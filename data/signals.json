@@ -1,0 +1,3245 @@
+{
+  "generated_by": "scripts/session_retro.py",
+  "inventory": {
+    "sessions": 90,
+    "excluded_session_prefixes": [
+      "17585dad"
+    ],
+    "sessions_with_tool_calls": 82,
+    "subagent_transcripts_not_analysed": 182,
+    "projects": {
+      "~/workspace/eduline-ai-shop": 41,
+      "~/workspace/eduline-shopify-tools": 27,
+      "~/workspace/thats-fair": 8,
+      "~/workspace/alexportelli": 4,
+      "~/workspace/verifika": 3,
+      "~": 3,
+      "~/.config/opencode": 2,
+      "~/.claude": 1,
+      "~/workspace": 1
+    },
+    "date_range": [
+      "2026-09-26T06:52:54.104000+00:00",
+      "2026-10-20T19:30:23.139000+00:00"
+    ],
+    "total_tool_calls": 14967
+  },
+  "thresholds": {
+    "retry_min": 3,
+    "near_dup_ratio": 0.9,
+    "reread_min": 4,
+    "sweep_min": 6,
+    "loop_min_cycles": 2,
+    "slow_tool_seconds": 120,
+    "gap_seconds": 300
+  },
+  "tool_errors": {
+    "total": 364,
+    "by_tool": {
+      "Bash": 237,
+      "Edit": 42,
+      "Write": 30,
+      "mcp__playwright__browser_run_code_unsafe": 18,
+      "mcp__playwright__browser_take_screenshot": 12,
+      "Read": 8,
+      "mcp__playwright__browser_type": 4,
+      "mcp__playwright__browser_click": 3,
+      "mcp__playwright__browser_navigate": 2,
+      "mcp__playwright__browser_handle_dialog": 2,
+      "mcp__playwright__browser_wait_for": 1,
+      "TaskStop": 1,
+      "mcp__playwright__browser_snapshot": 1,
+      "mcp__figma__get_design_context": 1,
+      "mcp__figma__get_screenshot": 1,
+      "mcp__figma__get_metadata": 1
+    },
+    "top_normalized": [
+      {
+        "count": 42,
+        "message": "Exit code N: (no output)",
+        "tool": "Bash",
+        "sessions": 32
+      },
+      {
+        "count": 39,
+        "message": "File has not been read yet. Read it first before writing to it.",
+        "tool": "Edit",
+        "sessions": 21
+      },
+      {
+        "count": 30,
+        "message": "File has not been read yet. Read it first before writing to it.",
+        "tool": "Write",
+        "sessions": 21
+      },
+      {
+        "count": 10,
+        "message": "Error: File access denied: <worktrees><path> is outside allowed roots. Allowed roots: <path>, <path>",
+        "tool": "mcp__playwright__browser_take_screenshot",
+        "sessions": 9
+      },
+      {
+        "count": 7,
+        "message": "File content (N tokens) exceeds maximum allowed tokens (N). Use offset and limit parameters to read specific portions of the file, or search",
+        "tool": "Read",
+        "sessions": 7
+      },
+      {
+        "count": 7,
+        "message": "TimeoutError: locator.click: Timeout Nms exceeded.",
+        "tool": "mcp__playwright__browser_run_code_unsafe",
+        "sessions": 4
+      },
+      {
+        "count": 6,
+        "message": "Exit code N: ls: cannot access <q>: No such file or directory",
+        "tool": "Bash",
+        "sessions": 6
+      },
+      {
+        "count": 5,
+        "message": "Exit code N: (eval):N: no matches found: --include=*.ts",
+        "tool": "Bash",
+        "sessions": 5
+      },
+      {
+        "count": 5,
+        "message": "Exit code N: Implementation workspace error: command failed: git rev-parse --show-toplevel",
+        "tool": "Bash",
+        "sessions": 5
+      },
+      {
+        "count": 4,
+        "message": "Exit code N: (eval):N: == not found",
+        "tool": "Bash",
+        "sessions": 4
+      },
+      {
+        "count": 4,
+        "message": "Exit code N: ModuleNotFoundError: No module named <q>",
+        "tool": "Bash",
+        "sessions": 4
+      },
+      {
+        "count": 3,
+        "message": "File has been modified since read, either by the user or by a linter. Read it again before attempting to write it.",
+        "tool": "Edit",
+        "sessions": 3
+      },
+      {
+        "count": 3,
+        "message": "Exit code N: [REDACTED]",
+        "tool": "Bash",
+        "sessions": 3
+      },
+      {
+        "count": 3,
+        "message": "Exit code N: (eval):N: no matches found: <path>*",
+        "tool": "Bash",
+        "sessions": 3
+      },
+      {
+        "count": 3,
+        "message": "Exit code N: AttributeError: <q> object has no attribute <q>",
+        "tool": "Bash",
+        "sessions": 3
+      },
+      {
+        "count": 3,
+        "message": "Exit code N: (eval):N: command not found: file",
+        "tool": "Bash",
+        "sessions": 2
+      },
+      {
+        "count": 3,
+        "message": "Exit code N: N:N  error  This line has a length of N. Maximum allowed is N  max-len",
+        "tool": "Bash",
+        "sessions": 3
+      },
+      {
+        "count": 3,
+        "message": "Exit code N: (eval):N: no matches found: --include=*.spec.ts",
+        "tool": "Bash",
+        "sessions": 2
+      },
+      {
+        "count": 3,
+        "message": "Exit code N: N",
+        "tool": "Bash",
+        "sessions": 3
+      },
+      {
+        "count": 3,
+        "message": "Exit code N: Implementation workspace error: command failed: git push --porcelain git@github.com:alexportelliN<path> <hex>:refs<path>",
+        "tool": "Bash",
+        "sessions": 1
+      },
+      {
+        "count": 2,
+        "message": "Exit code N: failed to run git: fatal: not a git repository (or any parent up to mount point /)",
+        "tool": "Bash",
+        "sessions": 2
+      },
+      {
+        "count": 2,
+        "message": "Exit code N: {<q>:<q>,<q>:<q>,<q>:<q>,<q>:<q>,<q>:<q>}",
+        "tool": "Bash",
+        "sessions": 2
+      },
+      {
+        "count": 2,
+        "message": "Exit code N: vN.N.N",
+        "tool": "Bash",
+        "sessions": 2
+      },
+      {
+        "count": 2,
+        "message": "Exit code N: (eval):N: no matches found: *.log",
+        "tool": "Bash",
+        "sessions": 2
+      },
+      {
+        "count": 2,
+        "message": "Exit code N: magick not found",
+        "tool": "Bash",
+        "sessions": 2
+      },
+      {
+        "count": 2,
+        "message": "Exit code N: <q>: <q>",
+        "tool": "Bash",
+        "sessions": 2
+      },
+      {
+        "count": 2,
+        "message": "Error: browserBackend.callTool: Error: strict mode violation: locator(<q>) resolved to N elements:",
+        "tool": "mcp__playwright__browser_type",
+        "sessions": 2
+      },
+      {
+        "count": 2,
+        "message": "Exit code N: raise JSONDecodeError(<q>, s, err.value) from None",
+        "tool": "Bash",
+        "sessions": 2
+      },
+      {
+        "count": 2,
+        "message": "Exit code N: FileNotFoundError: [Errno N] No such file or directory: <q>",
+        "tool": "Bash",
+        "sessions": 1
+      },
+      {
+        "count": 2,
+        "message": "Exit code N: AssertionError",
+        "tool": "Bash",
+        "sessions": 2
+      },
+      {
+        "count": 2,
+        "message": "Error: Tool <q> does not handle the modal state.",
+        "tool": "mcp__playwright__browser_run_code_unsafe",
+        "sessions": 2
+      },
+      {
+        "count": 2,
+        "message": "Error: The tool <q> can only be used when there is related modal state present.",
+        "tool": "mcp__playwright__browser_handle_dialog",
+        "sessions": 1
+      },
+      {
+        "count": 2,
+        "message": "Exit code N: N total",
+        "tool": "Bash",
+        "sessions": 2
+      },
+      {
+        "count": 2,
+        "message": "Exit code N: Implementation workspace error: the implementation branch was published outside this session",
+        "tool": "Bash",
+        "sessions": 1
+      },
+      {
+        "count": 1,
+        "message": "Exit code N: ffmpeg not found",
+        "tool": "Bash",
+        "sessions": 1
+      },
+      {
+        "count": 1,
+        "message": "Error: Path is not available when connecting remotely. Use saveAs() to save a local copy.",
+        "tool": "mcp__playwright__browser_run_code_unsafe",
+        "sessions": 1
+      },
+      {
+        "count": 1,
+        "message": "Exit code N: (eval):N: no matches found: fr*.png",
+        "tool": "Bash",
+        "sessions": 1
+      },
+      {
+        "count": 1,
+        "message": "Exit code N: <path>:N:eval <q>",
+        "tool": "Bash",
+        "sessions": 1
+      },
+      {
+        "count": 1,
+        "message": "Exit code N: env: ‘node’: No such file or directory",
+        "tool": "Bash",
+        "sessions": 1
+      },
+      {
+        "count": 1,
+        "message": "Exit code N: Implementation workspace error: <path> must be launched from the checked-out default branch",
+        "tool": "Bash",
+        "sessions": 1
+      }
+    ]
+  },
+  "error_families": {
+    "edit_before_read": {
+      "occurrences": 72,
+      "sessions": 31,
+      "session_ids": [
+        "0cde47c4",
+        "14a23cbf",
+        "2c32eb1d",
+        "2c51bc19",
+        "2d25b897",
+        "2db44a3d",
+        "2dfa52ed",
+        "30f22b49",
+        "3f2f8ffe",
+        "435c122c",
+        "4446133f",
+        "5963923b",
+        "5c7b05a6",
+        "5f2e0b72",
+        "620ad503",
+        "6c8145d8",
+        "76813351",
+        "87c2770d",
+        "8ef05d1f",
+        "9e031df9",
+        "a6b25a05",
+        "ab120ba3",
+        "ac0cba5f",
+        "b77706a9",
+        "bb64b5dc",
+        "c1f6448e",
+        "d627c786",
+        "dd1915d2",
+        "ddb2e0c3",
+        "f0d34bfe",
+        "f1359c04"
+      ]
+    },
+    "read_too_large": {
+      "occurrences": 7,
+      "sessions": 7,
+      "session_ids": [
+        "0cde47c4",
+        "10a3d96d",
+        "2c51bc19",
+        "5963923b",
+        "bde74a5e",
+        "c1f6448e",
+        "d5fe6a32"
+      ]
+    },
+    "playwright_outside_allowed_roots": {
+      "occurrences": 13,
+      "sessions": 12,
+      "session_ids": [
+        "35c60dd5",
+        "3f2f8ffe",
+        "5c7b05a6",
+        "620ad503",
+        "87c2770d",
+        "9e031df9",
+        "a6b25a05",
+        "a9c282f1",
+        "d12727da",
+        "d73acc22",
+        "dd1915d2",
+        "f0d34bfe"
+      ]
+    },
+    "playwright_locator_timeout": {
+      "occurrences": 16,
+      "sessions": 12,
+      "session_ids": [
+        "0132a610",
+        "099436ce",
+        "10a3d96d",
+        "13b2a54d",
+        "26fb586d",
+        "2c32eb1d",
+        "3f2f8ffe",
+        "435c122c",
+        "4446133f",
+        "5c7b05a6",
+        "8ef05d1f",
+        "dd1915d2"
+      ]
+    },
+    "implementation_workspace": {
+      "occurrences": 15,
+      "sessions": 12,
+      "session_ids": [
+        "081db385",
+        "0cde47c4",
+        "2c32eb1d",
+        "2c51bc19",
+        "2d25b897",
+        "35c60dd5",
+        "5c7b05a6",
+        "c1f6448e",
+        "d73acc22",
+        "dd1915d2",
+        "ee421b6c",
+        "f1359c04"
+      ]
+    },
+    "harness_sleep_block": {
+      "occurrences": 24,
+      "sessions": 23,
+      "session_ids": [
+        "081db385",
+        "0b97db07",
+        "10a3d96d",
+        "1eec82f5",
+        "2070b61f",
+        "2c51bc19",
+        "3243d991",
+        "3f2f8ffe",
+        "6c312600",
+        "87c2770d",
+        "a6b25a05",
+        "ab120ba3",
+        "bb64b5dc",
+        "bc8a74de",
+        "bd74eeb9",
+        "c1f6448e",
+        "d627c786",
+        "d73acc22",
+        "dd1915d2",
+        "e6eccd22",
+        "efcc3743",
+        "f0d34bfe",
+        "f1359c04"
+      ]
+    },
+    "missing_binary_or_module": {
+      "occurrences": 16,
+      "sessions": 12,
+      "session_ids": [
+        "0cde47c4",
+        "14a23cbf",
+        "2c32eb1d",
+        "2c51bc19",
+        "2d821534",
+        "30f22b49",
+        "3243d991",
+        "5c7b05a6",
+        "8ef05d1f",
+        "9e031df9",
+        "a6b25a05",
+        "f1359c04"
+      ]
+    }
+  },
+  "zsh_pitfalls": {
+    "description": "zsh-only failures (unquoted globs such as grep --include=*.ts, leading = words)",
+    "total": 386,
+    "sessions": 77,
+    "silent_in_successful_calls": 352,
+    "by_kind": {
+      "no matches found": 375,
+      " not found": 11
+    }
+  },
+  "environment_failures": {
+    "command_not_found": {
+      "occurrences": 7,
+      "sessions": 6,
+      "top_messages": [
+        {
+          "message": "Exit code N: (eval):N: command not found: file",
+          "count": 3
+        },
+        {
+          "message": "Exit code N: Implementation workspace error: expected prepare, sync, record-evidence, publish, publish-media, mark-pr, info, list, or cleanu",
+          "count": 1
+        },
+        {
+          "message": "Exit code N: (eval):N: command not found: implementation-workspace",
+          "count": 1
+        },
+        {
+          "message": "Exit code N: (eval):N: command not found: column",
+          "count": 1
+        },
+        {
+          "message": "Exit code N: -rw-rw-r-- N alex alex N Oct  N N:N desktop-validation-errors.png",
+          "count": 1
+        }
+      ]
+    },
+    "missing_package": {
+      "occurrences": 9,
+      "sessions": 9,
+      "top_messages": [
+        {
+          "message": "Exit code N: ModuleNotFoundError: No module named <q>",
+          "count": 4
+        },
+        {
+          "message": "Exit code N: magick not found",
+          "count": 2
+        },
+        {
+          "message": "Exit code N: eval<path>(N,N): error TSN: Cannot find module <q> or its corresponding type declarations.",
+          "count": 1
+        },
+        {
+          "message": "Exit code N: If the first CI deploy still fails on a permission, its log names the missing permission; grant",
+          "count": 1
+        },
+        {
+          "message": "Exit code N: Error [ERR_MODULE_NOT_FOUND]: Cannot find package <q> imported from <path>",
+          "count": 1
+        }
+      ]
+    },
+    "permission": {
+      "occurrences": 1,
+      "sessions": 1,
+      "top_messages": [
+        {
+          "message": "Exit code N: pkill: killing pid <hex> failed: Operation not permitted",
+          "count": 1
+        }
+      ]
+    },
+    "timeout": {
+      "occurrences": 13,
+      "sessions": 9,
+      "top_messages": [
+        {
+          "message": "TimeoutError: locator.click: Timeout Nms exceeded.",
+          "count": 7
+        },
+        {
+          "message": "TimeoutError: Timeout Nms exceeded.",
+          "count": 1
+        },
+        {
+          "message": "TimeoutError: locator.innerText: Timeout Nms exceeded.",
+          "count": 1
+        },
+        {
+          "message": "TimeoutError: locator.check: Timeout Nms exceeded.",
+          "count": 1
+        },
+        {
+          "message": "Exit code N: FAILED locator.click: Timeout Nms exceeded.",
+          "count": 1
+        },
+        {
+          "message": "TimeoutError: locator.fill: Timeout Nms exceeded.",
+          "count": 1
+        },
+        {
+          "message": "TimeoutError: locator.waitFor: Timeout Nms exceeded.",
+          "count": 1
+        }
+      ]
+    },
+    "network": {
+      "occurrences": 9,
+      "sessions": 7,
+      "top_messages": [
+        {
+          "message": "Exit code N: ModuleNotFoundError: No module named <q>",
+          "count": 4
+        },
+        {
+          "message": "Exit code N: magick not found",
+          "count": 2
+        },
+        {
+          "message": "Exit code N: FileNotFoundError: [Errno N] No such file or directory: <q>",
+          "count": 2
+        },
+        {
+          "message": "Exit code N: If the first CI deploy still fails on a permission, its log names the missing permission; grant",
+          "count": 1
+        }
+      ]
+    }
+  },
+  "bash_retries": {
+    "total": 50,
+    "sessions": 33,
+    "polling": 19,
+    "with_2plus_failures": 3,
+    "items": [
+      {
+        "session": "3f2f8ffe",
+        "command": "npx next start -p 3410 > ../../../phase8-eduline-ai-client.evidence/next-start.l",
+        "runs": 7,
+        "failed_runs": 0,
+        "polling": false
+      },
+      {
+        "session": "2c51bc19",
+        "command": "tail -5 <worktrees>/phase11d-views-words.evidence/preflight-all.log",
+        "runs": 6,
+        "failed_runs": 1,
+        "polling": true
+      },
+      {
+        "session": "d627c786",
+        "command": "npm run lint:functions 2>&1 | grep -B3 \" error \" | grep -E \"^/|error\"",
+        "runs": 6,
+        "failed_runs": 0,
+        "polling": false
+      },
+      {
+        "session": "ee39c02a",
+        "command": "cd <worktrees>/grounded-description-brief/functions/src; cat -n product-descript",
+        "runs": 6,
+        "failed_runs": 0,
+        "polling": false
+      },
+      {
+        "session": "0cde47c4",
+        "command": "tail -42 /tmp/claude-1000/-home-alex-workspace-eduline-ai-shop/0cde47c4-8a5b-40b",
+        "runs": 5,
+        "failed_runs": 0,
+        "polling": true
+      },
+      {
+        "session": "35c60dd5",
+        "command": "tail -5 <worktrees>/phase7-mcp-app-views.evidence/verify-1.log",
+        "runs": 5,
+        "failed_runs": 0,
+        "polling": true
+      },
+      {
+        "session": "c1f6448e",
+        "command": "cat /tmp/claude-1000/-home-alex-workspace-eduline-ai-shop/c1f6448e-02c1-4dfe-883",
+        "runs": 5,
+        "failed_runs": 0,
+        "polling": true
+      },
+      {
+        "session": "10a3d96d",
+        "command": "tail -c 1500 <worktrees>/phase9-cart.evidence/preflight-verify.log",
+        "runs": 4,
+        "failed_runs": 1,
+        "polling": true
+      },
+      {
+        "session": "2db44a3d",
+        "command": "date -u +%T; tail -4 <worktrees>/a0-latency-probe.evidence/site-run.log",
+        "runs": 4,
+        "failed_runs": 0,
+        "polling": false
+      },
+      {
+        "session": "3f2f8ffe",
+        "command": "tail -30 <worktrees>/phase8-eduline-ai-client.evidence/verify-baseline.log",
+        "runs": 4,
+        "failed_runs": 1,
+        "polling": true
+      },
+      {
+        "session": "5f2e0b72",
+        "command": "bash <worktrees>/phase11g-polish-2.evidence/scripts/servers.sh > <worktrees>/pha",
+        "runs": 4,
+        "failed_runs": 0,
+        "polling": false
+      },
+      {
+        "session": "ba80124c",
+        "command": "W=<worktrees>/phase11h-calm-loading; cd $W && BROWSER_PORT=4318 EDULINE_E2E_PORT",
+        "runs": 4,
+        "failed_runs": 0,
+        "polling": false
+      },
+      {
+        "session": "d627c786",
+        "command": "npm run verify > eval/results/run3/step2/verify.log 2>&1; echo EXIT $?; grep -E ",
+        "runs": 4,
+        "failed_runs": 3,
+        "polling": false
+      },
+      {
+        "session": "e6870d3c",
+        "command": "rm -rf functions/lib && npm run verify > ../verify-step6.log 2>&1; echo verify e",
+        "runs": 4,
+        "failed_runs": 0,
+        "polling": false
+      },
+      {
+        "session": "ef03871d",
+        "command": "git worktree add -q ~/workspace/eduline-harness-phase-d -b harness/phase-d-conve",
+        "runs": 4,
+        "failed_runs": 0,
+        "polling": false
+      },
+      {
+        "session": "efcc3743",
+        "command": "tail -5 <worktrees>/phase6b-eval-fixes.evidence/preflight.log",
+        "runs": 4,
+        "failed_runs": 1,
+        "polling": true
+      },
+      {
+        "session": "f0d34bfe",
+        "command": "E=<worktrees>/phase10b-hardening.evidence; $E/run-local.sh $E",
+        "runs": 4,
+        "failed_runs": 0,
+        "polling": false
+      },
+      {
+        "session": "26fb586d",
+        "command": "cat /tmp/claude-1000/-home-alex-workspace-eduline-shopify-tools/26fb586d-b8c9-43",
+        "runs": 4,
+        "failed_runs": 0,
+        "polling": true
+      },
+      {
+        "session": "435c122c",
+        "command": "W=<worktrees>/optimisation-restructure-batteries-age; cat $W/functions/src/produ",
+        "runs": 4,
+        "failed_runs": 0,
+        "polling": false
+      },
+      {
+        "session": "d73acc22",
+        "command": "sleep 15; ~/.config/opencode/scripts/implementation-workspace publish --session ",
+        "runs": 4,
+        "failed_runs": 3,
+        "polling": false
+      },
+      {
+        "session": "ddb2e0c3",
+        "command": "npm run verify > /tmp/claude-1000/-home-alex-workspace-thats-fair/ddb2e0c3-a1c5-",
+        "runs": 4,
+        "failed_runs": 0,
+        "polling": false
+      },
+      {
+        "session": "2d25b897",
+        "command": "sleep 1; for i in $(seq 1 40); do s=$(gh pr checks 1 2>/dev/null); if ! echo \"$s",
+        "runs": 4,
+        "failed_runs": 1,
+        "polling": true
+      },
+      {
+        "session": "b77706a9",
+        "command": "npx ng serve --port 4300 > /tmp/claude-1000/-home-alex-workspace-alexportelli/b7",
+        "runs": 3,
+        "failed_runs": 0,
+        "polling": false
+      },
+      {
+        "session": "093f9393",
+        "command": "tail -3 ~/workspace/eduline-wt/run1-step1/eval/results/gates/run1-step1-baseline",
+        "runs": 3,
+        "failed_runs": 0,
+        "polling": true
+      },
+      {
+        "session": "0cde47c4",
+        "command": "W=<worktrees>/phase11e-search-quality; $W.evidence/scripts/serve-local.sh $W",
+        "runs": 3,
+        "failed_runs": 0,
+        "polling": false
+      },
+      {
+        "session": "0cde47c4",
+        "command": "W=<worktrees>/phase11e-search-quality; cd $W && npx vfk logs crap-core crap-mcp ",
+        "runs": 3,
+        "failed_runs": 0,
+        "polling": false
+      },
+      {
+        "session": "0cde47c4",
+        "command": "W=<worktrees>/phase11e-search-quality; cd $W && npx prettier --write $(git diff ",
+        "runs": 3,
+        "failed_runs": 1,
+        "polling": false
+      },
+      {
+        "session": "2070b61f",
+        "command": "G=eval/results/gates/predeploy-fixups-focused && mkdir -p $G && NETLOG_FILE=$G/f",
+        "runs": 3,
+        "failed_runs": 0,
+        "polling": false
+      },
+      {
+        "session": "a6b25a05",
+        "command": "tail -30 <worktrees>/phase12b-launch-prep.evidence/preflight.log",
+        "runs": 3,
+        "failed_runs": 0,
+        "polling": true
+      },
+      {
+        "session": "a6b25a05",
+        "command": "npm run verify:ci > ../phase12b-launch-prep.evidence/verify-ci-1.log 2>&1; echo ",
+        "runs": 3,
+        "failed_runs": 0,
+        "polling": false
+      },
+      {
+        "session": "a6b25a05",
+        "command": "cat /tmp/claude-1000/-home-alex-workspace-eduline-ai-shop/a6b25a05-c771-4976-b1e",
+        "runs": 3,
+        "failed_runs": 0,
+        "polling": true
+      },
+      {
+        "session": "bd74eeb9",
+        "command": "cat screens-B.md",
+        "runs": 3,
+        "failed_runs": 0,
+        "polling": true
+      },
+      {
+        "session": "c1f6448e",
+        "command": "BROWSER_PORT=4321 npm run verify:ci > ../phase11f-refinement.evidence/verify-ci-",
+        "runs": 3,
+        "failed_runs": 0,
+        "polling": false
+      },
+      {
+        "session": "d5fe6a32",
+        "command": "/tmp/claude-1000/-home-alex-workspace-eduline-ai-shop/d5fe6a32-4536-4acb-b1bb-e4",
+        "runs": 3,
+        "failed_runs": 0,
+        "polling": false
+      },
+      {
+        "session": "d627c786",
+        "command": "W=<worktrees>/run3-harness-behaviour; cd $W/eval/src && sed -n 55,330p live-acce",
+        "runs": 3,
+        "failed_runs": 0,
+        "polling": false
+      },
+      {
+        "session": "d627c786",
+        "command": "npm run verify > eval/results/run3/step3/verify.log 2>&1; echo EXIT $?; grep -E ",
+        "runs": 3,
+        "failed_runs": 3,
+        "polling": false
+      },
+      {
+        "session": "d627c786",
+        "command": "grep -A30 \"crap-functions stdout\" eval/results/run3/step4/verify.log | grep -E \"",
+        "runs": 3,
+        "failed_runs": 0,
+        "polling": true
+      },
+      {
+        "session": "ef03871d",
+        "command": "cat /tmp/claude-1000/-home-alex-workspace-eduline-ai-shop/e41aaa2a-8905-4f9b-b0f",
+        "runs": 3,
+        "failed_runs": 0,
+        "polling": true
+      },
+      {
+        "session": "ef03871d",
+        "command": "git status --short | wc -l && eval \"$(fnm env)\" && fnm use 22.23.2 >/dev/null &&",
+        "runs": 3,
+        "failed_runs": 0,
+        "polling": false
+      },
+      {
+        "session": "f1359c04",
+        "command": "npm run verify > $PWD.evidence/verify-final.log 2>&1; echo exit=$?; tail -8 $PWD",
+        "runs": 3,
+        "failed_runs": 0,
+        "polling": false
+      }
+    ]
+  },
+  "denials": {
+    "total": 18,
+    "sessions": 14,
+    "by_kind": {
+      "auto_mode_classifier": 10,
+      "auto_mode_safetyCheck": 5,
+      "user_rejected": 3
+    }
+  },
+  "auto_mode_classifier_unavailable": {
+    "total": 9,
+    "sessions": 5
+  },
+  "harness_blocks": {
+    "total": 24,
+    "sessions": 23,
+    "messages": {
+      "Blocked: sleep N followed by: tail -N <worktrees><path> To wait for a condition, use Monit": 5,
+      "Blocked: sleep N followed by: tail -N <path> To wait for a condition, use Monitor with an ": 3,
+      "Blocked: sleep N followed by: tail -c N <worktrees><path> To wait for a condition, use Mon": 2,
+      "Blocked: sleep N followed by: cat <path> To wait for a condition, use Monitor with an unti": 2,
+      "Blocked: sleep N followed by: grep -c <q> <path> To wait for a condition, use Monitor with": 1,
+      "Blocked: sleep N followed by: echo ok. To wait for a condition, use Monitor with an until-": 1,
+      "Blocked: sleep N followed by: cd <worktrees><path> npm run verify:ci echo EXIT $? tail -N ": 1,
+      "Blocked: sleep N followed by: tail -N <path> grep -n <q> <worktrees><path> To wait for a c": 1,
+      "Blocked: sleep N followed by: cat <path> grep -E <q> tail -N. To wait for a condition, use": 1,
+      "Blocked: sleep N followed by: cd <worktrees><path> grep -E <q> eval<path> tail -N grep -c ": 1
+    }
+  },
+  "masked_verify_failures": {
+    "description": "verify/test/lint runs whose tool call succeeded but whose output reports failure",
+    "total": 247,
+    "sessions": 57,
+    "examples": [
+      {
+        "session": "2dfa52ed",
+        "command": "grep -rl \"let i = \\$index\" src | xargs sed -i 's/; let i = \\$index//' && grep -r"
+      },
+      {
+        "session": "2dfa52ed",
+        "command": "sed -i '/--color-accent-bright/d' src/styles.css && grep -n '\"format\\|\"lint\\|\"ty"
+      },
+      {
+        "session": "2dfa52ed",
+        "command": "npx vfk --check test 2>&1 | tail -8"
+      },
+      {
+        "session": "b77706a9",
+        "command": "npx eslint . 2>&1 | tail -80"
+      },
+      {
+        "session": "0cde47c4",
+        "command": "W=<worktrees>/phase11e-search-quality; cd $W && npx tsc -p eval/tsconfig.json 2>"
+      },
+      {
+        "session": "0cde47c4",
+        "command": "W=<worktrees>/phase11e-search-quality; cd $W && npx vitest run --config eval/vit"
+      },
+      {
+        "session": "0cde47c4",
+        "command": "W=<worktrees>/phase11e-search-quality; cd $W/packages/commerce-core && npx vites"
+      },
+      {
+        "session": "0cde47c4",
+        "command": "W=<worktrees>/phase11e-search-quality; cd $W && npm run core:stage >/dev/null 2>"
+      },
+      {
+        "session": "0cde47c4",
+        "command": "W=<worktrees>/phase11e-search-quality; cd $W/functions && npx vitest run src/har"
+      },
+      {
+        "session": "0cde47c4",
+        "command": "W=<worktrees>/phase11e-search-quality; cd $W && npm run packages:build >/dev/nul"
+      },
+      {
+        "session": "0cde47c4",
+        "command": "W=<worktrees>/phase11e-search-quality; cd $W && npm run test -w @eduline/commerc"
+      },
+      {
+        "session": "0cde47c4",
+        "command": "W=<worktrees>/phase11e-search-quality; cd $W && npx vfk --check crap-core --chec"
+      },
+      {
+        "session": "0cde47c4",
+        "command": "W=<worktrees>/phase11e-search-quality; cd $W && npx prettier --write $(git diff "
+      },
+      {
+        "session": "0cde47c4",
+        "command": "W=<worktrees>/phase11e-search-quality; cd $W && npx vfk logs browser 2>/dev/null"
+      },
+      {
+        "session": "0cde47c4",
+        "command": "W=<worktrees>/phase11e-search-quality; cd $W && sed -i 's/and joins them (\"and\","
+      }
+    ]
+  },
+  "interrupts": {
+    "total": 5,
+    "sessions": 5,
+    "by_session": {
+      "e6870d3c": 1,
+      "26fb586d": 1,
+      "2d821534": 1,
+      "d36125d1": 1,
+      "54ba6c18": 1
+    }
+  },
+  "corrections": {
+    "total": 0,
+    "sessions": 0,
+    "items": []
+  },
+  "soft_corrections": {
+    "total": 3,
+    "sessions": 3,
+    "items": [
+      {
+        "session": "2dfa52ed",
+        "snippet": "<pasted_content id=\"aa7a\"> Fresh session on latest main of alexportelli12/alexportelli. Second pass "
+      },
+      {
+        "session": "87c2770d",
+        "snippet": "this is chatgpt: <pasted_content id=\"7889\"> Host: chatgpt 0.0.1 Cart ID source: model passed cartId "
+      },
+      {
+        "session": "13b2a54d",
+        "snippet": "for the buttons scan and generate could we have icons instead of text to win some horizontal space i"
+      }
+    ]
+  },
+  "follow_up_requests": {
+    "total": 15,
+    "sessions": 13
+  },
+  "rereads": {
+    "total": 9,
+    "sessions": 8,
+    "items": [
+      {
+        "session": "5963923b",
+        "file": "<worktrees>/phase12a-retire-angular-harness/docs/agent-commerce-mvp.md",
+        "reads": 6
+      },
+      {
+        "session": "0cde47c4",
+        "file": "<worktrees>/phase11e-search-quality/docs/agent-commerce-mvp.md",
+        "reads": 5
+      },
+      {
+        "session": "ddb2e0c3",
+        "file": "alex-workspace-thats-fair/ddb2e0c3-a1c5-4988-8229-bd89257a2d36/scratchpad/p2.png",
+        "reads": 5
+      },
+      {
+        "session": "2c51bc19",
+        "file": "<worktrees>/phase11d-views-words/docs/agent-commerce-mvp.md",
+        "reads": 4
+      },
+      {
+        "session": "bde74a5e",
+        "file": "<worktrees>/phase10a-host-tuning/docs/agent-commerce-mvp.md",
+        "reads": 4
+      },
+      {
+        "session": "c1f6448e",
+        "file": "<worktrees>/phase11f-refinement/docs/agent-commerce-mvp.md",
+        "reads": 4
+      },
+      {
+        "session": "081db385",
+        "file": "<worktrees>/label-art-model-eval/functions/src/generateLabelCharacters.ts",
+        "reads": 4
+      },
+      {
+        "session": "dd1915d2",
+        "file": "-thats-fair/dd1915d2-32b1-4eb4-83ff-4d8f5196246b/scratchpad/desktop-expanded.txt",
+        "reads": 4
+      },
+      {
+        "session": "ddb2e0c3",
+        "file": "alex-workspace-thats-fair/ddb2e0c3-a1c5-4988-8229-bd89257a2d36/scratchpad/p1.png",
+        "reads": 4
+      }
+    ]
+  },
+  "search_sweeps": {
+    "total": 2,
+    "sessions": 2,
+    "items": [
+      {
+        "session": "30f22b49",
+        "length": 7
+      },
+      {
+        "session": "3f2f8ffe",
+        "length": 6
+      }
+    ]
+  },
+  "compactions": {
+    "total": 28,
+    "sessions": 23,
+    "by_session": {
+      "a6b25a05": 3,
+      "2dfa52ed": 2,
+      "0cde47c4": 2,
+      "c1f6448e": 2,
+      "10a3d96d": 1,
+      "14a23cbf": 1,
+      "2c51bc19": 1,
+      "2db44a3d": 1,
+      "3243d991": 1,
+      "35c60dd5": 1,
+      "3f2f8ffe": 1,
+      "5963923b": 1,
+      "5f2e0b72": 1,
+      "ba80124c": 1,
+      "d5fe6a32": 1,
+      "d627c786": 1,
+      "f0d34bfe": 1,
+      "f1359c04": 1,
+      "435c122c": 1,
+      "4446133f": 1,
+      "ddb2e0c3": 1,
+      "85fa2b95": 1,
+      "2d25b897": 1
+    }
+  },
+  "unfinished_sessions": {
+    "total": 5,
+    "by_reason": {
+      "ended_after_tool_result_without_reply": 1,
+      "interrupted": 3,
+      "ended_awaiting_user_answer": 1
+    },
+    "items": [
+      {
+        "session": "1150f11f",
+        "reason": "ended_after_tool_result_without_reply"
+      },
+      {
+        "session": "2d821534",
+        "reason": "interrupted"
+      },
+      {
+        "session": "d36125d1",
+        "reason": "interrupted"
+      },
+      {
+        "session": "54ba6c18",
+        "reason": "interrupted"
+      },
+      {
+        "session": "dd1915d2",
+        "reason": "ended_awaiting_user_answer"
+      }
+    ]
+  },
+  "verify_loops": {
+    "total": 8,
+    "sessions": 7,
+    "by_command": {
+      "npx vfk": 1,
+      "npx vitest": 3,
+      "npx tsc": 1,
+      "npx prettier": 1,
+      "npm build": 1,
+      "npm test": 1
+    },
+    "items": [
+      {
+        "session": "2dfa52ed",
+        "command": "npx vfk",
+        "fail_edit_rerun_cycles": 2
+      },
+      {
+        "session": "0cde47c4",
+        "command": "npx vitest",
+        "fail_edit_rerun_cycles": 2
+      },
+      {
+        "session": "0cde47c4",
+        "command": "npx tsc",
+        "fail_edit_rerun_cycles": 2
+      },
+      {
+        "session": "30f22b49",
+        "command": "npx prettier",
+        "fail_edit_rerun_cycles": 2
+      },
+      {
+        "session": "a6b25a05",
+        "command": "npx vitest",
+        "fail_edit_rerun_cycles": 2
+      },
+      {
+        "session": "bde74a5e",
+        "command": "npm build",
+        "fail_edit_rerun_cycles": 2
+      },
+      {
+        "session": "c1f6448e",
+        "command": "npm test",
+        "fail_edit_rerun_cycles": 2
+      },
+      {
+        "session": "2d25b897",
+        "command": "npx vitest",
+        "fail_edit_rerun_cycles": 2
+      }
+    ]
+  },
+  "slow_tool_calls": {
+    "total": 336,
+    "sessions": 64,
+    "by_tool": {
+      "Bash": 320,
+      "Agent": 15,
+      "WebFetch": 1
+    },
+    "bash_hit_10_minute_cap": 27,
+    "total_minutes": 1515,
+    "items": [
+      {
+        "session": "0cde47c4",
+        "tool": "Bash",
+        "seconds": 608,
+        "what": "cp -n ../../.local/share/opencode/implementation-worktrees/e"
+      },
+      {
+        "session": "d627c786",
+        "tool": "Bash",
+        "seconds": 602,
+        "what": "until grep -q \"^EXIT\" eval/results/run3/step5/full.log; do s"
+      },
+      {
+        "session": "0cde47c4",
+        "tool": "Bash",
+        "seconds": 601,
+        "what": "W=~/.local/share/opencode/implementation-worktrees/"
+      },
+      {
+        "session": "0cde47c4",
+        "tool": "Bash",
+        "seconds": 601,
+        "what": "npx vfk --check browser-client 2>&1 | tail -3; npx vfk --che"
+      },
+      {
+        "session": "14a23cbf",
+        "tool": "Bash",
+        "seconds": 601,
+        "what": "export EDULINE_AUDIT_OUT=$PWD.evidence/cross; C() { npx play"
+      },
+      {
+        "session": "5963923b",
+        "tool": "Bash",
+        "seconds": 601,
+        "what": "python3 - <<'EOF' p='docs/agent-commerce-mvp.md'; s=open(p)."
+      },
+      {
+        "session": "5963923b",
+        "tool": "Bash",
+        "seconds": 601,
+        "what": "until grep -qE \"PASS|FAIL\" /tmp/claude-1000/-home-alex-works"
+      },
+      {
+        "session": "5f2e0b72",
+        "tool": "Bash",
+        "seconds": 601,
+        "what": "git status --short && npx prettier --check $(git diff --name"
+      },
+      {
+        "session": "a6b25a05",
+        "tool": "Bash",
+        "seconds": 601,
+        "what": "npm run verify:ci > /tmp/claude-1000/-home-alex-workspace-ed"
+      },
+      {
+        "session": "a6b25a05",
+        "tool": "Bash",
+        "seconds": 601,
+        "what": "until grep -q \"exit=\" /tmp/claude-1000/-home-alex-workspace-"
+      },
+      {
+        "session": "bc8a74de",
+        "tool": "Bash",
+        "seconds": 601,
+        "what": "until grep -q \"^exit\" /tmp/claude-1000/-home-alex-workspace-"
+      },
+      {
+        "session": "bc8a74de",
+        "tool": "Bash",
+        "seconds": 601,
+        "what": "until grep -q \"Committable summary\\|configuration error\" /ho"
+      },
+      {
+        "session": "d627c786",
+        "tool": "Bash",
+        "seconds": 601,
+        "what": "until grep -q \"^Result:\\|EXIT\" /tmp/claude-1000/-home-alex-w"
+      },
+      {
+        "session": "0cde47c4",
+        "tool": "Bash",
+        "seconds": 600,
+        "what": "npm run deploy:mcp > ../phase11e-search-quality.evidence/dep"
+      },
+      {
+        "session": "1eec82f5",
+        "tool": "Bash",
+        "seconds": 600,
+        "what": "until grep -qE \"^exit|browser|✗\" ~/.local/share/ope"
+      },
+      {
+        "session": "1eec82f5",
+        "tool": "Bash",
+        "seconds": 600,
+        "what": "until grep -qE \"VERIFY (PASSED|FAILED)|✗\" ~/.local/"
+      },
+      {
+        "session": "3243d991",
+        "tool": "Bash",
+        "seconds": 600,
+        "what": "npm run build:client > /tmp/claude-1000/-home-alex-workspace"
+      },
+      {
+        "session": "5963923b",
+        "tool": "Bash",
+        "seconds": 600,
+        "what": "S=/tmp/claude-1000/-home-alex-workspace-eduline-ai-shop/5963"
+      },
+      {
+        "session": "5963923b",
+        "tool": "Bash",
+        "seconds": 600,
+        "what": "until gh pr checks 183 --json name,bucket --jq '[.[]|select("
+      },
+      {
+        "session": "5963923b",
+        "tool": "Bash",
+        "seconds": 600,
+        "what": "until grep -q \"verify:\" /tmp/claude-1000/-home-alex-workspac"
+      },
+      {
+        "session": "5f2e0b72",
+        "tool": "Bash",
+        "seconds": 600,
+        "what": "git worktree remove --force ../phase11g-polish-2.evidence/ba"
+      },
+      {
+        "session": "a6b25a05",
+        "tool": "Bash",
+        "seconds": 600,
+        "what": "A=/tmp/claude-1000/-home-alex-workspace-eduline-ai-shop/a6b2"
+      },
+      {
+        "session": "d5fe6a32",
+        "tool": "Bash",
+        "seconds": 600,
+        "what": "EV=../phase11c-resilience-cart-a11y.evidence; EDULINE_AUDIT_"
+      },
+      {
+        "session": "d5fe6a32",
+        "tool": "Bash",
+        "seconds": 600,
+        "what": "gh pr view 174 --json body --jq .body > /tmp/claude-1000/-ho"
+      },
+      {
+        "session": "f1359c04",
+        "tool": "Bash",
+        "seconds": 600,
+        "what": "E=~/.local/share/opencode/implementation-worktrees/"
+      },
+      {
+        "session": "f1359c04",
+        "tool": "Bash",
+        "seconds": 600,
+        "what": "pkill -f \"^next-server\" ; pkill -f \"^node .*next start -p 34"
+      },
+      {
+        "session": "6c312600",
+        "tool": "Bash",
+        "seconds": 600,
+        "what": "node capture.mjs before ~/.local/share/opencode/imp"
+      },
+      {
+        "session": "0cde47c4",
+        "tool": "Bash",
+        "seconds": 594,
+        "what": "W=~/.local/share/opencode/implementation-worktrees/"
+      },
+      {
+        "session": "35c60dd5",
+        "tool": "WebFetch",
+        "seconds": 583,
+        "what": "WebFetch"
+      },
+      {
+        "session": "c1f6448e",
+        "tool": "Bash",
+        "seconds": 578,
+        "what": "npx vfk --changed > ../phase11f-refinement.evidence/vfk-foll"
+      }
+    ]
+  },
+  "user_waits_on_questions": {
+    "total": 26,
+    "median_seconds": 219
+  },
+  "long_gaps_between_tool_calls": {
+    "threshold_seconds": 300,
+    "total": 159,
+    "sessions": 35,
+    "items": [
+      {
+        "session": "ef03871d",
+        "seconds": 14431,
+        "before_tool": "Bash"
+      },
+      {
+        "session": "093f9393",
+        "seconds": 4992,
+        "before_tool": "Bash"
+      },
+      {
+        "session": "ef03871d",
+        "seconds": 2339,
+        "before_tool": "Bash"
+      },
+      {
+        "session": "ef03871d",
+        "seconds": 2084,
+        "before_tool": "Bash"
+      },
+      {
+        "session": "ef03871d",
+        "seconds": 1986,
+        "before_tool": "Bash"
+      },
+      {
+        "session": "ef03871d",
+        "seconds": 1897,
+        "before_tool": "Bash"
+      },
+      {
+        "session": "ef03871d",
+        "seconds": 1894,
+        "before_tool": "Bash"
+      },
+      {
+        "session": "ef03871d",
+        "seconds": 1823,
+        "before_tool": "Bash"
+      },
+      {
+        "session": "2db44a3d",
+        "seconds": 1803,
+        "before_tool": "Monitor"
+      },
+      {
+        "session": "2db44a3d",
+        "seconds": 1779,
+        "before_tool": "Monitor"
+      },
+      {
+        "session": "14a23cbf",
+        "seconds": 1367,
+        "before_tool": "Bash"
+      },
+      {
+        "session": "2db44a3d",
+        "seconds": 1351,
+        "before_tool": "Bash"
+      },
+      {
+        "session": "d627c786",
+        "seconds": 1305,
+        "before_tool": "Bash"
+      },
+      {
+        "session": "ef03871d",
+        "seconds": 1284,
+        "before_tool": "Bash"
+      },
+      {
+        "session": "e6870d3c",
+        "seconds": 1281,
+        "before_tool": "Bash"
+      },
+      {
+        "session": "ef03871d",
+        "seconds": 1240,
+        "before_tool": "Bash"
+      },
+      {
+        "session": "2db44a3d",
+        "seconds": 1238,
+        "before_tool": "Bash"
+      },
+      {
+        "session": "2db44a3d",
+        "seconds": 1200,
+        "before_tool": "Monitor"
+      },
+      {
+        "session": "e6870d3c",
+        "seconds": 1192,
+        "before_tool": "Bash"
+      },
+      {
+        "session": "ef03871d",
+        "seconds": 1189,
+        "before_tool": "Bash"
+      },
+      {
+        "session": "bc8a74de",
+        "seconds": 1185,
+        "before_tool": "Bash"
+      },
+      {
+        "session": "2db44a3d",
+        "seconds": 1156,
+        "before_tool": "Bash"
+      },
+      {
+        "session": "2d25b897",
+        "seconds": 1118,
+        "before_tool": "Bash"
+      },
+      {
+        "session": "5f2e0b72",
+        "seconds": 1113,
+        "before_tool": "Bash"
+      },
+      {
+        "session": "5f2e0b72",
+        "seconds": 1111,
+        "before_tool": "Bash"
+      },
+      {
+        "session": "2db44a3d",
+        "seconds": 1104,
+        "before_tool": "Bash"
+      },
+      {
+        "session": "ef03871d",
+        "seconds": 1100,
+        "before_tool": "Bash"
+      },
+      {
+        "session": "d627c786",
+        "seconds": 1044,
+        "before_tool": "Bash"
+      },
+      {
+        "session": "ef03871d",
+        "seconds": 989,
+        "before_tool": "Bash"
+      },
+      {
+        "session": "ef03871d",
+        "seconds": 963,
+        "before_tool": "Bash"
+      }
+    ]
+  },
+  "tool_usage": {
+    "Bash": 12027,
+    "Read": 898,
+    "Write": 606,
+    "Agent": 173,
+    "Edit": 166,
+    "ToolSearch": 142,
+    "Skill": 112,
+    "mcp__playwright__browser_run_code_unsafe": 109,
+    "SendMessage": 102,
+    "mcp__playwright__browser_take_screenshot": 84,
+    "mcp__playwright__browser_navigate": 54,
+    "mcp__playwright__browser_click": 46,
+    "WebFetch": 43,
+    "TaskStop": 40,
+    "mcp__playwright__browser_evaluate": 40,
+    "mcp__playwright__browser_wait_for": 40,
+    "ScheduleWakeup": 39,
+    "mcp__playwright__browser_resize": 37,
+    "mcp__playwright__browser_type": 31,
+    "Monitor": 28,
+    "AskUserQuestion": 26,
+    "mcp__t3-code__link_pull_request": 21,
+    "mcp__playwright__browser_console_messages": 15,
+    "WebSearch": 14,
+    "mcp__claude_ai_Eduline_MCP_V2__search_products": 11,
+    "mcp__playwright__browser_snapshot": 11,
+    "mcp__figma__get_screenshot": 10,
+    "mcp__figma__get_metadata": 9,
+    "mcp__playwright__browser_handle_dialog": 6,
+    "mcp__playwright__browser_tabs": 5,
+    "mcp__figma__get_design_context": 4,
+    "ReadMcpResourceTool": 3,
+    "mcp__t3-code__list_thread_pull_requests": 2,
+    "mcp__claude_ai_Eduline_MCP_V2__get_product": 2,
+    "mcp__playwright__browser_emulate_media": 2,
+    "mcp__playwright__browser_network_requests": 1,
+    "mcp__playwright__browser_network_request": 1,
+    "ListAgents": 1,
+    "mcp__playwright__browser_close": 1,
+    "SendFeedback": 1,
+    "mcp__playwright__browser_hover": 1,
+    "mcp__playwright__browser_press_key": 1,
+    "mcp__figma__get_variable_defs": 1,
+    "mcp__figma__whoami": 1
+  },
+  "sessions": [
+    {
+      "session": "d627c786",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-09-28T18:14:17.531000+00:00",
+      "minutes": 665.7,
+      "tool_calls": 822,
+      "prompts": 0,
+      "title": null,
+      "signals": {
+        "zsh_pitfall": 27,
+        "masked_verify_failures": 31,
+        "slow_tools": 34,
+        "tool_errors": 11,
+        "harness_sleep_block": 1,
+        "harness_blocks": 1,
+        "classifier_unavailable": 2,
+        "compactions": 1,
+        "edit_before_read": 1,
+        "long_gaps": 4,
+        "retries": 5,
+        "failing_retries": 2
+      },
+      "friction_score": 81
+    },
+    {
+      "session": "0cde47c4",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-15T18:03:05.679000+00:00",
+      "minutes": 1237.4,
+      "tool_calls": 503,
+      "prompts": 7,
+      "title": "CI failure",
+      "signals": {
+        "implementation_workspace": 1,
+        "missing_binary_or_module": 1,
+        "tool_errors": 17,
+        "env_command_not_found": 1,
+        "read_too_large": 1,
+        "zsh_pitfall": 14,
+        "denials": 1,
+        "classifier_unavailable": 1,
+        "edit_before_read": 7,
+        "masked_verify_failures": 15,
+        "slow_tools": 15,
+        "compactions": 2,
+        "long_gaps": 8,
+        "follow_up_requests": 1,
+        "verify_loops": 2,
+        "rereads": 1,
+        "retries": 4
+      },
+      "friction_score": 63
+    },
+    {
+      "session": "a6b25a05",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-18T22:01:48.973000+00:00",
+      "minutes": 1254.3,
+      "tool_calls": 610,
+      "prompts": 5,
+      "title": "Shopify token content read access",
+      "signals": {
+        "tool_errors": 13,
+        "slow_tools": 16,
+        "denials": 1,
+        "zsh_pitfall": 18,
+        "masked_verify_failures": 11,
+        "playwright_outside_allowed_roots": 2,
+        "harness_sleep_block": 2,
+        "harness_blocks": 2,
+        "compactions": 3,
+        "follow_up_requests": 3,
+        "missing_binary_or_module": 2,
+        "env_command_not_found": 2,
+        "edit_before_read": 1,
+        "long_gaps": 3,
+        "verify_loops": 1,
+        "retries": 3
+      },
+      "friction_score": 60
+    },
+    {
+      "session": "c1f6448e",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-16T20:01:27.937000+00:00",
+      "minutes": 701.3,
+      "tool_calls": 507,
+      "prompts": 2,
+      "title": "Quiet shelf direction A",
+      "signals": {
+        "read_too_large": 1,
+        "tool_errors": 11,
+        "zsh_pitfall": 16,
+        "implementation_workspace": 1,
+        "edit_before_read": 4,
+        "masked_verify_failures": 12,
+        "slow_tools": 11,
+        "long_gaps": 8,
+        "compactions": 2,
+        "follow_up_requests": 1,
+        "harness_sleep_block": 1,
+        "harness_blocks": 1,
+        "denials": 1,
+        "verify_loops": 1,
+        "rereads": 1,
+        "retries": 2
+      },
+      "friction_score": 52
+    },
+    {
+      "session": "2c51bc19",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-15T14:11:17.369000+00:00",
+      "minutes": 223.5,
+      "tool_calls": 346,
+      "prompts": 1,
+      "title": "MCP Apps bridge and Dependabot",
+      "signals": {
+        "read_too_large": 1,
+        "tool_errors": 10,
+        "zsh_pitfall": 12,
+        "missing_binary_or_module": 2,
+        "edit_before_read": 5,
+        "masked_verify_failures": 12,
+        "env_missing_package": 1,
+        "env_network": 1,
+        "slow_tools": 6,
+        "harness_sleep_block": 1,
+        "harness_blocks": 1,
+        "long_gaps": 7,
+        "compactions": 1,
+        "follow_up_requests": 1,
+        "implementation_workspace": 1,
+        "rereads": 1,
+        "retries": 1
+      },
+      "friction_score": 41
+    },
+    {
+      "session": "2d25b897",
+      "project": "~/workspace",
+      "start": "2026-10-12T14:39:37.677000+00:00",
+      "minutes": 410.7,
+      "tool_calls": 355,
+      "prompts": 23,
+      "title": "Npm publishing post-MVP",
+      "signals": {
+        "tool_errors": 12,
+        "masked_verify_failures": 13,
+        "edit_before_read": 2,
+        "zsh_pitfall": 5,
+        "long_gaps": 2,
+        "implementation_workspace": 2,
+        "denials": 2,
+        "slow_tools": 12,
+        "compactions": 1,
+        "verify_loops": 1,
+        "retries": 2
+      },
+      "friction_score": 40
+    },
+    {
+      "session": "30f22b49",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-09-28T12:02:12.567000+00:00",
+      "minutes": 175.6,
+      "tool_calls": 382,
+      "prompts": 1,
+      "title": "Eduline shopping assistant Run 2",
+      "signals": {
+        "zsh_pitfall": 8,
+        "search_sweeps": 1,
+        "tool_errors": 6,
+        "masked_verify_failures": 9,
+        "missing_binary_or_module": 1,
+        "env_missing_package": 1,
+        "env_network": 1,
+        "slow_tools": 13,
+        "edit_before_read": 2,
+        "classifier_unavailable": 2,
+        "long_gaps": 2,
+        "verify_loops": 1
+      },
+      "friction_score": 32
+    },
+    {
+      "session": "dd1915d2",
+      "project": "~/workspace/thats-fair",
+      "start": "2026-09-29T15:20:28.818000+00:00",
+      "minutes": 3132.5,
+      "tool_calls": 346,
+      "prompts": 10,
+      "title": "That's Fair low-fidelity mockups",
+      "signals": {
+        "tool_errors": 13,
+        "implementation_workspace": 1,
+        "zsh_pitfall": 8,
+        "edit_before_read": 2,
+        "classifier_unavailable": 2,
+        "playwright_outside_allowed_roots": 1,
+        "playwright_locator_timeout": 1,
+        "env_timeout": 1,
+        "harness_sleep_block": 1,
+        "harness_blocks": 1,
+        "masked_verify_failures": 3,
+        "long_gaps": 1,
+        "slow_tools": 2,
+        "rereads": 1,
+        "retries": 1,
+        "unfinished": 1
+      },
+      "friction_score": 31
+    },
+    {
+      "session": "3243d991",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-17T18:26:05.639000+00:00",
+      "minutes": 208.1,
+      "tool_calls": 249,
+      "prompts": 3,
+      "title": "Eduline Phase 2 welcome and disclosure",
+      "signals": {
+        "zsh_pitfall": 10,
+        "tool_errors": 6,
+        "denials": 2,
+        "slow_tools": 3,
+        "compactions": 1,
+        "masked_verify_failures": 3,
+        "harness_sleep_block": 1,
+        "harness_blocks": 1,
+        "long_gaps": 4,
+        "missing_binary_or_module": 1,
+        "env_missing_package": 1,
+        "env_network": 1
+      },
+      "friction_score": 29
+    },
+    {
+      "session": "3f2f8ffe",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-12T08:20:19.043000+00:00",
+      "minutes": 253.9,
+      "tool_calls": 369,
+      "prompts": 2,
+      "title": "Firebase CLI setup",
+      "signals": {
+        "zsh_pitfall": 6,
+        "tool_errors": 12,
+        "search_sweeps": 1,
+        "edit_before_read": 1,
+        "playwright_outside_allowed_roots": 1,
+        "playwright_locator_timeout": 1,
+        "env_timeout": 1,
+        "masked_verify_failures": 3,
+        "env_permission": 1,
+        "harness_sleep_block": 1,
+        "harness_blocks": 1,
+        "long_gaps": 2,
+        "slow_tools": 2,
+        "compactions": 1,
+        "retries": 2
+      },
+      "friction_score": 29
+    },
+    {
+      "session": "5f2e0b72",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-17T09:15:00.335000+00:00",
+      "minutes": 541.5,
+      "tool_calls": 309,
+      "prompts": 2,
+      "title": "CI failure",
+      "signals": {
+        "zsh_pitfall": 9,
+        "tool_errors": 7,
+        "slow_tools": 14,
+        "edit_before_read": 2,
+        "masked_verify_failures": 8,
+        "long_gaps": 5,
+        "denials": 1,
+        "compactions": 1,
+        "retries": 1
+      },
+      "friction_score": 29
+    },
+    {
+      "session": "f1359c04",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-15T06:08:28.620000+00:00",
+      "minutes": 205.4,
+      "tool_calls": 244,
+      "prompts": 2,
+      "title": "Mobile composer reply button layout",
+      "signals": {
+        "zsh_pitfall": 7,
+        "tool_errors": 12,
+        "slow_tools": 10,
+        "edit_before_read": 2,
+        "harness_sleep_block": 1,
+        "harness_blocks": 1,
+        "masked_verify_failures": 1,
+        "missing_binary_or_module": 1,
+        "env_missing_package": 1,
+        "env_network": 1,
+        "implementation_workspace": 1,
+        "compactions": 1,
+        "retries": 1
+      },
+      "friction_score": 26
+    },
+    {
+      "session": "2dfa52ed",
+      "project": "~/workspace/alexportelli",
+      "start": "2026-10-16T12:34:49.991000+00:00",
+      "minutes": 293.0,
+      "tool_calls": 216,
+      "prompts": 2,
+      "title": "Alexportelli.com visual refresh",
+      "signals": {
+        "zsh_pitfall": 4,
+        "edit_before_read": 4,
+        "tool_errors": 9,
+        "masked_verify_failures": 3,
+        "slow_tools": 16,
+        "compactions": 2,
+        "soft_corrections": 1,
+        "verify_loops": 1
+      },
+      "friction_score": 25
+    },
+    {
+      "session": "10a3d96d",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-13T15:53:40.966000+00:00",
+      "minutes": 129.0,
+      "tool_calls": 205,
+      "prompts": 0,
+      "title": null,
+      "signals": {
+        "read_too_large": 1,
+        "tool_errors": 5,
+        "zsh_pitfall": 11,
+        "harness_sleep_block": 1,
+        "harness_blocks": 1,
+        "masked_verify_failures": 4,
+        "playwright_locator_timeout": 1,
+        "slow_tools": 3,
+        "long_gaps": 1,
+        "compactions": 1,
+        "retries": 1
+      },
+      "friction_score": 24
+    },
+    {
+      "session": "ba80124c",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-19T19:22:58.266000+00:00",
+      "minutes": 251.6,
+      "tool_calls": 199,
+      "prompts": 1,
+      "title": "PR #186 dark mode skeleton follow-up",
+      "signals": {
+        "zsh_pitfall": 7,
+        "tool_errors": 5,
+        "env_missing_package": 1,
+        "env_network": 3,
+        "denials": 1,
+        "slow_tools": 9,
+        "follow_up_requests": 1,
+        "masked_verify_failures": 2,
+        "long_gaps": 3,
+        "compactions": 1,
+        "retries": 1
+      },
+      "friction_score": 23
+    },
+    {
+      "session": "26fb586d",
+      "project": "~/workspace/eduline-shopify-tools",
+      "start": "2026-10-10T08:52:44.977000+00:00",
+      "minutes": 103.9,
+      "tool_calls": 254,
+      "prompts": 2,
+      "title": "Sonnet 5.5 model check",
+      "signals": {
+        "slow_tools": 5,
+        "zsh_pitfall": 5,
+        "tool_errors": 10,
+        "masked_verify_failures": 2,
+        "playwright_locator_timeout": 1,
+        "env_timeout": 1,
+        "denials": 1,
+        "interrupts": 1,
+        "retries": 1
+      },
+      "friction_score": 23
+    },
+    {
+      "session": "f0d34bfe",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-14T17:15:39.684000+00:00",
+      "minutes": 213.7,
+      "tool_calls": 251,
+      "prompts": 17,
+      "title": null,
+      "signals": {
+        "zsh_pitfall": 4,
+        "denials": 3,
+        "edit_before_read": 3,
+        "tool_errors": 6,
+        "masked_verify_failures": 2,
+        "harness_sleep_block": 1,
+        "harness_blocks": 1,
+        "slow_tools": 2,
+        "playwright_outside_allowed_roots": 1,
+        "long_gaps": 2,
+        "compactions": 1,
+        "follow_up_requests": 1,
+        "retries": 1
+      },
+      "friction_score": 22
+    },
+    {
+      "session": "9e031df9",
+      "project": "~/workspace/eduline-shopify-tools",
+      "start": "2026-10-08T09:25:56.977000+00:00",
+      "minutes": 99.9,
+      "tool_calls": 257,
+      "prompts": 6,
+      "title": "Eduline Admin rebrand and dashboard",
+      "signals": {
+        "missing_binary_or_module": 1,
+        "tool_errors": 10,
+        "env_command_not_found": 1,
+        "zsh_pitfall": 9,
+        "edit_before_read": 4,
+        "playwright_outside_allowed_roots": 1,
+        "masked_verify_failures": 2,
+        "slow_tools": 2
+      },
+      "friction_score": 22
+    },
+    {
+      "session": "5c7b05a6",
+      "project": "~/workspace/thats-fair",
+      "start": "2026-10-02T12:42:38.156000+00:00",
+      "minutes": 33.6,
+      "tool_calls": 142,
+      "prompts": 1,
+      "title": "Fairness check form simplification",
+      "signals": {
+        "missing_binary_or_module": 1,
+        "tool_errors": 12,
+        "env_command_not_found": 1,
+        "zsh_pitfall": 4,
+        "playwright_outside_allowed_roots": 1,
+        "masked_verify_failures": 4,
+        "playwright_locator_timeout": 1,
+        "env_timeout": 1,
+        "edit_before_read": 3,
+        "slow_tools": 1,
+        "implementation_workspace": 1
+      },
+      "friction_score": 22
+    },
+    {
+      "session": "ddb2e0c3",
+      "project": "~/workspace/thats-fair",
+      "start": "2026-10-20T15:12:24.986000+00:00",
+      "minutes": 258.0,
+      "tool_calls": 392,
+      "prompts": 1,
+      "title": "Continue previous session",
+      "signals": {
+        "zsh_pitfall": 3,
+        "tool_errors": 5,
+        "slow_tools": 15,
+        "denials": 1,
+        "masked_verify_failures": 7,
+        "edit_before_read": 1,
+        "long_gaps": 1,
+        "compactions": 1,
+        "rereads": 2,
+        "retries": 2
+      },
+      "friction_score": 22
+    },
+    {
+      "session": "bb64b5dc",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-09-28T07:50:52.195000+00:00",
+      "minutes": 221.3,
+      "tool_calls": 252,
+      "prompts": 1,
+      "title": "Harness run 1 follow-ups implementation",
+      "signals": {
+        "edit_before_read": 2,
+        "tool_errors": 2,
+        "masked_verify_failures": 10,
+        "zsh_pitfall": 8,
+        "harness_sleep_block": 1,
+        "harness_blocks": 1,
+        "long_gaps": 1,
+        "slow_tools": 1
+      },
+      "friction_score": 21
+    },
+    {
+      "session": "5963923b",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-18T14:56:53.458000+00:00",
+      "minutes": 254.1,
+      "tool_calls": 230,
+      "prompts": 1,
+      "title": "PR #183 browser test clean-up",
+      "signals": {
+        "slow_tools": 12,
+        "zsh_pitfall": 6,
+        "tool_errors": 7,
+        "edit_before_read": 3,
+        "masked_verify_failures": 2,
+        "env_missing_package": 1,
+        "follow_up_requests": 1,
+        "read_too_large": 1,
+        "long_gaps": 2,
+        "compactions": 1,
+        "rereads": 1
+      },
+      "friction_score": 20
+    },
+    {
+      "session": "bde74a5e",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-14T14:47:45.251000+00:00",
+      "minutes": 138.9,
+      "tool_calls": 222,
+      "prompts": 1,
+      "title": "Browser-client verification CI failure",
+      "signals": {
+        "read_too_large": 1,
+        "tool_errors": 2,
+        "zsh_pitfall": 7,
+        "masked_verify_failures": 7,
+        "slow_tools": 9,
+        "long_gaps": 1,
+        "verify_loops": 1,
+        "rereads": 1
+      },
+      "friction_score": 20
+    },
+    {
+      "session": "4446133f",
+      "project": "~/workspace/eduline-shopify-tools",
+      "start": "2026-10-08T11:57:19.895000+00:00",
+      "minutes": 139.5,
+      "tool_calls": 181,
+      "prompts": 2,
+      "title": "Product Import bugs in eduline-shopify-tools",
+      "signals": {
+        "zsh_pitfall": 4,
+        "playwright_locator_timeout": 5,
+        "tool_errors": 6,
+        "env_timeout": 5,
+        "edit_before_read": 1,
+        "masked_verify_failures": 2,
+        "slow_tools": 1,
+        "compactions": 1
+      },
+      "friction_score": 20
+    },
+    {
+      "session": "435c122c",
+      "project": "~/workspace/eduline-shopify-tools",
+      "start": "2026-10-17T21:55:17.421000+00:00",
+      "minutes": 683.0,
+      "tool_calls": 192,
+      "prompts": 1,
+      "title": "PR #69 review fixes",
+      "signals": {
+        "tool_errors": 9,
+        "zsh_pitfall": 3,
+        "edit_before_read": 6,
+        "masked_verify_failures": 2,
+        "long_gaps": 1,
+        "playwright_locator_timeout": 1,
+        "env_timeout": 1,
+        "slow_tools": 7,
+        "compactions": 1,
+        "follow_up_requests": 1,
+        "retries": 2
+      },
+      "friction_score": 18
+    },
+    {
+      "session": "14a23cbf",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-14T22:06:29.023000+00:00",
+      "minutes": 185.3,
+      "tool_calls": 190,
+      "prompts": 0,
+      "title": null,
+      "signals": {
+        "zsh_pitfall": 3,
+        "tool_errors": 5,
+        "masked_verify_failures": 2,
+        "slow_tools": 1,
+        "missing_binary_or_module": 2,
+        "env_missing_package": 1,
+        "env_network": 1,
+        "edit_before_read": 1,
+        "env_command_not_found": 1,
+        "long_gaps": 10,
+        "compactions": 1
+      },
+      "friction_score": 16
+    },
+    {
+      "session": "d5fe6a32",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-15T10:16:56.848000+00:00",
+      "minutes": 233.1,
+      "tool_calls": 270,
+      "prompts": 1,
+      "title": "CI failure",
+      "signals": {
+        "read_too_large": 1,
+        "tool_errors": 4,
+        "zsh_pitfall": 6,
+        "slow_tools": 15,
+        "masked_verify_failures": 3,
+        "compactions": 1,
+        "retries": 1
+      },
+      "friction_score": 16
+    },
+    {
+      "session": "2070b61f",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-09-27T14:18:49.031000+00:00",
+      "minutes": 141.1,
+      "tool_calls": 293,
+      "prompts": 3,
+      "title": "Harness predeploy followups 2026-09-27",
+      "signals": {
+        "zsh_pitfall": 3,
+        "masked_verify_failures": 9,
+        "harness_sleep_block": 1,
+        "harness_blocks": 1,
+        "long_gaps": 4,
+        "tool_errors": 2,
+        "retries": 1
+      },
+      "friction_score": 15
+    },
+    {
+      "session": "6c8145d8",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-09-29T17:29:24.509000+00:00",
+      "minutes": 57.8,
+      "tool_calls": 147,
+      "prompts": 0,
+      "title": null,
+      "signals": {
+        "zsh_pitfall": 7,
+        "tool_errors": 2,
+        "masked_verify_failures": 4,
+        "edit_before_read": 1,
+        "slow_tools": 3,
+        "long_gaps": 1,
+        "classifier_unavailable": 2
+      },
+      "friction_score": 15
+    },
+    {
+      "session": "2c32eb1d",
+      "project": "~/workspace/eduline-shopify-tools",
+      "start": "2026-09-26T09:10:54.195000+00:00",
+      "minutes": 101.9,
+      "tool_calls": 222,
+      "prompts": 2,
+      "title": "Implement items 1 and 2",
+      "signals": {
+        "implementation_workspace": 1,
+        "missing_binary_or_module": 1,
+        "tool_errors": 7,
+        "env_command_not_found": 1,
+        "zsh_pitfall": 4,
+        "edit_before_read": 1,
+        "masked_verify_failures": 2,
+        "playwright_locator_timeout": 1,
+        "env_timeout": 1,
+        "retries": 1
+      },
+      "friction_score": 15
+    },
+    {
+      "session": "8ef05d1f",
+      "project": "~/workspace/thats-fair",
+      "start": "2026-10-02T07:22:26.404000+00:00",
+      "minutes": 25.2,
+      "tool_calls": 137,
+      "prompts": 1,
+      "title": "PR #125 home header footer redesign review fixes",
+      "signals": {
+        "follow_up_requests": 1,
+        "missing_binary_or_module": 2,
+        "tool_errors": 9,
+        "env_missing_package": 1,
+        "env_network": 1,
+        "zsh_pitfall": 3,
+        "edit_before_read": 1,
+        "playwright_locator_timeout": 1,
+        "masked_verify_failures": 1
+      },
+      "friction_score": 15
+    },
+    {
+      "session": "35c60dd5",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-10T20:23:45.205000+00:00",
+      "minutes": 1112.1,
+      "tool_calls": 358,
+      "prompts": 2,
+      "title": "PR #167 cart context follow-up",
+      "signals": {
+        "slow_tools": 7,
+        "zsh_pitfall": 3,
+        "playwright_outside_allowed_roots": 1,
+        "tool_errors": 4,
+        "long_gaps": 1,
+        "implementation_workspace": 1,
+        "compactions": 1,
+        "masked_verify_failures": 4,
+        "retries": 1
+      },
+      "friction_score": 14
+    },
+    {
+      "session": "099436ce",
+      "project": "~/workspace/thats-fair",
+      "start": "2026-10-01T19:12:58.870000+00:00",
+      "minutes": 55.9,
+      "tool_calls": 211,
+      "prompts": 2,
+      "title": "Release branch merge workflow",
+      "signals": {
+        "slow_tools": 1,
+        "tool_errors": 5,
+        "zsh_pitfall": 8,
+        "masked_verify_failures": 1,
+        "playwright_locator_timeout": 1,
+        "retries": 2
+      },
+      "friction_score": 14
+    },
+    {
+      "session": "2d821534",
+      "project": "~/workspace/eduline-shopify-tools",
+      "start": "2026-10-10T11:11:59.519000+00:00",
+      "minutes": 9.6,
+      "tool_calls": 23,
+      "prompts": 2,
+      "title": "Stock take count in progress error",
+      "signals": {
+        "zsh_pitfall": 2,
+        "masked_verify_failures": 2,
+        "missing_binary_or_module": 1,
+        "tool_errors": 1,
+        "env_missing_package": 1,
+        "slow_tools": 1,
+        "denials": 1,
+        "interrupts": 1,
+        "unfinished": 1
+      },
+      "friction_score": 13
+    },
+    {
+      "session": "1150f11f",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-09-27T14:18:49.031000+00:00",
+      "minutes": 29.3,
+      "tool_calls": 146,
+      "prompts": 1,
+      "title": "Harness predeploy followups 2026-09-27",
+      "signals": {
+        "zsh_pitfall": 2,
+        "masked_verify_failures": 8,
+        "unfinished": 1
+      },
+      "friction_score": 12
+    },
+    {
+      "session": "87c2770d",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-05T16:48:42.480000+00:00",
+      "minutes": 75.4,
+      "tool_calls": 205,
+      "prompts": 3,
+      "title": "MCP testing with Claude and ChatGPT",
+      "signals": {
+        "slow_tools": 4,
+        "harness_sleep_block": 1,
+        "harness_blocks": 1,
+        "zsh_pitfall": 6,
+        "tool_errors": 5,
+        "edit_before_read": 2,
+        "playwright_outside_allowed_roots": 1,
+        "soft_corrections": 1
+      },
+      "friction_score": 12
+    },
+    {
+      "session": "d73acc22",
+      "project": "~/workspace/eduline-shopify-tools",
+      "start": "2026-10-07T16:38:04.389000+00:00",
+      "minutes": 35.3,
+      "tool_calls": 108,
+      "prompts": 1,
+      "title": "Create pull request",
+      "signals": {
+        "zsh_pitfall": 2,
+        "masked_verify_failures": 1,
+        "playwright_outside_allowed_roots": 1,
+        "tool_errors": 5,
+        "implementation_workspace": 3,
+        "harness_sleep_block": 1,
+        "harness_blocks": 1,
+        "retries": 1,
+        "failing_retries": 1
+      },
+      "friction_score": 12
+    },
+    {
+      "session": "85fa2b95",
+      "project": "~/workspace/verifika",
+      "start": "2026-10-12T23:09:34.147000+00:00",
+      "minutes": 380.9,
+      "tool_calls": 109,
+      "prompts": 3,
+      "title": "Avpr changes missing",
+      "signals": {
+        "masked_verify_failures": 3,
+        "tool_errors": 5,
+        "zsh_pitfall": 1,
+        "compactions": 1
+      },
+      "friction_score": 12
+    },
+    {
+      "session": "1eec82f5",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-10T09:37:02.513000+00:00",
+      "minutes": 57.1,
+      "tool_calls": 158,
+      "prompts": 0,
+      "title": null,
+      "signals": {
+        "zsh_pitfall": 3,
+        "harness_sleep_block": 1,
+        "harness_blocks": 1,
+        "slow_tools": 4,
+        "masked_verify_failures": 4,
+        "tool_errors": 3
+      },
+      "friction_score": 11
+    },
+    {
+      "session": "ab120ba3",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-10T18:10:24.020000+00:00",
+      "minutes": 67.6,
+      "tool_calls": 170,
+      "prompts": 0,
+      "title": null,
+      "signals": {
+        "zsh_pitfall": 6,
+        "tool_errors": 3,
+        "harness_sleep_block": 1,
+        "harness_blocks": 1,
+        "edit_before_read": 2,
+        "masked_verify_failures": 1,
+        "long_gaps": 1,
+        "slow_tools": 3
+      },
+      "friction_score": 11
+    },
+    {
+      "session": "bc8a74de",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-09-29T05:46:59.534000+00:00",
+      "minutes": 167.7,
+      "tool_calls": 239,
+      "prompts": 0,
+      "title": null,
+      "signals": {
+        "zsh_pitfall": 6,
+        "tool_errors": 3,
+        "harness_sleep_block": 1,
+        "harness_blocks": 1,
+        "masked_verify_failures": 1,
+        "long_gaps": 2,
+        "slow_tools": 11
+      },
+      "friction_score": 11
+    },
+    {
+      "session": "081db385",
+      "project": "~/workspace/eduline-shopify-tools",
+      "start": "2026-10-03T10:11:17.932000+00:00",
+      "minutes": 54.3,
+      "tool_calls": 117,
+      "prompts": 0,
+      "title": null,
+      "signals": {
+        "tool_errors": 5,
+        "harness_sleep_block": 1,
+        "harness_blocks": 1,
+        "slow_tools": 4,
+        "zsh_pitfall": 4,
+        "implementation_workspace": 1,
+        "rereads": 1
+      },
+      "friction_score": 11
+    },
+    {
+      "session": "54ba6c18",
+      "project": "~/workspace/thats-fair",
+      "start": "2026-10-12T21:35:26.424000+00:00",
+      "minutes": 9.5,
+      "tool_calls": 16,
+      "prompts": 1,
+      "title": "Verifika setup and configuration",
+      "signals": {
+        "zsh_pitfall": 2,
+        "tool_errors": 1,
+        "slow_tools": 2,
+        "masked_verify_failures": 1,
+        "denials": 1,
+        "interrupts": 1,
+        "unfinished": 1
+      },
+      "friction_score": 11
+    },
+    {
+      "session": "570ed11f",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-10T13:00:06.214000+00:00",
+      "minutes": 25.5,
+      "tool_calls": 92,
+      "prompts": 0,
+      "title": null,
+      "signals": {
+        "zsh_pitfall": 7,
+        "tool_errors": 3,
+        "slow_tools": 2
+      },
+      "friction_score": 10
+    },
+    {
+      "session": "e6eccd22",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-10T14:20:05.966000+00:00",
+      "minutes": 46.0,
+      "tool_calls": 136,
+      "prompts": 0,
+      "title": null,
+      "signals": {
+        "zsh_pitfall": 3,
+        "harness_sleep_block": 1,
+        "harness_blocks": 1,
+        "tool_errors": 3,
+        "masked_verify_failures": 3,
+        "slow_tools": 3
+      },
+      "friction_score": 10
+    },
+    {
+      "session": "feffef8c",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-06T15:52:14.967000+00:00",
+      "minutes": 62.4,
+      "tool_calls": 145,
+      "prompts": 0,
+      "title": null,
+      "signals": {
+        "zsh_pitfall": 5,
+        "slow_tools": 9,
+        "masked_verify_failures": 3,
+        "tool_errors": 2,
+        "retries": 1
+      },
+      "friction_score": 10
+    },
+    {
+      "session": "13b2a54d",
+      "project": "~/workspace/eduline-shopify-tools",
+      "start": "2026-10-03T08:54:27.673000+00:00",
+      "minutes": 55.8,
+      "tool_calls": 181,
+      "prompts": 1,
+      "title": "Product intake button icons",
+      "signals": {
+        "zsh_pitfall": 2,
+        "tool_errors": 5,
+        "masked_verify_failures": 2,
+        "playwright_locator_timeout": 1,
+        "env_timeout": 1,
+        "slow_tools": 1,
+        "soft_corrections": 1
+      },
+      "friction_score": 10
+    },
+    {
+      "session": "6c312600",
+      "project": "~/workspace/eduline-shopify-tools",
+      "start": "2026-10-10T14:01:13.470000+00:00",
+      "minutes": 70.5,
+      "tool_calls": 211,
+      "prompts": 0,
+      "title": null,
+      "signals": {
+        "zsh_pitfall": 3,
+        "slow_tools": 5,
+        "harness_sleep_block": 1,
+        "harness_blocks": 1,
+        "masked_verify_failures": 4,
+        "tool_errors": 2
+      },
+      "friction_score": 10
+    },
+    {
+      "session": "ac0cba5f",
+      "project": "~/workspace/eduline-shopify-tools",
+      "start": "2026-10-17T09:09:44.350000+00:00",
+      "minutes": 107.6,
+      "tool_calls": 235,
+      "prompts": 1,
+      "title": "Verify full gate PR",
+      "signals": {
+        "tool_errors": 2,
+        "zsh_pitfall": 7,
+        "masked_verify_failures": 1,
+        "edit_before_read": 1,
+        "slow_tools": 7,
+        "long_gaps": 1
+      },
+      "friction_score": 10
+    },
+    {
+      "session": "bd74eeb9",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-09-27T19:07:54.164000+00:00",
+      "minutes": 52.3,
+      "tool_calls": 124,
+      "prompts": 5,
+      "title": "Production QA findings root-cause investigation",
+      "signals": {
+        "zsh_pitfall": 4,
+        "tool_errors": 4,
+        "harness_sleep_block": 1,
+        "harness_blocks": 1,
+        "long_gaps": 1,
+        "retries": 1
+      },
+      "friction_score": 9
+    },
+    {
+      "session": "e6870d3c",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-09-27T08:44:21.622000+00:00",
+      "minutes": 249.8,
+      "tool_calls": 161,
+      "prompts": 3,
+      "title": "Harness evidence cleanup and phase G re-land",
+      "signals": {
+        "zsh_pitfall": 5,
+        "interrupts": 1,
+        "long_gaps": 16,
+        "tool_errors": 1,
+        "retries": 1
+      },
+      "friction_score": 9
+    },
+    {
+      "session": "620ad503",
+      "project": "~/workspace/eduline-shopify-tools",
+      "start": "2026-10-07T17:28:36.042000+00:00",
+      "minutes": 36.7,
+      "tool_calls": 126,
+      "prompts": 0,
+      "title": null,
+      "signals": {
+        "slow_tools": 1,
+        "zsh_pitfall": 4,
+        "edit_before_read": 1,
+        "tool_errors": 4,
+        "playwright_outside_allowed_roots": 1,
+        "masked_verify_failures": 1
+      },
+      "friction_score": 9
+    },
+    {
+      "session": "2db44a3d",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-20T09:32:53.345000+00:00",
+      "minutes": 306.4,
+      "tool_calls": 122,
+      "prompts": 1,
+      "title": "Remaining work status",
+      "signals": {
+        "zsh_pitfall": 3,
+        "tool_errors": 2,
+        "edit_before_read": 1,
+        "long_gaps": 13,
+        "compactions": 1,
+        "retries": 1
+      },
+      "friction_score": 8
+    },
+    {
+      "session": "a9c282f1",
+      "project": "~/workspace/eduline-shopify-tools",
+      "start": "2026-10-07T18:49:12.650000+00:00",
+      "minutes": 23.7,
+      "tool_calls": 128,
+      "prompts": 0,
+      "title": null,
+      "signals": {
+        "zsh_pitfall": 4,
+        "tool_errors": 4,
+        "playwright_outside_allowed_roots": 1
+      },
+      "friction_score": 8
+    },
+    {
+      "session": "b77706a9",
+      "project": "~/workspace/alexportelli",
+      "start": "2026-10-16T10:38:54.716000+00:00",
+      "minutes": 40.0,
+      "tool_calls": 97,
+      "prompts": 2,
+      "title": "Lint, Verifika, and dependency upgrades",
+      "signals": {
+        "tool_errors": 4,
+        "edit_before_read": 2,
+        "masked_verify_failures": 1,
+        "zsh_pitfall": 2,
+        "slow_tools": 1,
+        "follow_up_requests": 1,
+        "retries": 1
+      },
+      "friction_score": 7
+    },
+    {
+      "session": "2be58d89",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-10T08:47:19.095000+00:00",
+      "minutes": 20.0,
+      "tool_calls": 73,
+      "prompts": 0,
+      "title": null,
+      "signals": {
+        "zsh_pitfall": 5,
+        "masked_verify_failures": 1,
+        "tool_errors": 1,
+        "slow_tools": 3
+      },
+      "friction_score": 7
+    },
+    {
+      "session": "40452d4c",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-10T07:52:40.050000+00:00",
+      "minutes": 22.3,
+      "tool_calls": 66,
+      "prompts": 1,
+      "title": "Catalogue snapshot test and eval decision",
+      "signals": {
+        "zsh_pitfall": 4,
+        "tool_errors": 1,
+        "masked_verify_failures": 2,
+        "slow_tools": 1
+      },
+      "friction_score": 7
+    },
+    {
+      "session": "856bc913",
+      "project": "~/workspace/eduline-shopify-tools",
+      "start": "2026-10-03T08:01:29.610000+00:00",
+      "minutes": 40.8,
+      "tool_calls": 117,
+      "prompts": 1,
+      "title": "Twine product API Eduline",
+      "signals": {
+        "slow_tools": 2,
+        "zsh_pitfall": 3,
+        "tool_errors": 3,
+        "masked_verify_failures": 1
+      },
+      "friction_score": 7
+    },
+    {
+      "session": "975faed6",
+      "project": "~/workspace/eduline-shopify-tools",
+      "start": "2026-10-08T14:38:25.851000+00:00",
+      "minutes": 11.4,
+      "tool_calls": 24,
+      "prompts": 2,
+      "title": "Twine PATCH endpoint stock-take reconciliation",
+      "signals": {
+        "zsh_pitfall": 3,
+        "tool_errors": 2,
+        "denials": 1,
+        "slow_tools": 1
+      },
+      "friction_score": 7
+    },
+    {
+      "session": "d12727da",
+      "project": "~/workspace/verifika",
+      "start": "2026-10-13T16:15:33.121000+00:00",
+      "minutes": 32.3,
+      "tool_calls": 120,
+      "prompts": 1,
+      "title": "Verifika landing page",
+      "signals": {
+        "tool_errors": 5,
+        "playwright_outside_allowed_roots": 1,
+        "slow_tools": 1,
+        "denials": 1
+      },
+      "friction_score": 7
+    },
+    {
+      "session": "e41aaa2a",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-09-26T10:35:03.077000+00:00",
+      "minutes": 56.8,
+      "tool_calls": 86,
+      "prompts": 5,
+      "title": "Live harness verification and Fable audit",
+      "signals": {
+        "zsh_pitfall": 5,
+        "tool_errors": 1,
+        "slow_tools": 2,
+        "long_gaps": 2
+      },
+      "friction_score": 6
+    },
+    {
+      "session": "eb8f3291",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-10T13:35:46.428000+00:00",
+      "minutes": 36.3,
+      "tool_calls": 119,
+      "prompts": 0,
+      "title": null,
+      "signals": {
+        "zsh_pitfall": 2,
+        "tool_errors": 2,
+        "masked_verify_failures": 2,
+        "slow_tools": 1
+      },
+      "friction_score": 6
+    },
+    {
+      "session": "0132a610",
+      "project": "~/workspace/eduline-shopify-tools",
+      "start": "2026-10-10T07:47:25.015000+00:00",
+      "minutes": 44.0,
+      "tool_calls": 119,
+      "prompts": 2,
+      "title": "Counting form subtext",
+      "signals": {
+        "zsh_pitfall": 3,
+        "playwright_locator_timeout": 1,
+        "tool_errors": 2,
+        "env_timeout": 1,
+        "slow_tools": 1,
+        "follow_up_requests": 1,
+        "retries": 1
+      },
+      "friction_score": 6
+    },
+    {
+      "session": "04dc0d4d",
+      "project": "~/workspace/eduline-shopify-tools",
+      "start": "2026-10-03T13:13:28.852000+00:00",
+      "minutes": 339.4,
+      "tool_calls": 73,
+      "prompts": 6,
+      "title": "UI and UX audit with Playwright",
+      "signals": {
+        "slow_tools": 2,
+        "long_gaps": 4,
+        "zsh_pitfall": 4,
+        "tool_errors": 2
+      },
+      "friction_score": 6
+    },
+    {
+      "session": "76813351",
+      "project": "~/workspace/eduline-shopify-tools",
+      "start": "2026-10-07T19:18:46.950000+00:00",
+      "minutes": 52.6,
+      "tool_calls": 122,
+      "prompts": 0,
+      "title": null,
+      "signals": {
+        "zsh_pitfall": 1,
+        "edit_before_read": 3,
+        "tool_errors": 4,
+        "masked_verify_failures": 1,
+        "slow_tools": 1,
+        "long_gaps": 1
+      },
+      "friction_score": 6
+    },
+    {
+      "session": "66b9c82f",
+      "project": "~/.config/opencode",
+      "start": "2026-10-01T13:53:54.188000+00:00",
+      "minutes": 49.3,
+      "tool_calls": 76,
+      "prompts": 6,
+      "title": "Coding-agent-config workflow upgrade",
+      "signals": {
+        "zsh_pitfall": 2,
+        "tool_errors": 3,
+        "long_gaps": 1,
+        "slow_tools": 1
+      },
+      "friction_score": 5
+    },
+    {
+      "session": "efcc3743",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-10T19:28:44.445000+00:00",
+      "minutes": 38.3,
+      "tool_calls": 107,
+      "prompts": 0,
+      "title": null,
+      "signals": {
+        "zsh_pitfall": 2,
+        "harness_sleep_block": 1,
+        "harness_blocks": 1,
+        "masked_verify_failures": 1,
+        "slow_tools": 5,
+        "tool_errors": 1,
+        "retries": 1
+      },
+      "friction_score": 5
+    },
+    {
+      "session": "0b97db07",
+      "project": "~/workspace/eduline-shopify-tools",
+      "start": "2026-10-07T14:01:01.640000+00:00",
+      "minutes": 19.7,
+      "tool_calls": 66,
+      "prompts": 1,
+      "title": "Stock take investigation",
+      "signals": {
+        "tool_errors": 2,
+        "zsh_pitfall": 2,
+        "harness_sleep_block": 1,
+        "harness_blocks": 1,
+        "retries": 1
+      },
+      "friction_score": 5
+    },
+    {
+      "session": "4284f2ef",
+      "project": "~/workspace/eduline-shopify-tools",
+      "start": "2026-10-10T10:30:46.050000+00:00",
+      "minutes": 23.2,
+      "tool_calls": 78,
+      "prompts": 0,
+      "title": null,
+      "signals": {
+        "zsh_pitfall": 3,
+        "slow_tools": 3,
+        "tool_errors": 2
+      },
+      "friction_score": 5
+    },
+    {
+      "session": "d36125d1",
+      "project": "~/workspace/eduline-shopify-tools",
+      "start": "2026-10-10T10:27:32.960000+00:00",
+      "minutes": 0.2,
+      "tool_calls": 1,
+      "prompts": 0,
+      "title": null,
+      "signals": {
+        "interrupts": 1,
+        "unfinished": 1
+      },
+      "friction_score": 5
+    },
+    {
+      "session": "3fd80b58",
+      "project": "~/workspace/eduline-shopify-tools",
+      "start": "2026-10-07T15:13:21.455000+00:00",
+      "minutes": 65.5,
+      "tool_calls": 120,
+      "prompts": 1,
+      "title": "Stock take snapshot orchestration server-side",
+      "signals": {
+        "zsh_pitfall": 3,
+        "follow_up_requests": 1,
+        "tool_errors": 1
+      },
+      "friction_score": 4
+    },
+    {
+      "session": "c5e2bd18",
+      "project": "~/workspace/eduline-shopify-tools",
+      "start": "2026-10-03T09:13:48.410000+00:00",
+      "minutes": 26.2,
+      "tool_calls": 51,
+      "prompts": 1,
+      "title": "PR #44 product description usefulness and benefits",
+      "signals": {
+        "zsh_pitfall": 1,
+        "masked_verify_failures": 3,
+        "follow_up_requests": 1,
+        "slow_tools": 1
+      },
+      "friction_score": 4
+    },
+    {
+      "session": "816c6bd4",
+      "project": "~/workspace/alexportelli",
+      "start": "2026-10-15T21:02:21.886000+00:00",
+      "minutes": 3.6,
+      "tool_calls": 34,
+      "prompts": 0,
+      "title": null,
+      "signals": {
+        "tool_errors": 2,
+        "zsh_pitfall": 1
+      },
+      "friction_score": 3
+    },
+    {
+      "session": "ee421b6c",
+      "project": "~/workspace/alexportelli",
+      "start": "2026-10-15T20:40:51.282000+00:00",
+      "minutes": 0.3,
+      "tool_calls": 4,
+      "prompts": 0,
+      "title": null,
+      "signals": {
+        "tool_errors": 3,
+        "implementation_workspace": 1
+      },
+      "friction_score": 3
+    },
+    {
+      "session": "ef03871d",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-09-26T13:58:10.121000+00:00",
+      "minutes": 923.2,
+      "tool_calls": 203,
+      "prompts": 4,
+      "title": "Harness audit 2026-09-26 phased implementation",
+      "signals": {
+        "tool_errors": 3,
+        "long_gaps": 26,
+        "slow_tools": 1,
+        "retries": 3
+      },
+      "friction_score": 3
+    },
+    {
+      "session": "ee39c02a",
+      "project": "~/workspace/eduline-shopify-tools",
+      "start": "2026-10-03T10:28:24.817000+00:00",
+      "minutes": 16.2,
+      "tool_calls": 56,
+      "prompts": 0,
+      "title": null,
+      "signals": {
+        "zsh_pitfall": 1,
+        "masked_verify_failures": 2,
+        "slow_tools": 1,
+        "retries": 1
+      },
+      "friction_score": 3
+    },
+    {
+      "session": "1e1a0881",
+      "project": "~/workspace/thats-fair",
+      "start": "2026-10-12T22:29:02.228000+00:00",
+      "minutes": 33.4,
+      "tool_calls": 50,
+      "prompts": 4,
+      "title": "Verifika setup and configuration",
+      "signals": {
+        "zsh_pitfall": 1,
+        "slow_tools": 1,
+        "masked_verify_failures": 2
+      },
+      "friction_score": 3
+    },
+    {
+      "session": "093f9393",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-09-27T20:31:37.568000+00:00",
+      "minutes": 307.5,
+      "tool_calls": 132,
+      "prompts": 1,
+      "title": "Harness run 1: remove chat cart actions and fix launch issues",
+      "signals": {
+        "zsh_pitfall": 1,
+        "long_gaps": 17,
+        "tool_errors": 1,
+        "retries": 1
+      },
+      "friction_score": 2
+    },
+    {
+      "session": "d1fb1f08",
+      "project": "~/workspace/eduline-shopify-tools",
+      "start": "2026-10-10T12:59:07.773000+00:00",
+      "minutes": 19.4,
+      "tool_calls": 86,
+      "prompts": 0,
+      "title": null,
+      "signals": {
+        "zsh_pitfall": 2,
+        "slow_tools": 1
+      },
+      "friction_score": 2
+    },
+    {
+      "session": "379da15b",
+      "project": "~/.config/opencode",
+      "start": "2026-10-12T23:14:46.424000+00:00",
+      "minutes": 15.2,
+      "tool_calls": 39,
+      "prompts": 2,
+      "title": "Verifika migration for coding-agent-config",
+      "signals": {
+        "zsh_pitfall": 1
+      },
+      "friction_score": 1
+    },
+    {
+      "session": "74549884",
+      "project": "~/workspace/eduline-shopify-tools",
+      "start": "2026-09-26T14:01:20.585000+00:00",
+      "minutes": 30.1,
+      "tool_calls": 32,
+      "prompts": 0,
+      "title": null,
+      "signals": {
+        "zsh_pitfall": 1,
+        "slow_tools": 1
+      },
+      "friction_score": 1
+    },
+    {
+      "session": "1f732175",
+      "project": "~/.claude",
+      "start": "2026-09-26T06:52:54.104000+00:00",
+      "minutes": 0.0,
+      "tool_calls": 0,
+      "prompts": 0,
+      "title": null,
+      "signals": {},
+      "friction_score": 0
+    },
+    {
+      "session": "1f5d0431",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": null,
+      "minutes": 0,
+      "tool_calls": 0,
+      "prompts": 0,
+      "title": null,
+      "signals": {},
+      "friction_score": 0
+    },
+    {
+      "session": "f7a223dd",
+      "project": "~/workspace/eduline-ai-shop",
+      "start": "2026-10-14T21:20:07.577000+00:00",
+      "minutes": 0.0,
+      "tool_calls": 0,
+      "prompts": 0,
+      "title": null,
+      "signals": {},
+      "friction_score": 0
+    },
+    {
+      "session": "c63a8187",
+      "project": "~/workspace/eduline-shopify-tools",
+      "start": "2026-10-07T16:37:34.971000+00:00",
+      "minutes": 0.0,
+      "tool_calls": 0,
+      "prompts": 0,
+      "title": null,
+      "signals": {},
+      "friction_score": 0
+    },
+    {
+      "session": "d40468b6",
+      "project": "~/workspace/thats-fair",
+      "start": "2026-10-12T22:22:36.577000+00:00",
+      "minutes": 0.0,
+      "tool_calls": 0,
+      "prompts": 0,
+      "title": null,
+      "signals": {},
+      "friction_score": 0
+    },
+    {
+      "session": "618860c8",
+      "project": "~/workspace/verifika",
+      "start": "2026-10-13T12:42:29.127000+00:00",
+      "minutes": 0.2,
+      "tool_calls": 1,
+      "prompts": 1,
+      "title": "Verifika version bump",
+      "signals": {},
+      "friction_score": 0
+    },
+    {
+      "session": "29214c20",
+      "project": "~",
+      "start": "2026-09-26T07:27:10.093000+00:00",
+      "minutes": 0.4,
+      "tool_calls": 0,
+      "prompts": 0,
+      "title": null,
+      "signals": {},
+      "friction_score": 0
+    },
+    {
+      "session": "8f4c02b7",
+      "project": "~",
+      "start": "2026-09-26T07:00:08.781000+00:00",
+      "minutes": 0.0,
+      "tool_calls": 0,
+      "prompts": 0,
+      "title": null,
+      "signals": {},
+      "friction_score": 0
+    },
+    {
+      "session": "e0eb7e89",
+      "project": "~",
+      "start": "2026-09-26T07:01:01.245000+00:00",
+      "minutes": 0.0,
+      "tool_calls": 0,
+      "prompts": 0,
+      "title": null,
+      "signals": {},
+      "friction_score": 0
+    }
+  ]
+}
