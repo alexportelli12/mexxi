@@ -25,7 +25,7 @@ A hand-written page lists what it describes in `sources:` and the date you last 
 
 ## Names
 
-Names are Maltese (`ibni`, `/wettaq`); everything else is English. Pronunciation hints are written by Alex. Never invent one, and leave `TODO: Alex` in `names.json` until he supplies it.
+Names are Maltese (`ibni`, `/wettaq`); everything else is English.
 
 ## Before you finish
 

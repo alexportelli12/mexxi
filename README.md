@@ -62,7 +62,7 @@ The tools are named in Maltese, the author's native language, like [Verifika](ht
 | /lesti | get ready | opens a PR that makes a repository mexxi-ready, whatever it lacks |
 | ibda | begin | the setup skill a pasted prompt points to: installs or repairs mexxi |
 
-The [names page](https://alexportelli12.github.io/mexxi/docs/names.html) adds pronunciation hints and the old names, which still work for one release.
+The old command names still work as aliases for one release.
 
 ## Learn more
 

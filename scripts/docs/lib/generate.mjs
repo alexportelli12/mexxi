@@ -82,9 +82,8 @@ const codeCell = (value) => `\`${String(value).replace(/\|/g, "\\|")}\``;
 
 function nameDetails(entry) {
   const heading = entry.kind === "command" ? `/${entry.name}` : entry.name;
-  const todo = /^TODO/.test(entry.pronunciation);
   const lines = [
-    `- **Maltese:** \`${heading}\`${todo ? "" : `, pronounced ${entry.pronunciation}`}`,
+    `- **Maltese:** \`${heading}\``,
     `- **Literal meaning:** ${entry.meaning}`,
     `- **What it does:** ${entry.does}`,
   ];
@@ -92,7 +91,6 @@ function nameDetails(entry) {
     const old = entry.kind === "command" ? `/${entry.replaces}` : entry.replaces;
     lines.push(`- **Replaces:** \`${old}\`${entry.kind === "command" ? ", which still works for one release" : ""}`);
   }
-  if (todo) lines.push("", "::: warning TODO: Alex", `A pronunciation hint for \`${heading}\` is still to be written.`, ":::");
   return `${lines.join("\n")}\n`;
 }
 
@@ -197,10 +195,7 @@ export async function generatePages({ root, files }) {
     const target = { command: `commands/${entry.name}`, skill: `skills/${entry.name}`, cli: "cli/index", repo: "index" }[entry.kind];
     return `[${entry.kind === "command" ? "/" : ""}${entry.name}](${pageLink("names", target)})`;
   };
-  const nameRows = names.map((entry) => {
-    const hint = /^TODO/.test(entry.pronunciation) ? `**${entry.pronunciation}**` : entry.pronunciation;
-    return `| ${nameLink(entry)} | ${hint} | ${entry.meaning} | ${entry.replaces ? codeCell(entry.kind === "command" ? `/${entry.replaces}` : entry.replaces) : ""} | ${entry.does} |`;
-  });
+  const nameRows = names.map((entry) => `| ${nameLink(entry)} | ${entry.meaning} | ${entry.does} |`);
   add({
     route: "names",
     title: "The names",
@@ -211,8 +206,8 @@ export async function generatePages({ root, files }) {
       "",
       "The tools are named in Maltese, the author's native language, as [Verifika](https://github.com/alexportelli12/verifika) is. Only names are Maltese: the docs, skills, subcommands and flags are English.",
       "",
-      "| Name | Pronunciation | Meaning | Replaces | What it does |",
-      "| --- | --- | --- | --- | --- |",
+      "| Name | Meaning | What it does |",
+      "| --- | --- | --- |",
       ...nameRows,
       "",
       "The old command names stay as aliases for one release.",
