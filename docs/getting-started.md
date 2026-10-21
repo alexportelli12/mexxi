@@ -82,6 +82,18 @@ The two `cp` lines carry over the old clone's synced skills and their lock file,
 
 `--migrate-from` names the old path, not the moved copy: it takes over the links that still point inside it. If the old clone is still in place, the installer stops and prints this sequence. If the install stops after the move, every host still links into `~/.config/opencode`, so put the old clone back before you do anything else: `rmdir ~/.config/opencode && mv ~/.config/opencode.pre-move ~/.config/opencode`. `rmdir` refuses while files you copied back are still there; delete those copies first.
 
+To roll back a completed move, first set `"hosts": {"opencode": false, "claude": false, "codex": false}` in `config.json` and run `node scripts/install.mjs` from the new clone. A host that is off keeps nothing mexxi gave it: the installer removes its links, the entries it added to `settings.json` and Codex's `hooks.json`, and, for Claude Code, the mods. Then remove what is shared, put the old clone back and run its own installer:
+
+```bash
+claude plugin marketplace remove mexxi
+rm ~/.local/bin/ibni ~/.local/bin/implementation-workspace
+mv ~/.config/opencode ~/.config/opencode.mexxi
+mv ~/.config/opencode.pre-move ~/.config/opencode
+cd ~/.config/opencode && node scripts/install.mjs
+```
+
+`~/.config/opencode.mexxi` then holds only the files you copied back. Delete it, `~/.config/mexxi` and `~/.local/share/mexxi/generated` once you are sure. Keep the rest of `~/.local/share/mexxi`: it holds the retained implementation workspaces.
+
 ### Host details
 
 **Claude Code.** The installer merges only the keys it owns into your `settings.json`: `permissions.deny`, `env.BASH_MAX_TIMEOUT_MS` and the hook entries. It records what it added, so changing `config.json` later removes only those entries. It also installs the mods that `config.json` names from this clone. Open sessions pick up changes with `/reload-plugins`.

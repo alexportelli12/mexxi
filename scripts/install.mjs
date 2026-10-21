@@ -249,6 +249,17 @@ export async function install(options = {}) {
   const linkOptions = { ...options, home, checkout, generated, hosts: config.hosts };
   const entries = await links(linkOptions);
   const stale = await staleLinks({ ...linkOptions, migrateFrom, rendered, expected: new Set(entries.map(([destination]) => destination)) });
+  // A host switched off in config.json keeps none of its links: each one it
+  // would get that still points exactly where an install put it is retired.
+  const hostsOff = Object.fromEntries(Object.entries(config.hosts).map(([host, on]) => [host, !on]));
+  for (const [destination, source, host] of await links({ ...linkOptions, hosts: hostsOff })) {
+    if (host === "shared" || stale.includes(destination)) continue;
+    try {
+      if (path.resolve(path.dirname(destination), await readlink(destination)) === source) stale.push(destination);
+    } catch (error) {
+      if (!["ENOENT", "EINVAL", "UNKNOWN"].includes(error.code)) throw error;
+    }
+  }
   const pending = [];
   const relinks = [];
   const conflicts = [];
@@ -324,7 +335,8 @@ export async function install(options = {}) {
   // The claude CLI runs with this home, so a test's throwaway home is the
   // only one it can touch.
   const claudeCli = { cli: options.claudeCli ?? "claude", env: { ...(options.env ?? process.env), HOME: home } };
-  const modsPlan = config.hosts.claude ? planMods({ checkout, mods: config.mods, ...claudeCli }) : null;
+  // With Claude Code off, every mexxi mod is planned for removal, as its settings are.
+  const modsPlan = planMods({ checkout, mods: config.hosts.claude ? config.mods : [], ...claudeCli });
   // A dry run before the move asks whether the install that follows it would
   // stop. The old clone's own files are expected there, since moving it aside
   // is what clears them, so only the other conflicts count.

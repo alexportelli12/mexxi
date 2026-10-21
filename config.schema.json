@@ -31,7 +31,7 @@
       }
     },
     "hosts": {
-      "description": "Which coding-agent hosts the installer links the workflow into.",
+      "description": "Which coding-agent hosts the installer links the workflow into. Switching one off removes what an earlier install gave it: links, settings and hooks entries, and Claude Code mods.",
       "type": "object",
       "additionalProperties": false,
       "default": {},

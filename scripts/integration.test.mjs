@@ -929,6 +929,59 @@ test("turning Claude Code off takes back what mexxi added to settings.json and k
   await install({ ...options, check: true });
 });
 
+// Every link under `directory` that points into the clone or the generated files.
+async function linksInto(directory, bases) {
+  const found = [];
+  let entries;
+  try {
+    entries = await readdir(directory, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === "ENOENT") return found;
+    throw error;
+  }
+  for (const entry of entries) {
+    const file = path.join(directory, entry.name);
+    if (entry.isSymbolicLink()) {
+      const target = path.resolve(directory, await readlink(file));
+      if (bases.some((base) => target === base || target.startsWith(`${base}${path.sep}`))) found.push(file);
+    } else if (entry.isDirectory()) found.push(...await linksInto(file, bases));
+  }
+  return found;
+}
+
+test("turning a host off removes its links and mods, and with every host off only ibni stays linked", async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-host-off-"));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  await configure(home);
+  await registerPlaywright(home);
+  const options = { home, checkout };
+  const bases = [path.resolve(checkout), path.join(home, ".local/share/mexxi/generated")];
+  const hostLinks = (host) => linksInto(path.join(home, host), bases);
+  const plugins = async () => JSON.parse(await readFile(path.join(home, ".claude-stub.json"), "utf8")).plugins;
+  await install(options);
+  assert.ok((await hostLinks(".claude")).length > 0);
+  assert.deepEqual(await plugins(), ["run-pane@mexxi", "command-fixer@mexxi"]);
+
+  await configure(home, { hosts: { claude: false } });
+  await install(options);
+  assert.deepEqual(await hostLinks(".claude"), []);
+  assert.deepEqual(await plugins(), []);
+  assert.ok((await hostLinks(".codex")).length > 0);
+  await install({ ...options, check: true });
+
+  await configure(home, { hosts: { claude: false, codex: false, opencode: false } });
+  await install(options);
+  for (const host of [".claude", ".codex", ".agents", ".config/opencode"]) assert.deepEqual(await hostLinks(host), [], host);
+  assert.deepEqual((await linksInto(home, bases)).map((link) => path.relative(home, link)).sort(), [".local/bin/ibni", ".local/bin/implementation-workspace"]);
+  await install({ ...options, check: true });
+
+  // Turning them back on relinks everything.
+  await configure(home);
+  await install(options);
+  assert.ok((await hostLinks(".claude")).length > 0);
+  await install({ ...options, check: true });
+});
+
 test("the mods are installed through the claude CLI from this clone, and --check confirms where they are read from", async (t) => {
   const base = await mkdtemp(path.join(os.tmpdir(), "mexxi-mods-"));
   t.after(() => rm(base, { recursive: true, force: true }));
