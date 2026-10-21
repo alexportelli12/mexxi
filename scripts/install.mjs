@@ -218,6 +218,14 @@ async function installationConfig({ home, checkout, configFile, configSource }) 
 // so the write must be confirmed. The installer never prompts, so nothing else
 // changes with it. `--dry-run` writes nothing, so it needs no `--yes`.
 export function parseArguments(argv) {
+  // A misspelt flag would otherwise be ignored and a full install would run.
+  // `--after-merge` is the post-merge hook's, read before installing.
+  const switches = ["--check", "--dry-run", "--yes", "--after-merge"];
+  const valued = ["--config", "--migrate-from"];
+  for (let index = 0; index < argv.length; index += 1) {
+    if (valued.includes(argv[index])) index += 1;
+    else if (!switches.includes(argv[index])) throw new Error(`unknown argument: ${argv[index]} (expected ${[...switches, ...valued].join(", ")})`);
+  }
   const flagValue = (flag) => {
     const index = argv.indexOf(flag);
     if (index === -1) return undefined;

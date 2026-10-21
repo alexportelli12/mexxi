@@ -101,3 +101,9 @@ test("Jev's endpoint, which receives the API key, must be HTTPS unless it is on 
     assert.equal((await resolveConfig({ jev: { endpoint } }, { home })).jev.endpoint, endpoint);
   }
 });
+
+test("workflow.ports must not be empty, counting the defaults", async () => {
+  await assert.rejects(resolveConfig({ workflow: { ports: { first: 5000, last: 4000 } } }, { home }), /config\.workflow\.ports: first \(5000\) is above last \(4000\)/);
+  await assert.rejects(resolveConfig({ workflow: { ports: { first: 5000 } } }, { home }), /first \(5000\) is above last \(4999\)/);
+  assert.deepEqual((await resolveConfig({ workflow: { ports: { first: 4000, last: 4000 } } }, { home })).workflow.ports, { first: 4000, last: 4000 });
+});

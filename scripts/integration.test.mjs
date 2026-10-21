@@ -527,6 +527,14 @@ test("--yes confirms --config and nothing else", () => {
   assert.throws(() => parseArguments(["--migrate-from"]), /--migrate-from needs a value/);
 });
 
+test("the installer rejects an unknown or misspelt flag instead of running a full install", () => {
+  assert.throws(() => parseArguments(["--chek"]), /unknown argument: --chek/);
+  assert.throws(() => parseArguments(["check"]), /unknown argument: check/);
+  assert.throws(() => parseArguments(["--config", "c.json", "--yes", "extra"]), /unknown argument: extra/);
+  assert.equal(parseArguments(["--after-merge"]).check, false);
+  assert.equal(parseArguments(["--migrate-from", "old", "--dry-run"]).migrateFrom, "old");
+});
+
 test("--migrate-from relinks an old checkout's links, then a hand-edited host file turns --check red", async (t) => {
   const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-migrate-"));
   t.after(() => rm(home, { recursive: true, force: true }));

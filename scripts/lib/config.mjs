@@ -97,6 +97,10 @@ export async function resolveConfig(value, { home = os.homedir(), source = "conf
   const errors = validate(value, schema);
   if (errors.length) throw new ConfigError(`${source} is invalid:\n${errors.join("\n")}`);
   const config = withDefaults(value, schema);
+  // The schema checks each bound alone; only together, after defaults, can
+  // they describe an empty range.
+  const { first, last } = config.workflow.ports;
+  if (first > last) throw new ConfigError(`${source} is invalid:\nconfig.workflow.ports: first (${first}) is above last (${last})`);
   config.paths.checkout = path.resolve(expandHome(config.paths.checkout, home));
   config.paths.worktreeRoot = path.resolve(expandHome(config.paths.worktreeRoot, home));
   config.retro.output = path.resolve(config.paths.checkout, expandHome(config.retro.output, home));
