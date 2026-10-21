@@ -159,23 +159,25 @@ export const register: Register = on => {
         {/* Jev's call, ranked by how sure it was. Shadow only: it is recorded
             beside the agent's own choices and changes nothing. */}
         {triage.length > 0 ? (
-          <Box borderStyle="round" borderColor="suggestion" paddingX={1} flexDirection="column">
+          <Box borderStyle="round" borderColor="suggestion" paddingX={1} flexDirection="column" gap={1}>
             <Text>
               <Text backgroundColor="suggestion" color="inverseText" weight="bold">{' JEV TRIAGE '}</Text>
               <Text dimColor>{'  shadow'}</Text>
             </Text>
-            {triage.map(row => {
-              const cells = bar(row.percent)
-              return (
-                <Text tabular>
-                  <Text>{`${row.question.padEnd(questionWidth)}  `}</Text>
-                  <Text weight="bold">{`${row.answer.padEnd(answerWidth)}  `}</Text>
-                  <Text color={confidenceTone(row.percent)}>{cells.filled}</Text>
-                  <Text dimColor>{cells.empty}</Text>
-                  <Text color={confidenceTone(row.percent)}>{` ${String(row.percent).padStart(3)}%`}</Text>
-                </Text>
-              )
-            })}
+            <Box flexDirection="column">
+              {triage.map(row => {
+                const cells = bar(row.percent)
+                return (
+                  <Text tabular>
+                    <Text>{`${row.question.padEnd(questionWidth)}  `}</Text>
+                    <Text weight="bold">{`${row.answer.padEnd(answerWidth)}  `}</Text>
+                    <Text color={confidenceTone(row.percent)}>{cells.filled}</Text>
+                    <Text dimColor>{cells.empty}</Text>
+                    <Text color={confidenceTone(row.percent)}>{` ${String(row.percent).padStart(3)}%`}</Text>
+                  </Text>
+                )
+              })}
+            </Box>
             <Text dimColor wrap="wrap">Recorded only; changes nothing.</Text>
           </Box>
         ) : null}
