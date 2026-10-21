@@ -1,0 +1,74 @@
+{
+  "$schema": "./config.schema.json",
+  "paths": {
+    "checkout": "~/workspace/mexxi",
+    "worktreeRoot": "~/.local/share/mexxi/worktrees"
+  },
+  "hosts": {
+    "opencode": true,
+    "claude": true,
+    "codex": true
+  },
+  "models": {
+    "opencode": {
+      "general": "openai/gpt-5.6-luna",
+      "explore": "openai/gpt-5.6-luna",
+      "uiDesigner": "opencode-go/kimi-k2.7-code",
+      "reviewer": null,
+      "crossFamilyReviewer": null
+    },
+    "claude": {
+      "uiDesigner": null,
+      "reviewer": null,
+      "crossFamilyReviewer": null
+    },
+    "codex": {
+      "uiDesigner": null,
+      "reviewer": null,
+      "crossFamilyReviewer": null
+    }
+  },
+  "workflow": {
+    "branchPrefix": "agent/",
+    "viewports": [
+      1440,
+      768,
+      390
+    ]
+  },
+  "browser": {
+    "playwrightMcpVersion": "0.0.83",
+    "executablePath": "/usr/bin/chromium",
+    "outputDir": null
+  },
+  "guard": {
+    "deny": [
+      "firebase deploy",
+      "npm run deploy",
+      "npm publish",
+      "gcloud functions deploy",
+      "gcloud run deploy",
+      "vercel --prod",
+      "netlify deploy --prod",
+      "gh pr merge",
+      "gh release create",
+      "git push --force",
+      "git push -f"
+    ],
+    "protectedBranches": []
+  },
+  "jev": {
+    "enabled": false,
+    "model": "typesafe/jev-1.14",
+    "repositories": [],
+    "maxPayloadBytes": 32768
+  },
+  "retro": {
+    "output": "retro/",
+    "transcriptRetentionDays": 90
+  },
+  "mods": [
+    "run-pane",
+    "command-fixer"
+  ]
+}

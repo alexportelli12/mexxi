@@ -12,8 +12,8 @@ empty, perform a general audit. In either mode:
 
 1. Inspect the relevant current files and, for a broad audit, the root
    configuration holistically: `AGENTS.md`, agents, commands, skills,
-   references, `.gitignore`, installation tooling, `opencode.json`, and the
-   host adapters (`claude/`, `codex/`, and generated definitions).
+   references, `.gitignore`, installation tooling, `config.schema.json`, and
+   the host adapter templates (`opencode/`, `claude/`, `codex/`).
 2. Search for every instruction touching the concern.
 3. Identify the current owner or owners and classify the finding as
    contradiction, duplication, stale instruction, wrong ownership, missing

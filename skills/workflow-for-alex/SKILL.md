@@ -52,9 +52,12 @@ protocols, repository validation, or task contracts.
 
 The workflow is shared across coding-agent hosts. Commands and skills stay
 canonical; agent behaviour lives in `agent/`, with host-specific definitions
-generated or configured by adapters. Models, permissions, MCP and environment
-setup belong to the host adapters. `npm run verify` checks that boundary and
-generated definitions. Do not fork workflow semantics to accommodate a host.
+generated or configured by adapters. Anything two reasonable users would set
+differently, such as models and paths, belongs in `config.json` with a default
+and description in `config.schema.json`; permissions, MCP and environment setup
+belong to the host adapters, which the installer renders from that config.
+`npm run verify` checks that boundary and the rendered definitions. Do not fork
+workflow semantics to accommodate a host.
 
 ## Decision ladder
 

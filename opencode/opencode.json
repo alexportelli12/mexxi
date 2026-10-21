@@ -1,20 +1,16 @@
 {
   "$schema": "https://opencode.ai/config.json",
   "agent": {
-    "general": {
-      "model": "openai/gpt-5.6-luna"
-    },
     "ui-designer": {
       "description": "Design and implement repository-grounded UI with practical targeted rendered validation",
       "mode": "subagent",
-      "model": "opencode-go/kimi-k2.7-code",
-      "prompt": "{file:./agent/ui-designer.md}",
-      "permission": { "skill": "allow" }
+      "permission": {
+        "skill": "allow"
+      }
     },
     "code-reviewer": {
       "description": "Independently review completed changes using OCR Delegation Mode, including UI/UX when relevant",
       "mode": "subagent",
-      "prompt": "{file:./agent/code-reviewer.md}",
       "permission": {
         "read": "allow",
         "edit": "deny",
@@ -36,7 +32,6 @@
       }
     },
     "explore": {
-      "model": "openai/gpt-5.6-luna",
       "permission": {
         "bash": {
           "*": "deny",
@@ -67,12 +62,6 @@
           "tail *": "allow"
         }
       }
-    }
-  },
-  "permission": {
-    "external_directory": {
-      "~/.local/share/opencode/implementation-worktrees/**": "allow",
-      "~/.local/share/coding-agent/implementation-worktrees/**": "allow"
     }
   },
   "mcp": {

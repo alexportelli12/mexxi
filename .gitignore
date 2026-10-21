@@ -6,8 +6,3 @@ skills-lock.json
 skills/synced/
 __pycache__/
 *.skill
-
-# installed by herdr
-herdr-tui-session.js
-plugins/herdr-agent-state.js
-tui.jsonc

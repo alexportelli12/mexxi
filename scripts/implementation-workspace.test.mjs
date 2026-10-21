@@ -65,7 +65,9 @@ async function createFixture(t) {
   // prepare sweeps merged workspaces through gh; tests must never reach the
   // real CLI, so every fixture gets an unconfigured (always failing) stub.
   const gh = await ghStub(t);
-  return { root, remote, seed, control, worktrees, gh };
+  const config = path.join(root, "mexxi-config.json");
+  await writeFile(config, JSON.stringify({ paths: { worktreeRoot: worktrees } }));
+  return { root, remote, seed, control, worktrees, gh, config };
 }
 
 async function pathExists(candidate) {
@@ -83,7 +85,13 @@ async function lifecycle(fixture, cwd, operation, options = {}, allowedExitCodes
   for (const [key, value] of Object.entries(options)) args.push(`--${key}`, value);
   const result = await run(process.execPath, args, {
     cwd,
-    env: { IMPLEMENTATION_WORKTREE_ROOT: fixture.worktrees, ...ghEnv(fixture.gh), ...extraEnv },
+    env: {
+      MEXXI_CONFIG: fixture.config,
+      IMPLEMENTATION_WORKTREE_ROOT: "",
+      OPENCODE_WORKTREE_ROOT: "",
+      ...ghEnv(fixture.gh),
+      ...extraEnv,
+    },
     allowedExitCodes,
   });
   return {
@@ -135,22 +143,49 @@ test("uses readable slug names and numeric suffixes for repeated requests", asyn
   assert.notEqual(first.json.sessionId, second.json.sessionId);
 });
 
-test("keeps legacy workspace roots and branch ownership available", async (t) => {
+test("keeps workspaces retained under a legacy root available while new ones use the configured root", async (t) => {
   const fixture = await createFixture(t);
-  const dataHome = path.join(fixture.root, "data");
   const identity = createHash("sha256").update(path.join(fixture.control, ".git")).digest("hex").slice(0, 10);
-  const legacyRoot = path.join(dataHome, "opencode", "implementation-worktrees", `control-${identity}`);
-  await mkdir(legacyRoot, { recursive: true });
-  const env = { IMPLEMENTATION_WORKTREE_ROOT: "", OPENCODE_WORKTREE_ROOT: "", XDG_DATA_HOME: dataHome };
-  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "retained", prefix: "opencode" }, [0], env);
-  assert.equal(prepared.json.worktreePath, path.join(legacyRoot, "retained"));
+  const legacyRoot = path.join(fixture.root, "data", "opencode", "implementation-worktrees");
+  const legacyConfig = path.join(fixture.root, "legacy-config.json");
+  await writeFile(legacyConfig, JSON.stringify({ paths: { worktreeRoot: legacyRoot } }));
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "retained", prefix: "opencode" }, [0], { MEXXI_CONFIG: legacyConfig });
+  assert.equal(prepared.json.worktreePath, path.join(legacyRoot, `control-${identity}`, "retained"));
   assert.equal(prepared.json.branch, "opencode/retained");
   const gitDirectory = (await git(prepared.json.worktreePath, "rev-parse", "--absolute-git-dir")).stdout.trim();
   await rename(path.join(gitDirectory, "implementation-workspace.json"), path.join(gitDirectory, "opencode-implementation.json"));
-  const info = await lifecycle(fixture, fixture.control, "info", { session: prepared.json.sessionId }, [0], env);
+
+  // The fixture's config names a different root: the retained session is still found.
+  const info = await lifecycle(fixture, fixture.control, "info", { session: prepared.json.sessionId });
   assert.equal(info.json.worktreePath, prepared.json.worktreePath);
-  await lifecycle(fixture, fixture.control, "record-evidence", { session: prepared.json.sessionId }, [0], env);
+  const listed = await lifecycle(fixture, fixture.control, "list");
+  assert.deepEqual(listed.json.workspaces.map((workspace) => workspace.worktreePath), [prepared.json.worktreePath]);
+  await lifecycle(fixture, fixture.control, "record-evidence", { session: prepared.json.sessionId });
   assert.equal(await pathExists(path.join(gitDirectory, "implementation-workspace.json")), false);
+  const next = await lifecycle(fixture, fixture.control, "prepare", { slug: "next" });
+  assert.equal(next.json.worktreePath, path.join(fixture.worktrees, `control-${identity}`, "next"));
+});
+
+test("takes the branch prefix from config.json unless --prefix overrides it", async (t) => {
+  const fixture = await createFixture(t);
+  await writeFile(fixture.config, JSON.stringify({ paths: { worktreeRoot: fixture.worktrees }, workflow: { branchPrefix: "team/bots/" } }));
+  const configured = await lifecycle(fixture, fixture.control, "prepare", { slug: "configured" });
+  assert.equal(configured.json.branch, "team/bots/configured");
+  const explicit = await lifecycle(fixture, fixture.control, "prepare", { slug: "explicit", prefix: "fix" });
+  assert.equal(explicit.json.branch, "fix/explicit");
+});
+
+test("refuses retired worktree-root variables and invalid configuration before touching Git", async (t) => {
+  const fixture = await createFixture(t);
+  for (const name of ["IMPLEMENTATION_WORKTREE_ROOT", "OPENCODE_WORKTREE_ROOT"]) {
+    const result = await lifecycle(fixture, fixture.control, "prepare", { slug: "retired" }, [2], { [name]: fixture.worktrees });
+    assert.match(result.stderr, new RegExp(`${name} is retired[\\s\\S]*paths\\.worktreeRoot`));
+  }
+  await writeFile(fixture.config, JSON.stringify({ paths: { worktreeRoot: "relative/path" } }));
+  const invalid = await lifecycle(fixture, fixture.control, "prepare", { slug: "invalid" }, [2]);
+  assert.match(invalid.stderr, /mexxi configuration is invalid[\s\S]*paths\.worktreeRoot/);
+  assert.equal(await pathExists(fixture.worktrees), false);
+  assert.equal((await git(fixture.control, "worktree", "list", "--porcelain")).stdout.match(/^worktree /gm).length, 1);
 });
 
 test("fast-forwards a clean behind control branch before creating the worktree", async (t) => {

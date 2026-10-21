@@ -67,21 +67,27 @@ Not every change needs every step. A one-line fix doesn't get an independent rev
 | Script | [`implementation-workspace`](scripts/implementation-workspace.mjs) | Worktree lifecycle: prepare, publish, PR media, cleanup |
 | Script | [`install.mjs`](scripts/install.mjs) | Links shared configuration into all three hosts |
 
-[`AGENTS.md`](AGENTS.md) holds the cross-project engineering principles, including when agents may branch, commit and open PRs. `opencode.json`, `claude/agents.json`, and `codex/agents.json` hold the host-specific bits. `npm run agents:generate` generates both hosts' agent definitions from `agent/`, plus Codex's explicit-invocation skill wrappers from `commands/`. `npm run verify` rejects stale generated files.
+[`AGENTS.md`](AGENTS.md) holds the cross-project engineering principles, including when agents may branch, commit and open PRs. `opencode/opencode.json`, `claude/agents.json`, and `codex/agents.json` are templates for the host-specific bits; the installer renders them, with the agent definitions from `agent/` and Codex's explicit-invocation skill wrappers from `commands/`, using your `config.json`.
 
 ## Getting started
 
 **Prerequisites:** Node.js, the [`gh`](https://cli.github.com/) CLI (signed in), the [`ocr`](https://github.com/alibaba/open-code-review) CLI for reviews, the [Playwright MCP](https://github.com/microsoft/playwright-mcp) server in your host for rendered QA, and `ffmpeg` if you want GIFs.
 
-Put `~/.local/bin` on your `PATH`, then from a checkout of this repo on `main`:
+Put `~/.local/bin` on your `PATH`, then clone this repo to `~/workspace/mexxi` and install from `main`:
 
 ```bash
+git clone https://github.com/alexportelli12/coding-agent-config.git ~/workspace/mexxi
+cd ~/workspace/mexxi
 npm ci
 node scripts/install.mjs
 node scripts/install.mjs --check
 ```
 
-The installer links the shared files into `~/.config/opencode/`, `~/.claude/`, and Codex's home (`~/.codex/`, or `CODEX_HOME` when set). Codex gets the shared `AGENTS.md` at its config root and generated TOML agents in `agents/`. Shared skills, Verifika's skill from `node_modules`, and generated command wrappers are linked individually into `~/.agents/skills/`, Codex's user skill discovery location; this stays under your home even with a custom `CODEX_HOME`. The installer puts `implementation-workspace` in `~/.local/bin`, removes the retired `verify-runner` link it used to install, and adds a `post-merge` hook so a later `git pull` on `main` reinstalls automatically. It never overwrites existing configuration; on a conflict it stops and lists the paths. Your personal Codex `config.toml` is preserved, and the agent adapters inherit your model settings. The Codex reviewer defaults to a read-only sandbox; Codex's parent runtime permission overrides still take precedence.
+**Configuration lives in one file:** `~/.config/mexxi/config.json` (or the file `MEXXI_CONFIG` names). The first install writes a minimal one; every key is optional and falls back to the default in [`config.schema.json`](config.schema.json), which also describes it. [`config.example.json`](config.example.json) spells out every key: the clone's location, the worktree root (`~/.local/share/mexxi/worktrees`), which hosts to install for, the model per agent and host, and the branch prefix. Change that file, never a tracked one, then run `node scripts/install.mjs` again. To clone somewhere else, write `{"paths": {"checkout": "<your clone>"}}` to `config.json` first; the installer refuses to run from any clone but the one it names.
+
+The installer renders the host files from `config.json` into `~/.local/share/mexxi/generated/`, then links them and the shared files into `~/.config/opencode/`, `~/.claude/`, and Codex's home (`~/.codex/`, or `CODEX_HOME` when set). Codex gets the shared `AGENTS.md` at its config root and rendered TOML agents in `agents/`. Shared skills, Verifika's skill from `node_modules`, and rendered command wrappers are linked individually into `~/.agents/skills/`, Codex's user skill discovery location; this stays under your home even with a custom `CODEX_HOME`. The installer puts `implementation-workspace` in `~/.local/bin`, removes the retired `verify-runner` link it used to install, and adds a `post-merge` hook so a later `git pull` on `main` reinstalls automatically. It never overwrites existing configuration; on a conflict it stops and lists the paths. Your personal Codex `config.toml` is preserved, and agents without a model in `config.json` inherit the host's. The Codex reviewer defaults to a read-only sandbox; Codex's parent runtime permission overrides still take precedence.
+
+`install --check` renders again and fails on any difference, so a hand-edited host file or a stale render shows up as a red check. Moving from an older checkout (for example the clone that used to live in `~/.config/opencode`)? Pass the path its links point at, `node scripts/install.mjs --migrate-from ~/.config/opencode`, and the installer relinks them to the new clone instead of stopping on them as conflicts.
 
 For Claude Code, add Playwright in user scope:
 

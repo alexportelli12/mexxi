@@ -18,6 +18,7 @@ import {
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { ConfigError, configPath, loadConfig } from "./lib/config.mjs";
 
 const METADATA_FILE = "implementation-workspace.json";
 const LEGACY_METADATA_FILE = "opencode-implementation.json";
@@ -334,22 +335,29 @@ function sanitizePrefix(value) {
     .join("/");
 }
 
-async function workspaceRoot(repository, environment = process.env) {
-  const configured = environment.IMPLEMENTATION_WORKTREE_ROOT || environment.OPENCODE_WORKTREE_ROOT;
-  const dataHome = environment.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share");
-  const base = configured || path.join(
-    dataHome,
-    "coding-agent",
-    "implementation-worktrees",
-  );
+async function workspaceConfig(environment = process.env) {
+  // Both variables are retired in favour of config.json; failing beats
+  // silently creating worktrees somewhere other than where they were asked for.
+  for (const name of ["IMPLEMENTATION_WORKTREE_ROOT", "OPENCODE_WORKTREE_ROOT"]) {
+    if (environment[name]) {
+      throw new WorkspaceError(`${name} is retired`, `Set paths.worktreeRoot in ${configPath({ env: environment })} instead and unset ${name}.`);
+    }
+  }
+  try {
+    return (await loadConfig({ file: configPath({ env: environment }) })).config;
+  } catch (error) {
+    if (error instanceof ConfigError) throw new WorkspaceError("mexxi configuration is invalid", error.message);
+    throw error;
+  }
+}
+
+// New workspaces always go under paths.worktreeRoot. Retained ones under the
+// earlier coding-agent/ and opencode/ roots stay reachable, because sessions
+// are found through Git's worktree list and their metadata, not this path.
+async function workspaceRoot(repository, config) {
   const repositoryName = sanitizeSegment(path.basename(repository.root), "repository");
   const identity = createHash("sha256").update(repository.commonDirectory).digest("hex").slice(0, 10);
-  const directory = `${repositoryName}-${identity}`;
-  // Keep existing installations in their original location. Git worktree
-  // paths and ownership metadata must never be relocated implicitly.
-  const legacy = path.resolve(dataHome, "opencode", "implementation-worktrees", directory);
-  if (!configured && await pathExists(legacy)) return legacy;
-  return path.resolve(base, directory);
+  return path.resolve(config.paths.worktreeRoot, `${repositoryName}-${identity}`);
 }
 
 async function writeMetadata(gitDirectory, metadata) {
@@ -464,8 +472,8 @@ function workspaceLeaf(slug, attempt) {
   return `${base.slice(0, Math.max(1, 48 - suffix.length))}${suffix}`;
 }
 
-async function allocateWorkspace(repository, root, pushUrl, slug, prefix, baseSha) {
-  const parent = await workspaceRoot(repository);
+async function allocateWorkspace(repository, root, pushUrl, slug, prefix, config) {
+  const parent = await workspaceRoot(repository, config);
   await mkdir(parent, { recursive: true });
   const sessionId = randomBytes(12).toString("hex");
 
@@ -505,8 +513,9 @@ async function rollbackAllocatedWorkspace(root, allocation, baseSha) {
   }
 }
 
-export async function prepareWorkspace({ cwd = process.cwd(), slug, prefix = "agent" }) {
+export async function prepareWorkspace({ cwd = process.cwd(), slug, prefix }) {
   if (!slug) throw new WorkspaceError("prepare requires --slug <short-name>");
+  const config = await workspaceConfig();
   const repository = await repositoryAt(cwd);
   if (repository.gitDirectory !== repository.commonDirectory) {
     throw new WorkspaceError("/implement must be launched from the repository's primary control worktree");
@@ -576,8 +585,8 @@ export async function prepareWorkspace({ cwd = process.cwd(), slug, prefix = "ag
       repository.root,
       pushUrl,
       slug,
-      prefix,
-      baseSha,
+      prefix ?? config.workflow.branchPrefix.replace(/\/$/, ""),
+      config,
     );
     try {
       await git(repository.root, [

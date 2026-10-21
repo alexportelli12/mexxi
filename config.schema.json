@@ -1,0 +1,179 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "mexxi configuration",
+  "description": "Everything a mexxi user may set differently, read from ~/.config/mexxi/config.json (or MEXXI_CONFIG). Every key is optional; an unset key takes its default. Paths may start with ~/ for the home directory.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "description": "Editor hint pointing at this schema. Ignored by mexxi.",
+      "type": "string",
+      "default": ""
+    },
+    "paths": {
+      "description": "Where mexxi lives and where it creates task worktrees.",
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "checkout": {
+          "description": "The mexxi clone the hosts are linked to. The installer refuses to run from any other clone.",
+          "type": "string",
+          "pattern": "^(~/|/)",
+          "default": "~/workspace/mexxi"
+        },
+        "worktreeRoot": {
+          "description": "Directory under which implementation-workspace creates a folder per repository, holding each task's worktree and its evidence directory.",
+          "type": "string",
+          "pattern": "^(~/|/)",
+          "default": "~/.local/share/mexxi/worktrees"
+        }
+      }
+    },
+    "hosts": {
+      "description": "Which coding-agent hosts the installer links the workflow into.",
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "opencode": { "description": "Install for OpenCode (~/.config/opencode).", "type": "boolean", "default": true },
+        "claude": { "description": "Install for Claude Code (~/.claude).", "type": "boolean", "default": true },
+        "codex": { "description": "Install for Codex (~/.codex or CODEX_HOME, plus ~/.agents/skills).", "type": "boolean", "default": true }
+      }
+    },
+    "models": {
+      "description": "Model per role and host. null means the role inherits the host's own model.",
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "opencode": {
+          "description": "OpenCode models, as provider/model.",
+          "type": "object",
+          "additionalProperties": false,
+          "default": {},
+          "properties": {
+            "general": { "description": "OpenCode's built-in general subagent.", "type": ["string", "null"], "default": "openai/gpt-5.6-luna" },
+            "explore": { "description": "OpenCode's built-in explore subagent.", "type": ["string", "null"], "default": "openai/gpt-5.6-luna" },
+            "uiDesigner": { "description": "The shared ui-designer agent.", "type": ["string", "null"], "default": "opencode-go/kimi-k2.7-code" },
+            "reviewer": { "description": "The shared code-reviewer agent.", "type": ["string", "null"], "default": null },
+            "crossFamilyReviewer": { "description": "A reviewer model from a different family to the implementer's; null falls back to the reviewer's model.", "type": ["string", "null"], "default": null }
+          }
+        },
+        "claude": {
+          "description": "Claude Code models, as an alias (opus, sonnet, haiku) or a full model ID.",
+          "type": "object",
+          "additionalProperties": false,
+          "default": {},
+          "properties": {
+            "uiDesigner": { "description": "The shared ui-designer agent.", "type": ["string", "null"], "default": null },
+            "reviewer": { "description": "The shared code-reviewer agent.", "type": ["string", "null"], "default": null },
+            "crossFamilyReviewer": { "description": "A reviewer model from a different family to the implementer's; null falls back to the reviewer's model.", "type": ["string", "null"], "default": null }
+          }
+        },
+        "codex": {
+          "description": "Codex models.",
+          "type": "object",
+          "additionalProperties": false,
+          "default": {},
+          "properties": {
+            "uiDesigner": { "description": "The shared ui-designer agent.", "type": ["string", "null"], "default": null },
+            "reviewer": { "description": "The shared code-reviewer agent.", "type": ["string", "null"], "default": null },
+            "crossFamilyReviewer": { "description": "A reviewer model from a different family to the implementer's; null falls back to the reviewer's model.", "type": ["string", "null"], "default": null }
+          }
+        }
+      }
+    },
+    "workflow": {
+      "description": "Defaults the workflow applies to every repository.",
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "branchPrefix": {
+          "description": "Prefix for task branches; a repository instruction may still ask for another with --prefix.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*/$",
+          "default": "agent/"
+        },
+        "viewports": {
+          "description": "Viewport widths in CSS pixels that rendered QA covers: desktop, tablet and mobile.",
+          "type": "array",
+          "items": { "type": "integer", "minimum": 200 },
+          "default": [1440, 768, 390]
+        }
+      }
+    },
+    "browser": {
+      "description": "The Playwright MCP server every host uses for rendered QA.",
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "playwrightMcpVersion": { "description": "Exact @playwright/mcp version.", "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$", "default": "0.0.83" },
+        "executablePath": { "description": "Browser executable Playwright drives.", "type": "string", "pattern": "^(~/|/)", "default": "/usr/bin/chromium" },
+        "outputDir": { "description": "Where Playwright may write screenshots and recordings; null means paths.worktreeRoot, so evidence directories are writable.", "type": ["string", "null"], "pattern": "^(~/|/)", "default": null }
+      }
+    },
+    "guard": {
+      "description": "What the shared guard hook blocks on every host.",
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "deny": {
+          "description": "Command patterns the guard refuses, such as production deploys.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "default": [
+            "firebase deploy",
+            "npm run deploy",
+            "npm publish",
+            "gcloud functions deploy",
+            "gcloud run deploy",
+            "vercel --prod",
+            "netlify deploy --prod",
+            "gh pr merge",
+            "gh release create",
+            "git push --force",
+            "git push -f"
+          ]
+        },
+        "protectedBranches": {
+          "description": "Branches the guard refuses to push to, in addition to each repository's default branch.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "default": []
+        }
+      }
+    },
+    "jev": {
+      "description": "Jev triage through OpenRouter; the API key is read from OPENROUTER_API_KEY, never from this file.",
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "enabled": { "description": "Run triage at all.", "type": "boolean", "default": false },
+        "model": { "description": "Pinned Jev model.", "type": "string", "default": "typesafe/jev-1.14" },
+        "repositories": { "description": "Repositories (owner/name) triage may run in.", "type": "array", "items": { "type": "string", "pattern": "^[^/\\s]+/[^/\\s]+$" }, "default": [] },
+        "maxPayloadBytes": { "description": "Largest triage request sent, in bytes.", "type": "integer", "minimum": 1024, "default": 32768 }
+      }
+    },
+    "retro": {
+      "description": "Where session retrospectives go and how long transcripts are kept for them.",
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "output": { "description": "Report folder; a relative path is inside the clone, where it is gitignored.", "type": "string", "minLength": 1, "default": "retro/" },
+        "transcriptRetentionDays": { "description": "Days of host transcripts a retro reads.", "type": "integer", "minimum": 1, "default": 90 }
+      }
+    },
+    "mods": {
+      "description": "Which Claude Code mods the installer installs.",
+      "type": "array",
+      "items": { "type": "string", "enum": ["run-pane", "command-fixer"] },
+      "default": ["run-pane", "command-fixer"]
+    }
+  }
+}
