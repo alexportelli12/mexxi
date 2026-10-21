@@ -369,7 +369,11 @@ function checkDeny(argv, config) {
 }
 
 const SHOPIFY_ADMIN = /(?:\.myshopify\.com\/admin\/api|\/admin\/api\/\d{4}-\d{2}\/)/i;
-const CURL_DATA = new Set(["-d", "--data", "--data-raw", "--data-binary", "--data-ascii", "--data-urlencode", "--json", "-F", "--form", "--form-string", "-T", "--upload-file"]);
+const CURL_DATA = new Set(["--data", "--data-raw", "--data-binary", "--data-ascii", "--data-urlencode", "--json", "--form", "--form-string", "--upload-file"]);
+// curl's short options that take a value, which ends a cluster (-sSd '{}',
+// -sXPOST): d, F and T send a body, X names the method.
+const CURL_SHORT_VALUES = "AbcCdDeEFHKmoPQrtTuUwxXyYz";
+const WGET_BODIES = ["--post-data", "--post-file", "--body-data", "--body-file"];
 const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 // GraphQL sends every operation as a POST; only a mutation writes. A body the
@@ -389,20 +393,34 @@ function checkShopify(argv) {
     let get = false;
     for (let index = 0; index < args.length; index += 1) {
       const arg = args[index];
-      if (arg === "-X" || arg === "--request") method = args[++index]?.toUpperCase();
-      else if (/^-X[A-Za-z]+$/.test(arg)) method = arg.slice(2).toUpperCase();
+      if (/^-[^-]/.test(arg)) {
+        for (let at = 1; at < arg.length; at += 1) {
+          if (arg[at] === "G") get = true;
+          if (!CURL_SHORT_VALUES.includes(arg[at])) continue;
+          const value = at + 1 < arg.length ? arg.slice(at + 1) : args[++index] ?? "";
+          if (arg[at] === "X") method = value.toUpperCase();
+          // An uploaded file is a body the guard cannot read.
+          else if (arg[at] === "T") bodies.push("@");
+          else if (arg[at] === "d" || arg[at] === "F") bodies.push(value);
+          break;
+        }
+      } else if (arg === "--request") method = args[++index]?.toUpperCase();
       else if (arg.startsWith("--request=")) method = arg.slice(10).toUpperCase();
-      else if (arg === "-G" || arg === "--get") get = true;
-      else if (CURL_DATA.has(arg)) bodies.push(args[++index] ?? "");
-      else if ([...CURL_DATA].some((flag) => flag.startsWith("--") && arg.startsWith(`${flag}=`))) bodies.push(arg.slice(arg.indexOf("=") + 1));
+      else if (arg === "--get") get = true;
+      else if (arg === "--upload-file" || arg.startsWith("--upload-file=")) {
+        if (!arg.includes("=")) index += 1;
+        bodies.push("@");
+      } else if (CURL_DATA.has(arg)) bodies.push(args[++index] ?? "");
+      else if ([...CURL_DATA].some((flag) => arg.startsWith(`${flag}=`))) bodies.push(arg.slice(arg.indexOf("=") + 1));
     }
     method ??= bodies.length && !get ? "POST" : "GET";
   } else if (name === "wget") {
-    for (const arg of args) {
-      if (arg.startsWith("--method=")) method = arg.slice(9).toUpperCase();
-      for (const flag of ["--post-data=", "--post-file=", "--body-data=", "--body-file="]) {
-        if (arg.startsWith(flag)) bodies.push(flag.includes("file") ? "@" : arg.slice(flag.length));
-      }
+    for (let index = 0; index < args.length; index += 1) {
+      const [option, inline] = args[index].split(/=(.*)/s);
+      if (option !== "--method" && !WGET_BODIES.includes(option)) continue;
+      const value = inline ?? args[++index] ?? "";
+      if (option === "--method") method = value.toUpperCase();
+      else bodies.push(option.endsWith("-file") ? "@" : value);
     }
     method ??= bodies.length ? "POST" : "GET";
   } else if (["http", "https", "xh", "xhs"].includes(name)) {

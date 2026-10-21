@@ -353,12 +353,24 @@ test("Shopify Admin API writes are blocked and reads allowed", async () => {
     `http PUT ${api}/products/1.json title=New`,
     `xh ${api}/products.json title=New`,
     `curl -X PATCH "https://$SHOP/admin/api/2024-10/products/1.json"`,
+    // Short options clustered, and wget's options with their value apart.
+    `curl -sSd '{}' ${api}/products.json`,
+    `curl -sX POST ${api}/products.json`,
+    `curl -sXDELETE ${api}/products/1.json`,
+    `curl -sSF file=@x.png ${api}/products/1/images.json`,
+    `curl -sST product.json ${api}/products/1.json`,
+    `wget --post-data '{}' ${api}/products.json`,
+    `wget --method DELETE ${api}/products/1.json`,
+    `wget --body-file product.json --method PUT ${api}/products/1.json`,
   ]) await assertBlocked(command, /Shopify Admin API writes to a live store/);
   for (const command of [
     `curl -s ${api}/products.json`,
     `curl -G ${api}/products.json -d limit=5`,
     `curl -X POST ${api}/graphql.json -d '{"query":"{ shop { name } }"}'`,
     `http GET ${api}/products.json limit==5`,
+    `curl -sSH 'X-Shopify-Access-Token: x' ${api}/products.json`,
+    `curl -sSo out.json ${api}/products.json`,
+    `wget -O out.json ${api}/products.json`,
     "curl -X POST https://example.com/admin/api/items -d '{}'",
   ]) await assertAllowed(command);
 });
