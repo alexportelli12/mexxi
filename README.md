@@ -4,9 +4,29 @@ Hand a coding agent a task. Review the pull request in a minute.
 
 mexxi is a workflow around the coding agent you already use: OpenCode, Claude Code or Codex. It gives every task a fresh worktree, deterministic gates, rendered QA and an independent review. You decide whether to merge.
 
-## Set up by pasting a prompt
+## The problems
 
-Paste this into your agent to install mexxi:
+Handing an agent a task and hoping for the best goes wrong in four ways.
+
+- **It skips tests.** One run is careful; the next ships without proof.
+- **It never looks at the UI.** The code compiles, and nobody has seen the page.
+- **It fights its environment.** Across 89 of my sessions, from 26 September to 20 October, agents hit 386 zsh glob aborts in 77 sessions. They tried 72 edits before reading the file, ran into the 10-minute Bash cap 27 times, and hid 247 exit statuses behind pipes.
+- **It hands back a pull request you must reverse-engineer.** I sent 15 follow-up prompts asking for rework, and 28 sessions compacted their context mid-pull request.
+
+## How mexxi solves each one
+
+- **A fresh worktree per task.** `ibni prepare` creates a locked worktree, branch and free port, so parallel tasks never collide. Merged worktrees are swept on the way in.
+- **A green `verify` before and after.** The work starts from a passing `npm run verify` and ends with one. `ibni publish` pushes only a tree whose passing run is recorded.
+- **Rendered QA.** The agent drives the running UI at three viewports and checks motion, keyboard use, touch targets and console errors. The pull request shows before and after.
+- **An independent reviewer.** A read-only reviewer judges substantial changes, and calls how risky the merge is.
+- **Guardrails in code as well as in the rules.** On every host, a hook backs up the rules against force pushes, merges and pushes to the default branch. A loop breaker stops a third identical failure. A command fixer quotes globs and keeps pipe failures visible.
+- **A pull request you review in a minute.** It carries the tests that protect the behaviour, the evidence, and the screenshots.
+
+The product decisions and the merge stay with you.
+
+## Getting started
+
+Paste this into your agent to install mexxi. It checks the prerequisites, asks what it cannot detect, and shows what it will change before it changes anything:
 
 ```text
 Set up mexxi for me. Read https://raw.githubusercontent.com/alexportelli12/mexxi/main/skills/ibda/SKILL.md and follow it.
@@ -18,44 +38,13 @@ Then paste this in a repository to prepare it. The agent opens one pull request 
 Make this repository ready for mexxi: run /lesti here.
 ```
 
-## The problems
+From the repository's default branch, try a command:
 
-Handing an agent a task and hoping for the best goes wrong in four ways.
+```text
+/wettaq show the last sync time on the settings page
+```
 
-- **It skips tests.** One run is careful; the next ships without proof.
-- **It never looks at the UI.** The code compiles, and nobody has seen the page.
-- **It fights its environment.** Over 89 of my sessions, from 26 September to 20 October, agents hit 386 zsh glob aborts in 77 sessions. They tried 72 edits before reading the file, ran into the 10-minute Bash cap 27 times, and hid 247 exit statuses behind pipes.
-- **It hands back a pull request you must reverse-engineer.** I sent 15 follow-up prompts asking for rework, and 28 sessions compacted their context mid-pull request.
-
-## How mexxi solves each one
-
-- **A fresh worktree per task.** `ibni prepare` creates a locked worktree, branch and free port, so parallel tasks never collide. Merged worktrees are swept on the way in.
-- **A green `verify` before and after.** The work starts from a passing `npm run verify` and ends with one. `ibni publish` pushes only a tree whose passing run is recorded.
-- **Rendered QA.** The agent drives the running UI at three viewports and checks motion, keyboard use, touch targets and console errors. The pull request shows before and after.
-- **An independent reviewer.** A read-only reviewer judges substantial changes, and calls how risky the merge is.
-- **Guardrails the agent can't talk past.** A hook refuses force pushes, merges and pushes to the default branch on every host. A loop breaker stops a third identical failure. A command fixer quotes globs and keeps pipe failures visible.
-- **A pull request you review in a minute.** It carries the tests that protect the behaviour, the evidence, and the screenshots.
-
-The product decisions and the merge stay with you.
-
-## Getting started
-
-1. Clone mexxi to `~/workspace/mexxi` and run `npm ci`.
-2. Optionally write `~/.config/mexxi/config.json`. Every key has a default.
-3. Run the installer, then check it:
-
-   ```bash
-   node scripts/install.mjs
-   node scripts/install.mjs --check
-   ```
-
-4. From a repository's default branch, try a command:
-
-   ```text
-   /wettaq show the last sync time on the settings page
-   ```
-
-The [setup guide](https://alexportelli12.github.io/mexxi/docs/getting-started.html) covers prerequisites, each host and the Playwright server.
+The [setup guide](https://alexportelli12.github.io/mexxi/docs/getting-started.html) covers prerequisites, each host, the Playwright server and installing by hand.
 
 ## The names
 

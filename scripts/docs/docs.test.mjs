@@ -74,6 +74,17 @@ test("the landing page and README copies match prompts.json and names.json", asy
   assert.match(checkConsistency(files).join("\n"), /prepare/);
 });
 
+test("the README runs problems, solutions, getting started with the prompts, then links", async () => {
+  const files = await readAllowed(root);
+  const readme = files.get("README.md");
+  const problemsSection = readme.match(/^## The problems[\s\S]*?(?=^## )/m)[0];
+  files.set("README.md", readme.replace(problemsSection, "").replace(/^## Learn more/m, `${problemsSection}## Learn more`));
+  assert.match(checkConsistency(files).join("\n"), /sections must run The problems/);
+  const prompts = JSON.parse(files.get("prompts.json"));
+  files.set("README.md", readme.replace(prompts.install.text, "").replace(/^## The problems/m, `${prompts.install.text}\n\n## The problems`));
+  assert.match(checkConsistency(files).join("\n"), /"install" prompt belongs in Getting started/);
+});
+
 test("the build publishes only allowlisted tracked files, and search finds every skill by its description", async () => {
   const directory = await copyRepo({
     extra: { "scripts/not-allowlisted.md": "TRACKED-BUT-NOT-ALLOWLISTED" },

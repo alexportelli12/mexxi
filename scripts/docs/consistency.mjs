@@ -19,6 +19,18 @@ export function checkConsistency(files) {
       if (!flat(files.get(page) ?? "").includes(prompt.text)) problems.push(`${page}: must contain the "${key}" prompt from prompts.json`);
     }
   }
+  // The README reads as an argument: the problems, how mexxi solves them, then
+  // getting started (where the prompts belong), then where to read more.
+  const readmeSections = (files.get("README.md") ?? "").split(/^(?=## )/m).slice(1);
+  const order = [/^## The problems/, /^## How mexxi solves/, /^## Getting started/, /^## Learn more/];
+  const found = order.map((heading) => readmeSections.findIndex((section) => heading.test(section)));
+  if (found[0] !== 0 || found.some((index, at) => index === -1 || (at && index <= found[at - 1]))) {
+    problems.push("README.md: sections must run The problems, How mexxi solves..., Getting started, Learn more, with the problems first");
+  }
+  const gettingStarted = flat(readmeSections[found[2]] ?? "");
+  for (const [key, prompt] of Object.entries(prompts)) {
+    if (!gettingStarted.includes(prompt.text)) problems.push(`README.md: the "${key}" prompt belongs in Getting started`);
+  }
   // Every name is explained on the README's and the landing page's name lists.
   for (const entry of names) {
     const shown = entry.kind === "command" ? `/${entry.name}` : entry.name;
