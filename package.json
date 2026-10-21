@@ -2,12 +2,13 @@
   "private": true,
   "scripts": {
     "verify": "verifika --all",
-    "agents:generate": "node scripts/generate-claude-agents.mjs --write && node scripts/generate-codex.mjs --write"
-  },
-  "dependencies": {
-    "@opencode-ai/plugin": "1.18.33"
+    "docs:build": "node scripts/docs/build.mjs",
+    "prose": "node scripts/docs/vale.mjs --config .vale.ini README.md docs site/index.html skills/docs-writing"
   },
   "devDependencies": {
-    "verifika": "0.0.2"
+    "dictionary-en-gb": "3.0.0",
+    "mermaid": "11.17.2",
+    "verifika": "0.0.2",
+    "vitepress": "1.6.4"
   }
 }

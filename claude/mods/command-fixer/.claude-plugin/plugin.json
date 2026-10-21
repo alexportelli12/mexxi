@@ -1,0 +1,8 @@
+{
+  "name": "command-fixer",
+  "version": "0.1.0",
+  "description": "Rewrites Bash calls instead of letting them fail: quotes unquoted --include=* globs, adds pipefail to verify pipes, and moves a foreground full verify into the background.",
+  "author": {
+    "name": "Alex Portelli"
+  }
+}

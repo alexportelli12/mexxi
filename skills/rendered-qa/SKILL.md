@@ -1,6 +1,6 @@
 ---
 name: rendered-qa
-description: Exercise a running UI hands-on and capture evidence — viewports, motion, hydration, scrolling, interaction, keyboard, touch targets, console — then report findings with a severity. Use for /implement's rendered pass, before-shots, the /qa command, or when a reviewer must close a named rendered-evidence gap. Do not use to design UI or to edit code.
+description: Exercise a running UI hands-on and capture evidence — viewports, motion, hydration, scrolling, interaction, keyboard, touch targets, console — then report findings with a severity. Use for /wettaq's rendered pass, before-shots, the /ittestja command, or when a reviewer must close a named rendered-evidence gap. Do not use to design UI or to edit code.
 ---
 
 # Rendered QA
@@ -21,7 +21,7 @@ Pick the checks below that can plausibly fail for this change and say which
 ones you skipped.
 
 Write every artifact to the session's `evidenceDir` (from
-`implementation-workspace prepare` or `info`). Outside a workspace, use a fresh
+`ibni prepare` or `info`). Outside a workspace, use a fresh
 system temporary directory. Never write into a worktree or checkout. Name files
 `<before|after>-<route-slug>-<viewport>.<ext>` so before and after pairs line up.
 
@@ -31,16 +31,54 @@ Use the repository's documented commands (agent docs, README, package scripts)
 to install, seed and start the app; do not invent commands or configuration.
 Install with the lockfile-respecting command (for example `npm ci`) and
 confirm `git status` is unchanged afterwards; a rewritten lockfile dirties the
-tree and blocks the lifecycle. Note the URL and port, wait until it serves, and
+tree and blocks the lifecycle. In a workspace, serve on its recorded `port`
+(from `ibni prepare` or `info`) through the repository's own port setting, so
+parallel worktrees never collide. Note the URL and port, wait until it serves, and
 stop any server you started when finished. If the app cannot start, report that as the result instead of
 guessing from source.
 
+## Readiness Rules
+
+Agents lost the most time to fixed waits and guessed selectors. Always:
+
+1. **Wait for a readiness signal, not a timer.** A selector that appears, a
+   response that lands, `document.fonts.ready`; never a fixed sleep.
+2. **Confirm no dev-error overlay** (Vite, Next.js, webpack, Angular) before
+   judging a page; an overlay hides the app and is itself a finding.
+3. **Take an accessibility snapshot before guessing selectors**, then act on
+   what it shows.
+4. **Dismiss overlays that intercept clicks** (cookie banners, dialogs, toasts)
+   instead of retrying the click or forcing it.
+5. **Use 5-second action timeouts.** A click or fill that has not landed in 5s
+   is blocked or mistargeted; diagnose it rather than waiting longer.
+
+## The Sweep Helper
+
+Do not write the three-viewport pass by hand. From this skill's folder:
+
+```bash
+node scripts/sweep.mjs --url <url> --out <evidenceDir> --name <route-slug> --phase <before|after>
+```
+
+It screenshots `<phase>-<route-slug>-<width>.png` at each width in
+`workflow.viewports` (default 1440, 768, 390; heights 900, 1024, 844), and
+reports as JSON, per viewport: horizontal overflow (`scrollWidth` against
+`clientWidth`, with the elements reaching past the edge), interactive elements
+smaller than 44×44 CSS px, a visible dev-error overlay, and console errors.
+`--wait-for <selector>` supplies the readiness signal when load is not enough;
+`node scripts/sweep.mjs --help` lists the rest. It finds Playwright through the
+pinned MCP's npx cache or the target repository, and says how to provide it
+when neither exists. Its findings need judgement: an overflow or a
+`below-24` target is a defect to report with the evidence path, `below-44` is
+advisory, and inline links in a sentence are exempt (WCAG 2.5.8).
+
+The helper covers viewports, overflow, touch targets and console errors for one
+URL. The checks below still apply for everything it cannot see.
+
 ## Checks
 
-**Viewports.** Desktop (about 1440×900), tablet (about 768×1024) and mobile
-(about 390×844). Check that the hierarchy survives, nothing important
-disappears, and nothing overflows horizontally: compare
-`document.documentElement.scrollWidth` with `clientWidth` at each width.
+**Viewports.** Read the sweep's screenshots at each width: the hierarchy
+survives and nothing important disappears.
 
 **Motion.** Entrance and scroll-triggered animations cannot be judged from one
 screenshot. Prefer a Playwright video (a context with `recordVideo`, or the
@@ -75,11 +113,7 @@ states where they apply. Then operate the flow with the keyboard only: logical
 tab order, visible focus on every stop, Enter/Space activate, Escape closes
 overlays, and focus returns sensibly afterwards.
 
-**Touch targets.** At the mobile viewport, measure interactive elements with
-`getBoundingClientRect`. Flag targets smaller than 24×24 CSS px (WCAG 2.5.8)
-and note those under about 44×44 on primary actions.
-
-**Console and network.** Collect console errors and warnings for the whole
+**Console and network.** Beyond the sweep's console errors, collect warnings for the whole
 pass, including hydration-mismatch messages, plus failed requests. Report
 each one that is new or relevant to the change.
 
@@ -102,6 +136,14 @@ Lower the frame rate, width or duration if the file is too large. GitHub does
 not embed video files from a repository, so keep the original only as a link.
 If recording or `ffmpeg` is unavailable, fall back to a short sequence of
 screenshots and say so in the report.
+
+## Publishing Evidence For A Pull Request
+
+Publish the screenshots or GIFs a pull request should show with `ibni
+publish-media --session "<sessionId>" --files "<comma-separated names in
+evidenceDir>"`. First look at every file for secrets, tokens, personal or real
+user data, and internal hostnames, and leave out any that show them: the branch
+may be public, and later cleanup does not erase history.
 
 ## Before-Shots
 
@@ -128,4 +170,6 @@ any limit on the evidence (for example, video recording unavailable).
 End with **Could become executable checks**: findings or checks that the app
 repository could automate, such as failing on console errors, asserting no
 horizontal overflow at mobile width, or loading under reduced motion. Suggest
-them; do not add them.
+them; do not add them. Write each as one line that works as an issue title
+(for example "Fail on console errors at every route"): `/wettaq` files them as
+`qa-check` issues with `ibni file-qa-checks`.

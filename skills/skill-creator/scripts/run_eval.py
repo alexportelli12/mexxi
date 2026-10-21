@@ -34,6 +34,73 @@ def find_project_root() -> Path:
     return current
 
 
+def codex_skill_read(event: dict, skill_name: str) -> bool:
+    """True when a `codex exec --json` event is a shell command reading the skill.
+
+    Codex has no Skill tool: it loads a skill by reading its SKILL.md, which
+    shows up as a command_execution item naming <skill>/SKILL.md.
+    """
+    item = event.get("item", {})
+    return (
+        item.get("type") == "command_execution"
+        and f"{skill_name}/SKILL.md" in item.get("command", "")
+    )
+
+
+def run_codex_query(
+    query: str,
+    skill_name: str,
+    timeout: int,
+    project_root: str,
+    model: str | None = None,
+) -> bool:
+    """Run one query through `codex exec` and report whether it read the skill.
+
+    Unlike the other hosts, Codex tests the skill as installed (under
+    ~/.agents/skills): there is no temporary command to carry an overridden
+    description, so --description has no effect here.
+    """
+    cmd = ["codex", "exec", "--json", "--ephemeral", "--skip-git-repo-check", "-s", "read-only"]
+    if model:
+        cmd.extend(["-m", model])
+    cmd.append(query)
+    process = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        stdin=subprocess.DEVNULL,
+        cwd=project_root,
+    )
+    try:
+        deadline = time.time() + timeout
+        buffer = ""
+        while time.time() < deadline:
+            ready, _, _ = select.select([process.stdout], [], [], 1.0)
+            if not ready:
+                if process.poll() is not None:
+                    break
+                continue
+            chunk = os.read(process.stdout.fileno(), 8192)
+            if not chunk:
+                break
+            buffer += chunk.decode("utf-8", errors="replace")
+            while "\n" in buffer:
+                line, buffer = buffer.split("\n", 1)
+                try:
+                    event = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if codex_skill_read(event, skill_name):
+                    return True
+                if event.get("type") == "turn.completed":
+                    return False
+        return False
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait()
+
+
 def run_single_query(
     query: str,
     skill_name: str,
@@ -53,8 +120,10 @@ def run_single_query(
     unique_id = uuid.uuid4().hex[:8]
     clean_name = f"{skill_name}-skill-{unique_id}"
     host = os.environ.get("SKILL_CREATOR_HOST", "claude" if os.environ.get("CLAUDECODE") else "opencode")
-    if host not in ("claude", "opencode"):
-        raise ValueError("SKILL_CREATOR_HOST must be claude or opencode")
+    if host not in ("claude", "opencode", "codex"):
+        raise ValueError("SKILL_CREATOR_HOST must be claude, opencode or codex")
+    if host == "codex":
+        return run_codex_query(query, skill_name, timeout, project_root, model)
     project_commands_dir = Path(project_root) / (".claude" if host == "claude" else ".opencode") / "commands"
     command_file = project_commands_dir / f"{clean_name}.md"
 

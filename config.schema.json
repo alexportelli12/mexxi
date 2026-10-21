@@ -1,0 +1,215 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "mexxi configuration",
+  "description": "Everything a mexxi user may set differently, read from ~/.config/mexxi/config.json (or MEXXI_CONFIG). Every key is optional; an unset key takes its default. Paths may start with ~/ for the home directory.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "description": "Editor hint pointing at this schema. Ignored by mexxi.",
+      "type": "string",
+      "default": ""
+    },
+    "paths": {
+      "description": "Where mexxi lives and where it creates task worktrees.",
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "checkout": {
+          "description": "The mexxi clone the hosts are linked to. The installer refuses to run from any other clone.",
+          "type": "string",
+          "pattern": "^(~/|/)",
+          "default": "~/workspace/mexxi"
+        },
+        "worktreeRoot": {
+          "description": "Directory under which ibni creates a folder per repository, holding each task's worktree and its evidence directory.",
+          "type": "string",
+          "pattern": "^(~/|/)",
+          "default": "~/.local/share/mexxi/worktrees"
+        }
+      }
+    },
+    "hosts": {
+      "description": "Which coding-agent hosts the installer links the workflow into. Switching one off removes what an earlier install gave it: links, settings and hooks entries, and Claude Code mods.",
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "opencode": { "description": "Install for OpenCode (~/.config/opencode).", "type": "boolean", "default": true },
+        "claude": { "description": "Install for Claude Code (~/.claude).", "type": "boolean", "default": true },
+        "codex": { "description": "Install for Codex (~/.codex or CODEX_HOME, plus ~/.agents/skills).", "type": "boolean", "default": true }
+      }
+    },
+    "models": {
+      "description": "Model per role and host. null means the role inherits the host's own model.",
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "opencode": {
+          "description": "OpenCode models, as provider/model.",
+          "type": "object",
+          "additionalProperties": false,
+          "default": {},
+          "properties": {
+            "general": { "description": "OpenCode's built-in general subagent.", "type": ["string", "null"], "default": "openai/gpt-5.6-luna" },
+            "explore": { "description": "OpenCode's built-in explore subagent.", "type": ["string", "null"], "default": "openai/gpt-5.6-luna" },
+            "uiDesigner": { "description": "The shared ui-designer agent.", "type": ["string", "null"], "default": "opencode-go/kimi-k2.7-code" },
+            "reviewer": { "description": "The shared code-reviewer agent.", "type": ["string", "null"], "default": null },
+            "crossFamilyReviewer": { "description": "A reviewer model from a different family to the implementer's, as provider/model; rendered as the code-reviewer's model in place of reviewer. null falls back to the reviewer's model.", "type": ["string", "null"], "default": null }
+          }
+        },
+        "claude": {
+          "description": "Claude Code models, as an alias (opus, sonnet, haiku) or a full model ID.",
+          "type": "object",
+          "additionalProperties": false,
+          "default": {},
+          "properties": {
+            "uiDesigner": { "description": "The shared ui-designer agent.", "type": ["string", "null"], "default": null },
+            "reviewer": { "description": "The shared code-reviewer agent.", "type": ["string", "null"], "default": null },
+            "crossFamilyReviewer": { "description": "A Codex model that `ibni cross-review` runs the code-reviewer on through codex exec in a read-only sandbox, so the reviewer is not the implementer's family. null, or Codex not installed, falls back to the reviewer's model and says so in the pull request's Evidence.", "type": ["string", "null"], "default": null }
+          }
+        },
+        "codex": {
+          "description": "Codex models.",
+          "type": "object",
+          "additionalProperties": false,
+          "default": {},
+          "properties": {
+            "uiDesigner": { "description": "The shared ui-designer agent.", "type": ["string", "null"], "default": null },
+            "reviewer": { "description": "The shared code-reviewer agent.", "type": ["string", "null"], "default": null },
+            "crossFamilyReviewer": { "description": "Codex has only one family, so this is simply used in place of reviewer as the code-reviewer's model; null falls back to the reviewer's model.", "type": ["string", "null"], "default": null }
+          }
+        }
+      }
+    },
+    "workflow": {
+      "description": "Defaults the workflow applies to every repository.",
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "branchPrefix": {
+          "description": "Prefix for task branches; a repository instruction may still ask for another with --prefix.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)*/$",
+          "default": "agent/"
+        },
+        "viewports": {
+          "description": "Viewport widths in CSS pixels that rendered QA covers: desktop, tablet and mobile.",
+          "type": "array",
+          "items": { "type": "integer", "minimum": 200 },
+          "default": [1440, 768, 390]
+        },
+        "ports": {
+          "description": "Range ibni assigns each new workspace's PORT from, so parallel worktrees' dev servers do not collide. Ports already recorded by a retained workspace or bound on this machine are skipped.",
+          "type": "object",
+          "additionalProperties": false,
+          "default": {},
+          "properties": {
+            "first": { "description": "Lowest port ibni assigns.", "type": "integer", "minimum": 1024, "maximum": 65535, "default": 4300 },
+            "last": { "description": "Highest port ibni assigns; at least first.", "type": "integer", "minimum": 1024, "maximum": 65535, "default": 4999 }
+          }
+        }
+      }
+    },
+    "browser": {
+      "description": "The Playwright MCP server every host uses for rendered QA.",
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "playwrightMcpVersion": { "description": "Exact @playwright/mcp version.", "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$", "default": "0.0.83" },
+        "executablePath": { "description": "Browser executable Playwright drives.", "type": "string", "pattern": "^(~/|/)", "default": "/usr/bin/chromium" },
+        "outputDir": { "description": "Where Playwright may write screenshots and recordings; null means paths.worktreeRoot, so evidence directories are writable.", "type": ["string", "null"], "pattern": "^(~/|/)", "default": null }
+      }
+    },
+    "guard": {
+      "description": "What the shared guard hook blocks on every host.",
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "deny": {
+          "description": "Command prefixes refused on every host, such as production deploys. The installer also writes each as a Bash(<prefix>:*) permissions.deny rule in Claude Code's settings.json; the guard hook repeats them as patterns, because a prefix rule is sidestepped by cd x && <command>.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "default": [
+            "firebase deploy",
+            "npm run deploy",
+            "npm publish",
+            "gcloud functions deploy",
+            "gcloud run deploy",
+            "vercel --prod",
+            "netlify deploy --prod",
+            "gh pr merge",
+            "gh release create",
+            "git push --force",
+            "git push -f"
+          ]
+        },
+        "protectedBranches": {
+          "description": "Branches the guard refuses to push to, in addition to each repository's default branch.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "default": []
+        },
+        "blockUnquotedGlobs": {
+          "description": "Refuse unquoted --include=* and --exclude=* globs, which zsh expands (and aborts on when nothing matches) unless setopt no_nomatch reaches the agent's shell. Leave off once a fresh Claude Code session shows `grep -rn x --include=*.ts .` searching; turn on if it fails with 'no matches found'.",
+          "type": "boolean",
+          "default": false
+        },
+        "repeatedFailureLimit": {
+          "description": "How many times the same shell command may fail in one agent session, with no file edited in between, before the loop breaker tells the agent to stop retrying and re-diagnose.",
+          "type": "integer",
+          "minimum": 2,
+          "default": 3
+        }
+      }
+    },
+    "claude": {
+      "description": "Claude Code-only settings: the ones the installer merges into Claude Code's own settings.json (alongside the deny rules and hooks it owns; everything else in that file stays yours), and the ones the mods read.",
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "bashMaxTimeoutMs": { "description": "Longest a foreground Bash command may run (BASH_MAX_TIMEOUT_MS), in milliseconds. Set it above your slowest repository's verify run; the default is 15 minutes.", "type": "integer", "minimum": 1000, "default": 900000 },
+        "contextNudgePercent": { "description": "Context window fill, in percent, at which the run pane's band suggests a fresh session and ibni adopt for follow-ups.", "type": "integer", "minimum": 1, "maximum": 100, "default": 70 }
+      }
+    },
+    "jev": {
+      "description": "Jev triage through OpenRouter; the API key is read from OPENROUTER_API_KEY, never from this file.",
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "enabled": { "description": "Run triage at all.", "type": "boolean", "default": false },
+        "stage": { "description": "What triage may do with its answers. Only shadow exists: it records answers beside the agent's own gate choices and changes nothing. Escalate (add a gate on a confident answer) and skip (drop the independent review on a confident mechanical answer) come only once shadow data shows agreement.", "type": "string", "enum": ["shadow"], "default": "shadow" },
+        "model": { "description": "Pinned Jev model; not the ~typesafe/jev-latest alias, so a release cannot shift answers mid-calibration.", "type": "string", "default": "typesafe/jev-1.14" },
+        "endpoint": { "description": "OpenRouter's Decisions API, which takes the question schema triage sends. It receives the API key, so it must be HTTPS; plain HTTP is allowed only on loopback (localhost, 127.0.0.1, [::1]), where a local stand-in never sends the key over a network.", "type": "string", "pattern": "^(https://|http://(localhost|127\\.0\\.0\\.1|\\[::1\\])(:[0-9]+)?(/|$))", "default": "https://openrouter.ai/api/alpha/decisions" },
+        "owners": { "description": "GitHub accounts and organisations that are yours. A listed repository owned by anyone else is skipped, since its content is not only yours to share.", "type": "array", "items": { "type": "string", "pattern": "^[^/\\s]+$" }, "default": [] },
+        "repositories": { "description": "Repositories (owner/name, as in the push remote's GitHub URL) triage may run in.", "type": "array", "items": { "type": "string", "pattern": "^[^/\\s]+/[^/\\s]+$" }, "default": [] },
+        "maxPayloadBytes": { "description": "Each request stays below this many bytes; larger text puts Jev in a slower, less accurate long-context mode.", "type": "integer", "minimum": 4096, "default": 32768 },
+        "timeoutMs": { "description": "How long one request may take before triage gives up and the run carries on.", "type": "integer", "minimum": 500, "default": 5000 },
+        "zeroDataRetention": { "description": "Ask OpenRouter to route only to providers that retain no data (provider.zdr). If none serves the model, calls fail and are recorded with the reason.", "type": "boolean", "default": true }
+      }
+    },
+    "retro": {
+      "description": "Where session retrospectives go and how long transcripts are kept for them.",
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "output": { "description": "Where /irrifletti writes its reports. A relative path is inside the clone, where retro/ is gitignored; the command refuses a folder in a Git repository unless it is gitignored there with nothing tracked, so reports never reach a public repository.", "type": "string", "minLength": 1, "default": "retro/" },
+        "transcriptRetentionDays": { "description": "Days of host transcripts a retro reads.", "type": "integer", "minimum": 1, "default": 90 }
+      }
+    },
+    "mods": {
+      "description": "Which Claude Code mods the installer installs.",
+      "type": "array",
+      "items": { "type": "string", "enum": ["run-pane", "command-fixer"] },
+      "default": ["run-pane", "command-fixer"]
+    }
+  }
+}

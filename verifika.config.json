@@ -6,13 +6,53 @@
   },
   "checks": {
     "config": { "command": "node scripts/check-config.mjs" },
+    "settings": {
+      "command": "node --test scripts/config.test.mjs",
+      "paths": ["scripts/config.test.mjs", "scripts/lib/config.mjs", "config.schema.json"]
+    },
     "workspace": {
-      "command": "node --test scripts/implementation-workspace.test.mjs",
-      "paths": ["scripts/implementation-workspace*"]
+      "command": "node --test scripts/ibni/ibni.test.mjs scripts/ibni/triage.test.mjs",
+      "paths": ["scripts/ibni/**", "scripts/implementation-workspace*", "scripts/lib/config.mjs", "scripts/lib/redact.mjs", "scripts/lib/secret-patterns.json", "config.schema.json", "claude/mods/run-pane/tests/recorded.mjs"]
+    },
+    "retro": {
+      "command": "node --test scripts/retro/retro.test.mjs",
+      "paths": ["scripts/retro/**", "scripts/lib/config.mjs", "scripts/lib/secret-patterns.json", "scripts/lib/render.mjs", "scripts/ibni/lib/timings.mjs", "scripts/ibni/commands/triage.mjs", "scripts/ibni/lib/metadata.mjs", "config.schema.json"]
+    },
+    "hooks": {
+      "command": "node --test scripts/hooks/hooks.test.mjs",
+      "paths": ["scripts/hooks/**", "opencode/plugins/**", "scripts/lib/config.mjs", "scripts/ibni/lib/metadata.mjs", "config.schema.json"]
+    },
+    "mods": {
+      "command": "node scripts/check-mods.mjs",
+      "paths": ["claude/mods/**", ".claude-plugin/**", "scripts/check-mods.mjs"]
     },
     "repo-context": {
       "command": "node --test skills/repo-context/tests/inspect.test.js",
       "paths": ["skills/repo-context/**"]
+    },
+    "rendered-qa": {
+      "command": "node --test skills/rendered-qa/tests/sweep.test.mjs",
+      "paths": ["skills/rendered-qa/**", "scripts/lib/config.mjs", "config.schema.json"]
+    },
+    "evals": {
+      "command": "node --test scripts/evals.test.mjs",
+      "paths": ["evals/**", "scripts/evals.test.mjs", "skills/*/SKILL.md", "package.json"]
+    },
+    "docs": {
+      "command": "node scripts/docs/check.mjs",
+      "paths": ["README.md", "AGENTS.md", "docs/**", "site/**", "commands/**", "agent/**", "skills/**", "names.json", "prompts.json", "config.schema.json", "config.example.json", "claude/agents.json", "codex/agents.json", "opencode/opencode.json", "scripts/install.mjs", "scripts/ibni/**", "scripts/docs/**", "scripts/lib/**", ".github/workflows/docs.yml"]
+    },
+    "docs-tests": {
+      "command": "node --test scripts/docs/docs.test.mjs scripts/docs/fresh.test.mjs scripts/docs/vale.test.mjs",
+      "paths": ["scripts/docs/**", "docs/**", "site/**", "names.json", "prompts.json", "skills/*/SKILL.md"]
+    },
+    "docs-fresh": {
+      "command": "node scripts/docs/fresh.mjs",
+      "paths": ["README.md", "AGENTS.md", "docs/**", "site/**", "commands/**", "agent/**", "skills/**", "names.json", "prompts.json", "config.schema.json", "config.example.json", "claude/agents.json", "codex/agents.json", "opencode/opencode.json", "scripts/install.mjs", "scripts/ibni/**", "scripts/docs/**", "scripts/lib/**"]
+    },
+    "prose": {
+      "command": "npm run --silent prose",
+      "paths": ["README.md", "docs/**", "site/index.html", "skills/docs-writing/**", "scripts/docs/vale.mjs", ".vale.ini", ".vale/**"]
     },
     "integration": {
       "command": "node --test scripts/integration.test.mjs",

@@ -52,7 +52,7 @@ Ground the description in the full final diff against the PR's actual base,
 including all commits, and the verified evidence. Session plans explain intent,
 not what shipped. On subsequent delivery, rewrite the title and body to match
 the current whole PR; remove superseded claims, checks and media rather than
-appending an update diary. `/implement` owns posting and media publication.
+appending an update diary. `/wettaq` owns posting and media publication.
 
 ### Shape The Description
 
@@ -80,6 +80,8 @@ when present. Keep it above long media.>
 **Check:** <Entry point · action · expected result, when useful for human review.>
 
 **Risk / rollback:** <What could break and how to undo it; see below.>
+
+**Assumptions:** <Unattended runs only; see below.>
 ```
 
 Choose the two or three outcomes that define the PR, rather than compressing
@@ -113,8 +115,8 @@ explain this change. Distinguish current from intended/future behaviour. Avoid
 symbol-heavy trees, code dumps and miniature diffs that make the reader decode
 the implementation. A diagram explains design; it does not prove execution.
 
-**UI media.** Embed URLs returned by `implementation-workspace publish-media`;
-capture and publishing safety stay with `rendered-qa` and `/implement`. Choose
+**UI media.** Embed URLs returned by `ibni publish-media`;
+capture and publishing safety stay with `rendered-qa` and `/wettaq`. Choose
 the route, state and viewport that best shows the outcome—mobile first for a
 phone-first task. Keep that comparison in the open, near the lead; link or
 collapse secondary states and viewports only when useful. For example:
@@ -142,6 +144,15 @@ part of the outcome, not for every animated element. Link original videos
 rather than embedding them. If relevant media cannot be published, say why
 briefly in Evidence without treating an unavailable capture as proof.
 
+### Assumptions
+
+When the run was unattended, or a question went unanswered, the author took the
+most reasonable reading instead of asking. Add an **Assumptions** section after
+the lead and any **Important** note, above media, with one line per assumption:
+the open question, the reading taken, and the cheapest way to reverse it. A
+question that would have changed the design is a review item, so say what the
+reviewer should decide. Omit the section when nothing was assumed.
+
 ### Evidence And Material Risks
 
 Give the most useful proof in plain language: the behaviour a test protects,
@@ -157,7 +168,15 @@ measurement actually counted; do not broaden a sample result into a guarantee.
 
 When useful, give the shortest human check derived from acceptance criteria:
 entry point, action and expected result. Link longer existing instructions
-rather than recreating a test plan.
+rather than recreating a test plan. When the application repository documents
+a preview deploy (a Firebase Hosting channel, a Vercel preview), put that
+preview's URL in the **Check:** line, so the change can be validated from a
+phone; never invent a URL the repository does not document or the deploy has
+not produced.
+
+List the review's out-of-scope or taste-only `low` findings in one line each,
+with why they were left. If the reviewer had to share the implementer's model
+because no other family was available, say so in Evidence.
 
 Preserve the independent reviewer's door and blast-radius assessment from
 `code-reviewer`, translating it into a concise **Risk / rollback** line: scope

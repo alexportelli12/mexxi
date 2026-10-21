@@ -1,0 +1,6 @@
+extends: spelling
+message: "'%s' is not in the British English dictionary or the vocabulary. Fix the spelling, or add a real term to the vocabulary."
+level: error
+# British dictionary from the pinned dictionary-en-gb package; paths are relative to StylesPath.
+dic: ../../node_modules/dictionary-en-gb/index.dic
+aff: ../../node_modules/dictionary-en-gb/index.aff

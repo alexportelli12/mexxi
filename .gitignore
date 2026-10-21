@@ -7,7 +7,9 @@ skills/synced/
 __pycache__/
 *.skill
 
-# installed by herdr
-herdr-tui-session.js
-plugins/herdr-agent-state.js
-tui.jsonc
+# Retrospective reports hold transcript-derived data: private, never committed
+/retro/
+
+# Generated docs: pages are written here, then built into site/docs/
+/docs-site/
+/site/docs/

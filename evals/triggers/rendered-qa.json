@@ -1,0 +1,66 @@
+[
+  {
+    "query": "I just changed the checkout page layout. Can you run the app, look at it at desktop, tablet and phone widths and tell me if anything overflows or breaks?",
+    "should_trigger": true
+  },
+  {
+    "query": "do a hands-on QA pass of the new settings screen: click through it, keyboard-only too, and check the console for errors before I merge",
+    "should_trigger": true
+  },
+  {
+    "query": "The hero animation on the landing page feels janky. Record it and tell me whether anything gets stuck mid-transition or never appears.",
+    "should_trigger": true
+  },
+  {
+    "query": "Take before screenshots of the dashboard route at all three viewports so we can compare after the redesign.",
+    "should_trigger": true
+  },
+  {
+    "query": "Are the buttons on the mobile nav big enough to tap? Measure them in the running app and report anything too small.",
+    "should_trigger": true
+  },
+  {
+    "query": "Check that the page still shows all its content with prefers-reduced-motion turned on, and that nothing is left at opacity 0.",
+    "should_trigger": true
+  },
+  {
+    "query": "the reviewer says there is no rendered evidence for the empty and error states of the invoice list; go and capture it from the running app",
+    "should_trigger": true
+  },
+  {
+    "query": "Our SSR app flashes unstyled content on first load. Compare the early render with the settled one and measure layout shift.",
+    "should_trigger": true
+  },
+  {
+    "query": "Design a new pricing page for our SaaS: pick the layout, typography and colour palette.",
+    "should_trigger": false
+  },
+  {
+    "query": "Fix the CSS so the sidebar stops overflowing on narrow screens.",
+    "should_trigger": false
+  },
+  {
+    "query": "Write Playwright tests for the login flow using resilient selectors and a page object.",
+    "should_trigger": false
+  },
+  {
+    "query": "Review this pull request diff for correctness bugs and missing tests.",
+    "should_trigger": false
+  },
+  {
+    "query": "What does the viewport meta tag do and when should I set initial-scale?",
+    "should_trigger": false
+  },
+  {
+    "query": "Add a loading spinner component to our Angular app and wire it to the HTTP interceptor.",
+    "should_trigger": false
+  },
+  {
+    "query": "Summarise the stack and folder structure of this repository for me.",
+    "should_trigger": false
+  },
+  {
+    "query": "Write the commit message and pull request description for the changes I just finished.",
+    "should_trigger": false
+  }
+]

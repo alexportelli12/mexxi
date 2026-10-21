@@ -1,0 +1,89 @@
+{
+  "$schema": "./config.schema.json",
+  "paths": {
+    "checkout": "~/workspace/mexxi",
+    "worktreeRoot": "~/.local/share/mexxi/worktrees"
+  },
+  "hosts": {
+    "opencode": true,
+    "claude": true,
+    "codex": true
+  },
+  "models": {
+    "opencode": {
+      "general": "openai/gpt-5.6-luna",
+      "explore": "openai/gpt-5.6-luna",
+      "uiDesigner": "opencode-go/kimi-k2.7-code",
+      "reviewer": null,
+      "crossFamilyReviewer": null
+    },
+    "claude": {
+      "uiDesigner": null,
+      "reviewer": null,
+      "crossFamilyReviewer": null
+    },
+    "codex": {
+      "uiDesigner": null,
+      "reviewer": null,
+      "crossFamilyReviewer": null
+    }
+  },
+  "workflow": {
+    "branchPrefix": "agent/",
+    "viewports": [
+      1440,
+      768,
+      390
+    ],
+    "ports": {
+      "first": 4300,
+      "last": 4999
+    }
+  },
+  "browser": {
+    "playwrightMcpVersion": "0.0.83",
+    "executablePath": "/usr/bin/chromium",
+    "outputDir": null
+  },
+  "guard": {
+    "deny": [
+      "firebase deploy",
+      "npm run deploy",
+      "npm publish",
+      "gcloud functions deploy",
+      "gcloud run deploy",
+      "vercel --prod",
+      "netlify deploy --prod",
+      "gh pr merge",
+      "gh release create",
+      "git push --force",
+      "git push -f"
+    ],
+    "protectedBranches": [],
+    "blockUnquotedGlobs": false,
+    "repeatedFailureLimit": 3
+  },
+  "claude": {
+    "bashMaxTimeoutMs": 900000,
+    "contextNudgePercent": 70
+  },
+  "jev": {
+    "enabled": false,
+    "stage": "shadow",
+    "model": "typesafe/jev-1.14",
+    "endpoint": "https://openrouter.ai/api/alpha/decisions",
+    "owners": [],
+    "repositories": [],
+    "maxPayloadBytes": 32768,
+    "timeoutMs": 5000,
+    "zeroDataRetention": true
+  },
+  "retro": {
+    "output": "retro/",
+    "transcriptRetentionDays": 90
+  },
+  "mods": [
+    "run-pane",
+    "command-fixer"
+  ]
+}

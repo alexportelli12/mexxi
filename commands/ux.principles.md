@@ -1,12 +1,9 @@
 ---
-description: Generate or refine the product's UX principles document
+description: Old name for /fassal, kept for one release. Generate or refine the product's UX principles document
 ---
 
-# UX Principles: $ARGUMENTS
+`/ux.principles` is now `/fassal`; this alias goes in the next release, so say so once.
 
-Load the `ux-principles` skill and run it for the active repository. Treat
-`$ARGUMENTS` as optional product context or a requested area of refinement, not
-as a substitute for repository inspection and adaptive discovery.
-
-Create or maintain `UX_PRINCIPLES.md` only. Do not implement product changes or
-modify implementation commands, execution workflows, or agents.
+Read `commands/fassal.md` in the mexxi clone (`paths.checkout` in
+`~/.config/mexxi/config.json`, default `~/workspace/mexxi`) and follow it
+exactly, as if `/fassal` had been run with: $ARGUMENTS

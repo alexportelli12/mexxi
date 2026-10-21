@@ -1,0 +1,66 @@
+[
+  {
+    "query": "I've finished the retry logic. Write the commit message and the pull request description from what we did and the test results.",
+    "should_trigger": true
+  },
+  {
+    "query": "Draft a PR title and body for this branch; keep it short and say what to check and what evidence we have.",
+    "should_trigger": true
+  },
+  {
+    "query": "Summarise these changes as an outcome-focused commit message, following the repo's conventions.",
+    "should_trigger": true
+  },
+  {
+    "query": "Open the pull request for the finished work and write the description so a reviewer doesn't have to read the whole diff.",
+    "should_trigger": true
+  },
+  {
+    "query": "The implementation passed verify and rendered QA. Prepare the commit copy and PR text including the evidence and any risks.",
+    "should_trigger": true
+  },
+  {
+    "query": "Write a PR description that lists our assumptions, since nobody was around to answer the questions during this run.",
+    "should_trigger": true
+  },
+  {
+    "query": "Rewrite this PR description; it just lists files changed and the reviewer can't tell what the change achieves.",
+    "should_trigger": true
+  },
+  {
+    "query": "Compose the final commit message for the hotfix, explaining why it was needed and how it was validated.",
+    "should_trigger": true
+  },
+  {
+    "query": "Create a new branch off main called feature/login and check it out.",
+    "should_trigger": false
+  },
+  {
+    "query": "Squash my last four commits into one.",
+    "should_trigger": false
+  },
+  {
+    "query": "Resolve the merge conflict in package.json.",
+    "should_trigger": false
+  },
+  {
+    "query": "Cut a release and tag v2.3.0.",
+    "should_trigger": false
+  },
+  {
+    "query": "Review this pull request and list the bugs you find.",
+    "should_trigger": false
+  },
+  {
+    "query": "Write release notes for the changelog from the merged PRs since last week.",
+    "should_trigger": false
+  },
+  {
+    "query": "Push my branch and set the upstream.",
+    "should_trigger": false
+  },
+  {
+    "query": "Explain what git rebase --onto does.",
+    "should_trigger": false
+  }
+]

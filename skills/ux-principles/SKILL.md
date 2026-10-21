@@ -1,6 +1,6 @@
 ---
 name: ux-principles
-description: Define, generate, or refine a product's UX_PRINCIPLES.md through repository-informed discovery and adaptive product-owner questions. Use when establishing product-specific UX decision principles, revisiting existing UX principles, or running the ux.principles command. Do not use for visual design systems, component styling rules, or feature-level UI specifications.
+description: Define, generate, or refine a product's UX_PRINCIPLES.md through repository-informed discovery and adaptive product-owner questions. Use when establishing product-specific UX decision principles, revisiting existing UX principles, or running the /fassal command. Do not use for visual design systems, component styling rules, or feature-level UI specifications.
 ---
 
 # UX Principles

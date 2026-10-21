@@ -1,0 +1,74 @@
+[
+  {
+    "name": "mexxi",
+    "kind": "repo",
+    "meaning": "steer, lead",
+    "replaces": "coding-agent-config",
+    "does": "the repository and the workflow as a whole",
+    "pronunciation": "TODO: Alex"
+  },
+  {
+    "name": "ibni",
+    "kind": "cli",
+    "meaning": "build",
+    "replaces": "implementation-workspace",
+    "does": "the worktree CLI: a fresh, isolated worktree per task, through to a published PR",
+    "pronunciation": "TODO: Alex"
+  },
+  {
+    "name": "wettaq",
+    "kind": "command",
+    "meaning": "carry out",
+    "replaces": "implement",
+    "does": "takes a request to a reviewable PR",
+    "pronunciation": "TODO: Alex"
+  },
+  {
+    "name": "ittestja",
+    "kind": "command",
+    "meaning": "test",
+    "replaces": "qa",
+    "does": "hands-on rendered QA; reports, never edits",
+    "pronunciation": "TODO: Alex"
+  },
+  {
+    "name": "sewwi",
+    "kind": "command",
+    "meaning": "put right",
+    "replaces": "update-my-workflow",
+    "does": "audits or changes the workflow itself",
+    "pronunciation": "TODO: Alex"
+  },
+  {
+    "name": "fassal",
+    "kind": "command",
+    "meaning": "design, sketch out",
+    "replaces": "ux.principles",
+    "does": "writes a product's UX principles",
+    "pronunciation": "TODO: Alex"
+  },
+  {
+    "name": "irrifletti",
+    "kind": "command",
+    "meaning": "reflect",
+    "replaces": null,
+    "does": "the session retrospective",
+    "pronunciation": "TODO: Alex"
+  },
+  {
+    "name": "lesti",
+    "kind": "command",
+    "meaning": "get ready",
+    "replaces": null,
+    "does": "opens a PR that makes a repository mexxi-ready, whatever it lacks",
+    "pronunciation": "TODO: Alex"
+  },
+  {
+    "name": "ibda",
+    "kind": "skill",
+    "meaning": "begin",
+    "replaces": null,
+    "does": "the setup skill a pasted prompt points to: installs or repairs mexxi",
+    "pronunciation": "TODO: Alex"
+  }
+]

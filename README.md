@@ -1,134 +1,78 @@
-# coding-agent-config
+# mexxi
 
-This is the configuration I use to make coding agents more reliable across my projects.
+Hand a coding agent a task. Review the pull request in a minute.
 
-## The case
+mexxi is a workflow around the coding agent you already use: OpenCode, Claude Code or Codex. It gives every task a fresh worktree, deterministic gates, rendered QA and an independent review. You decide whether to merge.
 
-Coding agents are very capable, but handing one a task and hoping for the best is still pretty hit or miss. One run is careful; the next skips the tests, never looks at the UI and hands me a PR I have to reverse-engineer.
+## The problems
 
-I don't think the fix is writing the perfect prompt every time. **The fix is a workflow around the agent** that does the heavy lifting:
+Handing an agent a task and hoping for the best goes wrong in four ways.
 
-* the repository, not my prompt, is the source of truth;
-* deterministic gates the agent can't talk its way past;
-* actually looking at the rendered UI, including how it moves;
-* an independent reviewer for changes where judgement matters; and
-* a pull request I can review in a minute.
+- **It skips tests.** One run is careful; the next ships without proof.
+- **It never looks at the UI.** The code compiles, and nobody has seen the page.
+- **It fights its environment.** Across 89 of my sessions, from 26 September to 20 October, agents hit 386 zsh glob aborts in 77 sessions. They tried 72 edits before reading the file, ran into the 10-minute Bash cap 27 times, and hid 247 exit statuses behind pipes.
+- **It hands back a pull request you must reverse-engineer.** I sent 15 follow-up prompts asking for rework, and 28 sessions compacted their context mid-pull request.
 
-The agent gets to do the work. **Product decisions and merges stay with me.**
+## How mexxi solves each one
 
-## What you get
+- **A fresh worktree per task.** `ibni prepare` creates a locked worktree, branch and free port, so parallel tasks never collide. Merged worktrees are swept on the way in.
+- **A green `verify` before and after.** The work starts from a passing `npm run verify` and ends with one. `ibni publish` pushes only a tree whose passing run is recorded.
+- **Rendered QA.** The agent drives the running UI at three viewports and checks motion, keyboard use, touch targets and console errors. The pull request shows before and after.
+- **An independent reviewer.** A read-only reviewer judges substantial changes, and calls how risky the merge is.
+- **Guardrails in code as well as in the rules.** A hook backs up the rules against force pushes, merges and pushes to the default branch. Claude Code and OpenCode run it before every shell command, and Codex does once you trust it in `/hooks`. A loop breaker stops a third identical failure. A command fixer quotes globs and keeps pipe failures visible.
+- **A pull request you review in a minute.** It carries the tests that protect the behaviour, the evidence, and the screenshots.
 
-* An isolated worktree per task, swept away automatically on a later run once its PR is merged.
-* A green `npm run verify` before work starts and again before delivery.
-* Rendered QA across desktop, tablet and mobile, including animations, reduced motion, keyboard use and console errors.
-* PRs with before/after screenshots, GIFs for motion, the tests that protect the behaviour, and a call on how dangerous the merge is.
-* One configuration shared by [OpenCode](https://opencode.ai/), [Claude Code](https://code.claude.com/), and [Codex CLI](https://developers.openai.com/codex/cli).
-
-## The flow
-
-```mermaid
-flowchart TD
-  A["/implement request"] --> B["Fresh worktree<br/>(merged ones swept)"]
-  B --> C["Investigate repo,<br/>agree what done means"]
-  C --> D{"verify green?"}
-  D -- no --> S["Stop and report"]
-  D -- yes --> E["Before-shots<br/>(if UI changes)"]
-  E --> F["Implement"]
-  F --> G["verify"]
-  G --> H["Rendered QA"]
-  H --> I["Independent review"]
-  I --> J["Commit, push,<br/>PR with media"]
-  J --> K["I review and merge"]
-```
-
-Not every change needs every step. A one-line fix doesn't get an independent review; a substantial feature does. The workflow is deliberately proportional.
-
-## What's in the box
-
-| | Name | What it does |
-| --- | --- | --- |
-| Command | [`/implement`](commands/implement.md) | Takes a request from investigation to a reviewable PR |
-| Command | [`/qa`](commands/qa.md) | Hands-on rendered QA of a route, flow, PR or session; reports, never edits |
-| Command | [`/update-my-workflow`](commands/update-my-workflow.md) | Audits or changes this configuration coherently |
-| Command | [`/ux.principles`](commands/ux.principles.md) | Writes or refines a product's `UX_PRINCIPLES.md` |
-| Agent | [`code-reviewer`](agent/code-reviewer.md) | Independent review via OCR delegation, plus the merge-danger call |
-| Agent | [`ui-designer`](agent/ui-designer.md) | Designs and implements UI grounded in the repo |
-| Skill | [`rendered-qa`](skills/rendered-qa/SKILL.md) | How to exercise a running UI and capture evidence |
-| Skill | [`commit-pr-writing`](skills/commit-pr-writing/SKILL.md) | Commit messages and PR descriptions that prove their claims |
-| Skill | [`repo-context`](skills/repo-context/SKILL.md) | Evidence-based map of an unfamiliar repository |
-| Skill | [`ui-designer`](skills/ui-designer/SKILL.md) | Practical UI judgement: hierarchy, layout, forms, accessibility |
-| Skill | [`frontend-design`](skills/frontend-design/SKILL.md) | Aesthetic direction for new or reshaped UI |
-| Skill | [`ux-principles`](skills/ux-principles/SKILL.md) | Product-level UX principles discovery |
-| Skill | [`angular`](skills/angular/SKILL.md) | Angular architecture, forms, state and testing guidance |
-| Skill | [`playwright-tests`](skills/playwright-tests/SKILL.md) | Resilient Playwright UI tests |
-| Skill | [`skill-creator`](skills/skill-creator/SKILL.md) | Creating and evaluating skills |
-| Skill | [`workflow-for-alex`](skills/workflow-for-alex/SKILL.md) | Governance for changing this workflow |
-| Skill | [`verifika`](https://github.com/alexportelli12/verifika/blob/main/skills/verifika/SKILL.md) | Running and diagnosing Verifika checks; linked from the pinned npm package |
-| Script | [`implementation-workspace`](scripts/implementation-workspace.mjs) | Worktree lifecycle: prepare, publish, PR media, cleanup |
-| Script | [`install.mjs`](scripts/install.mjs) | Links shared configuration into all three hosts |
-
-[`AGENTS.md`](AGENTS.md) holds the cross-project engineering principles, including when agents may branch, commit and open PRs. `opencode.json`, `claude/agents.json`, and `codex/agents.json` hold the host-specific bits. `npm run agents:generate` generates both hosts' agent definitions from `agent/`, plus Codex's explicit-invocation skill wrappers from `commands/`. `npm run verify` rejects stale generated files.
+The product decisions and the merge stay with you.
 
 ## Getting started
 
-**Prerequisites:** Node.js, the [`gh`](https://cli.github.com/) CLI (signed in), the [`ocr`](https://github.com/alibaba/open-code-review) CLI for reviews, the [Playwright MCP](https://github.com/microsoft/playwright-mcp) server in your host for rendered QA, and `ffmpeg` if you want GIFs.
-
-Put `~/.local/bin` on your `PATH`, then from a checkout of this repo on `main`:
-
-```bash
-npm ci
-node scripts/install.mjs
-node scripts/install.mjs --check
-```
-
-The installer links the shared files into `~/.config/opencode/`, `~/.claude/`, and Codex's home (`~/.codex/`, or `CODEX_HOME` when set). Codex gets the shared `AGENTS.md` at its config root and generated TOML agents in `agents/`. Shared skills, Verifika's skill from `node_modules`, and generated command wrappers are linked individually into `~/.agents/skills/`, Codex's user skill discovery location; this stays under your home even with a custom `CODEX_HOME`. The installer puts `implementation-workspace` in `~/.local/bin`, removes the retired `verify-runner` link it used to install, and adds a `post-merge` hook so a later `git pull` on `main` reinstalls automatically. It never overwrites existing configuration; on a conflict it stops and lists the paths. Your personal Codex `config.toml` is preserved, and the agent adapters inherit your model settings. The Codex reviewer defaults to a read-only sandbox; Codex's parent runtime permission overrides still take precedence.
-
-For Claude Code, add Playwright in user scope:
-
-```bash
-claude mcp add --scope user playwright -- npx -y @playwright/mcp@latest --headless --isolated
-```
-
-For Codex, configure the same MCP server in user scope:
-
-```bash
-codex mcp add playwright -- npx -y @playwright/mcp@latest --headless --isolated
-```
-
-Start a new Codex session after installation. A non-empty `AGENTS.override.md` in Codex's home takes precedence over the installed `AGENTS.md`; remove your override when you want the shared guidance. Invoke command wrappers explicitly as `$workflow-implement <request>`, `$workflow-qa <request>`, `$workflow-update-my-workflow <request>`, or `$workflow-ux-principles <request>`. These use the canonical command bodies with the invocation's request as their arguments; ordinary skills retain their existing names. Codex discovers skills through `/skills` or `$` and agents from its `agents/` directory. Unlike OpenCode and Claude's slash commands, these wrappers use Codex's native skill invocation.
-
-**An app repo needs one thing:** an `npm run verify` script that defines "mechanically healthy" for that project (lint, types, tests, whatever fits). Nothing host-specific. The recommended way is [Verifika](https://github.com/alexportelli12/verifika): list the checks in `verifika.config.json` and set `"verify": "verifika --all"`, as this repo does. Agents can then run only the checks a change affects while they work, and read compact failures and per-check logs.
-
-**A first command to try**, from the app repo's default branch:
+Paste this into your agent to install mexxi. It checks the prerequisites, asks what it cannot detect, and shows what it will change before it changes anything:
 
 ```text
-/implement show the last sync time on the settings page
+Set up mexxi for me. Read https://raw.githubusercontent.com/alexportelli12/mexxi/main/skills/ibda/SKILL.md and follow it.
 ```
 
-For occasional manual use:
+Then paste this in a repository to prepare it. The agent opens one pull request that adds what mexxi needs and fixes the checks that already fail.
 
-```bash
-implementation-workspace list                     # retained workspaces
-implementation-workspace info --session <id>      # paths, branch and PR for one
-implementation-workspace cleanup                  # what would be removed (dry run)
-implementation-workspace cleanup --dry-run false  # remove merged, consumed ones
+```text
+Make this repository ready for mexxi: run /lesti here.
 ```
 
-You rarely need the last two: every `/implement` sweeps merged workspaces on the way in.
+From the repository's default branch, try a command:
 
-## Principles
+```text
+/wettaq show the last sync time on the settings page
+```
 
-* **Repository first.** The app repo owns its architecture and conventions; this config sits above it.
-* **Deterministic before prose.** If a tool can check it, don't rely on an agent remembering an instruction.
-* **Proportional process.** Ceremony scales with the change.
-* **The human owns merges.** Agents can prove, review and propose. They don't decide what ships.
+The [setup guide](https://alexportelli12.github.io/mexxi/docs/getting-started.html) covers prerequisites, each host, the Playwright server and installing by hand.
 
-The full reasoning lives in [`workflow-for-alex`](skills/workflow-for-alex/SKILL.md).
+## The names
+
+The tools are named in Maltese, the author's native language, like [Verifika](https://github.com/alexportelli12/verifika). Everything else is English.
+
+| Name | Meaning | What it does |
+| --- | --- | --- |
+| mexxi | steer, lead | the repository and the workflow as a whole |
+| ibni | build | the worktree CLI: a fresh, isolated worktree per task, through to a published PR |
+| /wettaq | carry out | takes a request to a reviewable PR |
+| /ittestja | test | hands-on rendered QA; reports, never edits |
+| /sewwi | put right | audits or changes the workflow itself |
+| /fassal | design, sketch out | writes a product's UX principles |
+| /irrifletti | reflect | the session retrospective |
+| /lesti | get ready | opens a PR that makes a repository mexxi-ready, whatever it lacks |
+| ibda | begin | the setup skill a pasted prompt points to: installs or repairs mexxi |
+
+The [names page](https://alexportelli12.github.io/mexxi/docs/names.html) adds pronunciation hints and the old names, which still work for one release.
+
+## Learn more
+
+The details live in the [docs](https://alexportelli12.github.io/mexxi/docs/), generated from this repository so they cannot drift from it:
+
+- [How a run works](https://alexportelli12.github.io/mexxi/docs/how-a-run-works.html), with a diagram of `/wettaq`.
+- [Commands](https://alexportelli12.github.io/mexxi/docs/commands/), [agents](https://alexportelli12.github.io/mexxi/docs/agents/) and [skills](https://alexportelli12.github.io/mexxi/docs/skills/).
+- The [`ibni` CLI reference](https://alexportelli12.github.io/mexxi/docs/cli/) and every [configuration key](https://alexportelli12.github.io/mexxi/docs/configuration/).
+- The [principles](https://alexportelli12.github.io/mexxi/docs/principles/agents.html) behind it, and a [glossary](https://alexportelli12.github.io/mexxi/docs/glossary.html).
 
 ## Using it yourself
 
-Go for it. This repo is public because I wanted to share the workflow I've been building while using coding agents day to day.
-
-It's opinionated around how **I** like to work, so I wouldn't copy the whole thing and expect it to fit. Browse it, take the bits that fit, and change the bits that don't.
-
-If it gives you one useful idea for your own setup, it has done its job.
+Go for it. I made this repository public to share the workflow I use day to day. It is opinionated around how I like to work, so take the parts that fit and change the rest.
