@@ -50,9 +50,8 @@ or out-of-scope findings.
 finding inside the task's scope with a bounded fix is fixed in the same
 remediation batch, because deferred lows were the strongest source of rework;
 it needs no review pass of its own. A `low` that is out of scope or a matter of
-taste is left alone and listed in the pull request. This rule lives here, where
-remediation does, and not in `AGENTS.md`. Keep a concise finding ledger in
-session context only: each finding's severity and disposition, and the
+taste is left alone and listed in the pull request. Keep a concise finding
+ledger in session context only: each finding's severity and disposition, and the
 remediation for each blocker.
 
 If discovery has no applicable blockers, fix any in-scope lows, rerun
