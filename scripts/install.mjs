@@ -344,7 +344,7 @@ export async function install(options = {}) {
   // only one it can touch.
   const claudeCli = { cli: options.claudeCli ?? "claude", env: { ...(options.env ?? process.env), HOME: home } };
   // With Claude Code off, every mexxi mod is planned for removal, as its settings are.
-  const modsPlan = planMods({ checkout, mods: config.hosts.claude ? config.mods : [], ...claudeCli });
+  const modsPlan = planMods({ checkout, mods: config.hosts.claude ? config.mods : [], claudeOn: config.hosts.claude, ...claudeCli });
   // A dry run before the move asks whether the install that follows it would
   // stop. The old clone's own files are expected there, since moving it aside
   // is what clears them, so only the other conflicts count.
@@ -423,7 +423,7 @@ async function fileExists(file) {
 
 function modsSummary(plan) {
   if (!plan) return {};
-  return { mods: plan.available ? plan.install.length + plan.uninstall.length + (plan.marketplace ? 1 : 0) : "skipped: no claude CLI" };
+  return { mods: plan.available ? plan.install.length + plan.uninstall.length + (plan.marketplace ? 1 : 0) : plan.skipped };
 }
 
 function windowsWrapper(module) {

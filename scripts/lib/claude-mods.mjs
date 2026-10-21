@@ -4,7 +4,8 @@
 // a git pull updates them with no reinstall. The installer adds the marketplace
 // and installs whichever of config.json's mods are missing; `install --check`
 // asks `claude plugin list` where each one is read from, which catches a mod
-// still read from an old clone. Hosts without the claude CLI are skipped.
+// still read from an old clone. Hosts without the claude CLI are skipped, as
+// is one whose CLI fails while Claude Code is off.
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 
@@ -25,16 +26,25 @@ function claude(args, { env, cli }) {
   return result.stdout;
 }
 
-// What `install --check` reports and what an install would run.
-export function planMods({ checkout, mods, env = process.env, cli = "claude" }) {
-  const listed = claude(["plugin", "list", "--json"], { env, cli });
-  if (listed === null) return { available: false, drift: [], marketplace: false, install: [], uninstall: [] };
+// What `install --check` reports and what an install would run. With Claude
+// Code off (`claudeOn` false) a claude CLI that fails is reported as skipped,
+// not fatal: it only stops removing mods someone who does not use it may
+// never have had.
+export function planMods({ checkout, mods, claudeOn = true, env = process.env, cli = "claude" }) {
+  const skipped = (reason) => ({ available: false, skipped: `skipped: ${reason}`, drift: [], marketplace: false, install: [], uninstall: [] });
   let plugins;
   try {
-    plugins = JSON.parse(listed);
-    if (!Array.isArray(plugins)) throw new Error("not an array");
+    const listed = claude(["plugin", "list", "--json"], { env, cli });
+    if (listed === null) return skipped("no claude CLI");
+    try {
+      plugins = JSON.parse(listed);
+      if (!Array.isArray(plugins)) throw new Error("not an array");
+    } catch (error) {
+      throw new Error(`could not read \`${cli} plugin list --json\` (${error.message})`);
+    }
   } catch (error) {
-    throw new Error(`could not read \`${cli} plugin list --json\` (${error.message})`);
+    if (claudeOn) throw error;
+    return skipped(error.message);
   }
   const ours = plugins.filter((plugin) => typeof plugin?.id === "string" && plugin.id.endsWith(`@${MARKETPLACE}`));
   const drift = [];

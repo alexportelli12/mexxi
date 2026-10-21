@@ -1055,3 +1055,18 @@ test("hosts without the claude CLI skip the mods", async (t) => {
   assert.equal((await install(options)).mods, "skipped: no claude CLI");
   assert.equal((await install({ ...options, check: true })).mods, "skipped: no claude CLI");
 });
+
+test("a failing claude CLI stops the install only while Claude Code is on", async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-broken-claude-"));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  await configure(home, { hosts: { claude: false } });
+  await registerPlaywright(home);
+  const broken = path.join(home, "broken-claude");
+  await writeFile(broken, "#!/bin/sh\necho 'not logged in' >&2\nexit 1\n", { mode: 0o755 });
+  const options = { home, checkout, claudeCli: broken };
+  // Someone who does not use Claude Code is told, not stopped.
+  assert.match((await install(options)).mods, /^skipped: .*plugin list --json failed: not logged in/);
+  assert.match((await install({ ...options, check: true })).mods, /^skipped: .*not logged in/);
+  await configure(home);
+  await assert.rejects(install(options), /plugin list --json failed: not logged in/);
+});
