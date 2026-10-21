@@ -49,8 +49,10 @@ reads separately from the code fixes.
 
 **Fix, never weaken.** Fix a failure at its cause. Disabling a lint rule,
 skipping or deleting a test, loosening types or lowering a threshold is not a
-fix. If a failure cannot be fixed without a product decision, stop and ask
-rather than guess, even in an unattended run: report what is blocked.
+fix. If a failure cannot be fixed without a product decision, ask. In an
+unattended run follow `/wettaq`'s **Unattended runs** rule: take the most
+reasonable reading, fix it and record it as an assumption; stop and report only
+for a one-way door.
 
 ## Prove It
 
@@ -65,5 +67,5 @@ Review is mandatory when the PR contains code fixes, and follows the usual
 gate for any other substantial change: load `implement-review` and follow it.
 Deliver as `/wettaq` does. The pull-request description lists each gap, what
 was added and why, every pre-existing failure with how it was fixed (one line
-per commit), and what is left for a human: product principles, tests to write,
-anything blocked.
+per commit), every assumption taken in place of a product decision, and what is
+left for a human: product principles and tests to write.

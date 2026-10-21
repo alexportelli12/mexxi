@@ -125,7 +125,8 @@ baseline before implementation (proven by a CI run of the exact base commit
 when the repository names that check in `.mexxi.json`) and a green final result
 afterward. Do not
 duplicate repository-specific checks in global prose or add project tooling
-from this configuration.
+from this configuration. The one exception is `/lesti`: run in a repository on
+request, it installs the verify contract there.
 
 [Verifika](https://github.com/alexportelli12/verifika) is the recommended
 verification engine, and the one this configuration uses: a repository lists
