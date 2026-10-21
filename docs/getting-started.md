@@ -111,7 +111,7 @@ codex mcp add playwright -- npx -y @playwright/mcp@0.0.83 --headless --isolated 
 
 `install --check` reads those files back and fails when a server is missing or has another version, another output directory, or `--allow-unrestricted-file-access`. To change the pin, edit `config.json`, rerun the installer, remove the old server and register it again with the new lines.
 
-**The guard.** Claude Code and Codex run `scripts/hooks/guard.mjs` before every shell command, and OpenCode runs the same code through a plugin. It refuses force pushes, pushes to the default branch, merges, and destructive Git outside an owned worktree. It reads every command in a line, including those inside `if`, loops and `{ ...; }` groups, and treats quoted text as data. It also reads the script a shell is given, whether by `bash -c` or on standard input. A shell piped a script it cannot see, such as `curl ... | sh`, is refused. A refusal reaches the agent as the tool's error, with the reason.
+**The guard.** Claude Code and Codex run `scripts/hooks/guard.mjs` before every shell command, and OpenCode runs the same code through a plugin. Codex runs it only once you trust it in `/hooks`. The rules in `AGENTS.md` are what bind the agent; the guard is a backup for some of them, not a substitute. A command it lets through is not thereby allowed. A refusal reaches the agent as the tool's error, with the reason.
 
 ## Prepare your repository
 

@@ -45,7 +45,9 @@ You review the pull request and decide whether to merge. Mexxi never merges for 
 
 ## What stops an agent talking its way past a gate
 
-The gates are code, not instructions. The guard hook refuses force pushes, merges and pushes to the default branch on every host. The loop breaker tells an agent to stop and re-diagnose when the same command fails a third time. `ibni publish` refuses a branch without recorded evidence that the committed tree passed. See [the CLI reference](cli/index.md) for each step.
+The delivery gate is code: `ibni publish` refuses a branch without recorded evidence that the committed tree passed. The loop breaker tells an agent to stop and re-diagnose when the same command fails a third time. See [the CLI reference](cli/index.md) for each step.
+
+The red lines are rules: the agent never merges, force pushes or pushes to the default branch. The guard hook is a backup for some of them, not a substitute. A command it lets through is not thereby allowed.
 
 ## After the pull request
 
