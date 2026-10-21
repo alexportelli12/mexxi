@@ -166,23 +166,42 @@ export function since(iso: string | undefined, now: number): string | undefined 
   return hours < 24 ? `${hours}h ${minutes % 60}m ago` : `${Math.floor(hours / 24)}d ago`
 }
 
-// Jev's answers as a few short tags on one line: it runs in shadow and
-// changes nothing, so it earns a glance, not a section.
-export function triageTags(run: RunPaneSnapshot): string[] {
+// Jev's answers, most confident first, each with the question asked in plain
+// words and its confidence as a percentage. Questions Jev did not answer, or
+// answered without a confidence, are left out.
+const QUESTIONS: Record<string, string> = {
+  oneWayDoor: 'One-way door?',
+  userFacing: 'User-facing?',
+  existingUi: 'Changes existing UI?',
+  size: 'Change size',
+  reviewValue: 'Review value',
+}
+
+export type TriageRow = { key: string; question: string; answer: string; percent: number }
+
+export function triageRanking(run: RunPaneSnapshot): TriageRow[] {
   const answers = run.triage ?? {}
-  const value = (key: string) => {
-    const item = record(answers[key])
-    return 'answer' in item ? String(item.answer) : undefined
-  }
-  const tags: string[] = []
-  const size = value('size')
-  if (size) tags.push(`${size} change`)
-  if (value('existingUi') !== undefined) tags.push(value('existingUi') === 'yes' ? 'changes UI' : 'no UI change')
-  if (value('userFacing') === 'yes') tags.push('user-facing')
-  if (value('oneWayDoor') !== undefined) tags.push(value('oneWayDoor') === 'yes' ? 'one-way door' : 'two-way door')
-  const review = Number(value('reviewValue'))
-  if (value('reviewValue') !== undefined && Number.isFinite(review)) tags.push(`review value ${review}`)
-  return tags
+  return Object.entries(answers)
+    .map(([key, value]) => {
+      const item = record(value)
+      const confidence = Number(item.confidence)
+      if (!('answer' in item) || !Number.isFinite(confidence)) return null
+      return { key, question: QUESTIONS[key] ?? key, answer: String(item.answer), percent: Math.round(Math.min(1, Math.max(0, confidence)) * 100) }
+    })
+    .filter((row): row is TriageRow => row !== null)
+    .sort((a, b) => b.percent - a.percent || a.question.localeCompare(b.question))
+}
+
+// A ten-cell bar for a percentage: filled cells, then empty ones.
+export function bar(percent: number, width = 10): { filled: string; empty: string } {
+  const cells = Math.round((Math.min(100, Math.max(0, percent)) / 100) * width)
+  return { filled: '▰'.repeat(cells), empty: '▱'.repeat(width - cells) }
+}
+
+// How sure Jev was, as a theme colour: green when sure, accent when fairly
+// sure, amber when it was close to guessing.
+export function confidenceTone(percent: number): Tone {
+  return percent >= 80 ? 'success' : percent >= 60 ? 'claude' : 'warning'
 }
 
 // Why the band suggests a fresh session, or null. The key changes with the

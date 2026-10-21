@@ -8,7 +8,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { RunPaneSnapshot } from '../types'
 import type { StageState } from './run'
-import { duration, headline, journey, lastEventAt, nudge, nudgePercentFrom, progress, sessionIdFrom, since, snapshotFrom, taskTitle, triageTags } from './run'
+import { bar, confidenceTone, duration, headline, journey, lastEventAt, nudge, nudgePercentFrom, progress, sessionIdFrom, since, snapshotFrom, taskTitle, triageRanking } from './run'
 
 const PANE = 'run-pane'
 
@@ -107,7 +107,9 @@ export const register: Register = on => {
     const started = since(current.createdAt, now)
     const lastEvent = lastEventAt(current)
     const onCurrent = lastEvent ? duration(now - Date.parse(lastEvent)) : undefined
-    const tags = triageTags(current)
+    const triage = triageRanking(current)
+    const questionWidth = Math.max(0, ...triage.map(row => row.question.length))
+    const answerWidth = Math.max(0, ...triage.map(row => row.answer.length))
     const port = current.port === null || current.port === undefined ? undefined : `port ${current.port}`
     return (
       <Box flexDirection="column" gap={1}>
@@ -154,9 +156,26 @@ export const register: Register = on => {
           </Box>
         ) : null}
 
-        {tags.length > 0 ? (
-          <Box paddingX={1}>
-            <Text dimColor wrap="wrap">{`Jev (shadow) · ${tags.join(' · ')}`}</Text>
+        {/* Jev's call, ranked by how sure it was. Shadow only: it is recorded
+            beside the agent's own choices and changes nothing. */}
+        {triage.length > 0 ? (
+          <Box borderStyle="round" borderColor="suggestion" paddingX={1} flexDirection="column">
+            <Text>
+              <Text backgroundColor="suggestion" color="inverseText" weight="bold">{' JEV TRIAGE '}</Text>
+              <Text dimColor>{'  shadow · changes nothing'}</Text>
+            </Text>
+            {triage.map(row => {
+              const cells = bar(row.percent)
+              return (
+                <Text tabular>
+                  <Text>{`${row.question.padEnd(questionWidth)}  `}</Text>
+                  <Text weight="bold">{`${row.answer.padEnd(answerWidth)}  `}</Text>
+                  <Text color={confidenceTone(row.percent)}>{cells.filled}</Text>
+                  <Text dimColor>{cells.empty}</Text>
+                  <Text color={confidenceTone(row.percent)}>{` ${String(row.percent).padStart(3)}%`}</Text>
+                </Text>
+              )
+            })}
           </Box>
         ) : null}
 

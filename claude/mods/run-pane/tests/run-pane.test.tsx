@@ -58,7 +58,7 @@ function engine(on: On, answers: Answers, percent = 20) {
   return calls
 }
 
-test('a finished run reads as a card with a status capsule and progress, then the journey, the PR link and a Jev line', async ($, on) => {
+test('a finished run reads as a card with a status capsule and progress, then the journey, the PR link and the ranked Jev answers', async ($, on) => {
   const calls = engine(on, { info, stats })
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await $.tool.call({ tool: 'Bash', command: 'ibni prepare --slug timed' })
@@ -79,7 +79,15 @@ test('a finished run reads as a card with a status capsule and progress, then th
     expect(await text(/Independent review/)).toBe('✓ Independent review  2 passes · 4 findings · cross-family')
     expect(await text(/^✓ Pull request/)).toBe('✓ Pull request  #42 open')
     expect(await ui.find({ type: 'Link' })).toMatchObject({ props: { href: 'https://github.com/alexportelli12/example/pull/42' } })
-    expect(await text(/^Jev/)).toBe('Jev (shadow) · local change · no UI change · two-way door · review value 2.4')
+    expect(await text(/JEV TRIAGE/)).toBe(' JEV TRIAGE   shadow · changes nothing')
+    const rows = (await ui.findAll({ type: 'Text', text: /^\S.*%$/ })).map(row => row.text)
+    expect(rows).toEqual([
+      'One-way door?         no     ▰▰▰▰▰▰▰▰▰▰  95%',
+      'User-facing?          no     ▰▰▰▰▰▰▰▰▰▱  90%',
+      'Change size           local  ▰▰▰▰▰▰▰▰▱▱  80%',
+      'Changes existing UI?  no     ▰▰▰▰▰▰▰▰▱▱  80%',
+      'Review value          2.4    ▰▰▰▰▰▰▱▱▱▱  60%',
+    ])
     expect(await text(/worktrees\/control/)).toBeUndefined()
     await ui.unmount()
   }
@@ -117,7 +125,7 @@ test('Jev triage is absent until a triage call is answered', async ($, on) => {
   engine(on, { info, stats: { ...stats, triage: skipped } })
   await $.tool.call({ tool: 'Bash', command: `ibni info --session ${SESSION}` })
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect(await ui.find({ type: 'Text', text: /^Jev/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /JEV TRIAGE/ })).toBeUndefined()
   await ui.unmount()
 })
 
