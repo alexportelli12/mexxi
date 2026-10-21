@@ -41,6 +41,7 @@ export function snapshotFrom(sessionId: string, info: unknown, stats: unknown): 
       step: String(step.step ?? '?'),
       outcome: String(step.outcome ?? '?'),
       durationMs: typeof step.durationMs === 'number' ? step.durationMs : undefined,
+      endedAt: typeof step.endedAt === 'string' ? step.endedAt : undefined,
     })),
     verify: merged.verify as RunPaneSnapshot['verify'],
     review: merged.review
@@ -101,15 +102,49 @@ export function journey(run: RunPaneSnapshot): Stage[] {
   return stages.map((stage, index) => (index === next ? { ...stage, state: 'current' } : stage))
 }
 
+// The capsule at the top: one or two words a person reads at a glance, in
+// the colour of where the run stands. Uppercase, like a status line segment.
+const DOING: Record<string, string> = {
+  workspace: 'PREPARING',
+  build: 'BUILDING',
+  verify: 'VERIFYING',
+  qa: 'TESTING UI',
+  review: 'IN REVIEW',
+  pr: 'PUBLISHING',
+}
+
 export function headline(run: RunPaneSnapshot): { label: string; tone: Tone } {
-  if (run.error) return { label: 'ibni unreachable', tone: 'warning' }
+  if (run.error) return { label: 'IBNI OFFLINE', tone: 'warning' }
   const stages = journey(run)
-  const failed = stages.find(stage => stage.state === 'failed')
-  if (failed) return { label: `${failed.label}: needs attention`, tone: 'error' }
-  if (isDelivered(run)) return { label: 'PR open', tone: 'success' }
-  if (run.state === 'published') return { label: 'Branch published', tone: 'success' }
+  if (stages.some(stage => stage.state === 'failed')) return { label: 'NEEDS ATTENTION', tone: 'error' }
+  if (isDelivered(run)) return { label: 'PR OPEN', tone: 'success' }
+  if (run.state === 'published') return { label: 'PUBLISHED', tone: 'success' }
   const current = stages.find(stage => stage.state === 'current')
-  return { label: current ? `Now: ${current.label.toLowerCase()}` : 'In progress', tone: 'claude' }
+  return { label: current ? DOING[current.key] ?? 'IN PROGRESS' : 'IN PROGRESS', tone: 'claude' }
+}
+
+// How far along the run is: stages done or skipped, out of all of them.
+export function progress(stages: Stage[]): { done: number; total: number } {
+  return { done: stages.filter(stage => stage.state === 'done' || stage.state === 'skipped').length, total: stages.length }
+}
+
+// When ibni last recorded anything for the run: the stage in progress has
+// been running since then.
+export function lastEventAt(run: RunPaneSnapshot): string | undefined {
+  const times = [
+    ...run.steps.map(step => step.endedAt),
+    ...(run.verify?.history ?? []).map(entry => (entry as { at?: string }).at),
+  ].filter((at): at is string => typeof at === 'string' && !Number.isNaN(Date.parse(at)))
+  return times.sort().at(-1) ?? run.createdAt
+}
+
+// A duration the way a status line shows one: 45s, 12m, 1h 05m.
+export function duration(ms: number): string {
+  const seconds = Math.max(0, Math.round(ms / 1000))
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.round(seconds / 60)
+  if (minutes < 60) return `${minutes}m`
+  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`
 }
 
 // The task's short name and the repository it runs in, read from the branch
@@ -131,25 +166,43 @@ export function since(iso: string | undefined, now: number): string | undefined 
   return hours < 24 ? `${hours}h ${minutes % 60}m ago` : `${Math.floor(hours / 24)}d ago`
 }
 
+// Jev's answers, most confident first, each with the question asked in plain
+// words and its confidence as a percentage. Questions Jev did not answer, or
+// answered without a confidence, are left out.
+// Each question as a short label, so the panel stays narrow.
 const QUESTIONS: Record<string, string> = {
-  existingUi: 'Changes existing UI',
-  userFacing: 'User-facing',
-  oneWayDoor: 'One-way door',
-  size: 'Size',
-  reviewValue: 'Review value',
+  oneWayDoor: '1-way',
+  userFacing: 'users',
+  existingUi: 'UI',
+  size: 'size',
+  reviewValue: 'review',
 }
 
-// Jev's latest answers, worded for a person.
-export function triageRows(run: RunPaneSnapshot): { question: string; answer: string; confidence?: number }[] {
-  return Object.entries(run.triage ?? {}).map(([key, value]) => {
-    const item = record(value)
-    const raw = 'answer' in item ? item.answer : value
-    return {
-      question: QUESTIONS[key] ?? key,
-      answer: typeof raw === 'object' ? JSON.stringify(raw) : String(raw),
-      confidence: typeof item.confidence === 'number' ? Math.round(item.confidence * 100) : undefined,
-    }
-  })
+export type TriageRow = { key: string; question: string; answer: string; percent: number }
+
+export function triageRanking(run: RunPaneSnapshot): TriageRow[] {
+  const answers = run.triage ?? {}
+  return Object.entries(answers)
+    .map(([key, value]) => {
+      const item = record(value)
+      const confidence = Number(item.confidence)
+      if (!('answer' in item) || !Number.isFinite(confidence)) return null
+      return { key, question: QUESTIONS[key] ?? key, answer: String(item.answer), percent: Math.round(Math.min(1, Math.max(0, confidence)) * 100) }
+    })
+    .filter((row): row is TriageRow => row !== null)
+    .sort((a, b) => b.percent - a.percent || a.question.localeCompare(b.question))
+}
+
+// A ten-cell bar for a percentage: filled cells, then empty ones.
+export function bar(percent: number, width = 10): { filled: string; empty: string } {
+  const cells = Math.round((Math.min(100, Math.max(0, percent)) / 100) * width)
+  return { filled: '▰'.repeat(cells), empty: '▱'.repeat(width - cells) }
+}
+
+// How sure Jev was, as a theme colour: green when sure, accent when fairly
+// sure, amber when it was close to guessing.
+export function confidenceTone(percent: number): Tone {
+  return percent >= 80 ? 'success' : percent >= 60 ? 'claude' : 'warning'
 }
 
 // Why the band suggests a fresh session, or null. The key changes with the

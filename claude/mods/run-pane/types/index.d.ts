@@ -6,6 +6,7 @@ export type RunPaneStep = {
   step: string
   outcome: string
   durationMs?: number
+  endedAt?: string
 }
 
 export type RunPaneGate = {

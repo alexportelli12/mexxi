@@ -1,7 +1,7 @@
 {
   "name": "run-pane",
   "version": "0.1.0",
-  "description": "A pane beside the chat showing the current mexxi /wettaq run (stage, gates, worktree, port, PR), and a band suggesting a fresh session once the PR is delivered or context runs high.",
+  "description": "A pane beside the chat showing the current mexxi /wettaq run (what it is doing, how far along, which gates passed, its port and PR), and a band suggesting a fresh session once the PR is delivered or context runs high.",
   "author": {
     "name": "Alex Portelli"
   },
