@@ -148,7 +148,7 @@ export async function check(base = root) {
   const commands = Object.values(verifika.checks).map((entry) => entry.command);
   const tests = [
     ...(await readdir(path.join(base, "scripts"), { recursive: true })).filter((name) => name.endsWith(".test.mjs")).map((name) => `scripts/${name.split(path.sep).join("/")}`),
-    ...(await readdir(path.join(base, "skills/repo-context/tests"))).filter((name) => name.endsWith(".test.js")).map((name) => `skills/repo-context/tests/${name}`),
+    ...(await readdir(path.join(base, "skills"), { recursive: true })).filter((name) => /\/tests\/[^/]+\.test\.m?js$/.test(name)).map((name) => `skills/${name.split(path.sep).join("/")}`),
   ];
   for (const test of tests) {
     assert.ok(commands.some((command) => command.split(/\s+/).includes(test)), `${test} is not run by any Verifika check`);

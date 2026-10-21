@@ -168,7 +168,15 @@ measurement actually counted; do not broaden a sample result into a guarantee.
 
 When useful, give the shortest human check derived from acceptance criteria:
 entry point, action and expected result. Link longer existing instructions
-rather than recreating a test plan.
+rather than recreating a test plan. When the application repository documents
+a preview deploy (a Firebase Hosting channel, a Vercel preview), put that
+preview's URL in the **Check:** line, so the change can be validated from a
+phone; never invent a URL the repository does not document or the deploy has
+not produced.
+
+List the review's out-of-scope or taste-only `low` findings in one line each,
+with why they were left. If the reviewer had to share the implementer's model
+because no other family was available, say so in Evidence.
 
 Preserve the independent reviewer's door and blast-radius assessment from
 `code-reviewer`, translating it into a concise **Risk / rollback** line: scope

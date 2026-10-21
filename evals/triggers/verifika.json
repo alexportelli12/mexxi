@@ -1,0 +1,66 @@
+[
+  {
+    "query": "Before I say this is done, check my changes with the repo's verification tooling and tell me what fails.",
+    "should_trigger": true
+  },
+  {
+    "query": "The repository has a verifika.config.json. Run the right checks for the files I touched.",
+    "should_trigger": true
+  },
+  {
+    "query": "npm run verify just failed. Find out which check broke and read its logs.",
+    "should_trigger": true
+  },
+  {
+    "query": "I'm about to open a pull request. Make sure the quality gate is green first.",
+    "should_trigger": true
+  },
+  {
+    "query": "Run vfk on my changed files and fix whatever it reports.",
+    "should_trigger": true
+  },
+  {
+    "query": "Our verification run reported a failing lint check; diagnose it from the persisted logs rather than guessing.",
+    "should_trigger": true
+  },
+  {
+    "query": "Add a new check to the verifika config for our type-checking step and make sure it runs in the full gate.",
+    "should_trigger": true
+  },
+  {
+    "query": "Can you confirm the repo's checks pass after this refactor? Use whatever the project defines for verification.",
+    "should_trigger": true
+  },
+  {
+    "query": "Write a unit test for the date parsing helper using Jest.",
+    "should_trigger": false
+  },
+  {
+    "query": "Set up ESLint and Prettier in this project from scratch.",
+    "should_trigger": false
+  },
+  {
+    "query": "Explain the difference between unit and integration tests.",
+    "should_trigger": false
+  },
+  {
+    "query": "Configure GitHub Actions to run our tests on every push.",
+    "should_trigger": false
+  },
+  {
+    "query": "Benchmark this function and tell me which implementation is faster.",
+    "should_trigger": false
+  },
+  {
+    "query": "Why does this React component re-render on every keystroke?",
+    "should_trigger": false
+  },
+  {
+    "query": "Install the dependencies and start the dev server.",
+    "should_trigger": false
+  },
+  {
+    "query": "Review this diff for design problems.",
+    "should_trigger": false
+  }
+]

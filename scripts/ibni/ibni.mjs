@@ -4,6 +4,8 @@
 import { pathToFileURL } from "node:url";
 import { adoptWorkspace } from "./commands/adopt.mjs";
 import { cleanupWorkspaces } from "./commands/cleanup.mjs";
+import { crossReview } from "./commands/cross-review.mjs";
+import { fileQaChecks } from "./commands/file-qa-checks.mjs";
 import { workspaceInfo } from "./commands/info.mjs";
 import { listWorkspaces } from "./commands/list.mjs";
 import { markPullRequest } from "./commands/mark-pr.mjs";
@@ -21,6 +23,8 @@ import { recordStep } from "./lib/timings.mjs";
 export {
   adoptWorkspace,
   cleanupWorkspaces,
+  crossReview,
+  fileQaChecks,
   listWorkspaces,
   markPullRequest,
   prepareWorkspace,
@@ -111,6 +115,43 @@ export const COMMANDS = {
     options: { session: "The sessionId from prepare or adopt.", url: "The pull request's URL." },
     timed: true,
     run: (options) => markPullRequest({ sessionId: options.session, url: options.url }),
+  },
+  "file-qa-checks": {
+    usage: "ibni file-qa-checks --session <id> --from <file>",
+    summary: "File rendered QA's suggested checks as qa-check issues, skipping duplicates.",
+    details: [
+      "The file lists one check per line (a leading list marker is dropped); each is an issue title.",
+      "Creates the qa-check label if the repository lacks it, then an issue per check whose title",
+      "(case-insensitive) is not already open or closed under that label. Safe to repeat.",
+      "Prints created (title, url) and skipped titles. Needs an authenticated gh.",
+      SESSION_LOOKUP,
+    ],
+    options: {
+      session: "The sessionId from prepare or adopt.",
+      from: "File of checks, one per line.",
+    },
+    timed: true,
+    run: (options) => fileQaChecks({ sessionId: options.session, from: options.from }),
+  },
+  "cross-review": {
+    usage: "ibni cross-review --session <id> --mode <discovery|confirmation> --background <file> --target <text>",
+    summary: "Run the code-reviewer through codex exec in a read-only sandbox (Claude Code only).",
+    details: [
+      "For Claude Code, whose implementer and reviewer would otherwise share a model family. Runs the",
+      "shared code-reviewer instructions with models.claude.crossFamilyReviewer as the Codex model,",
+      "writes the reviewer's final message to evidenceDir/cross-review-<mode>.md and prints it as review.",
+      "Prints delegated: false with a reason when no model is configured or codex is not installed;",
+      "then use the code-reviewer subagent and state the reason in the pull request's Evidence.",
+      SESSION_LOOKUP,
+    ],
+    options: {
+      session: "The sessionId from prepare or adopt.",
+      mode: "discovery or confirmation, as for code-reviewer.",
+      background: "The background file the reviewer reads first (requirements, and for confirmation the ledger and fixes).",
+      target: "The review target, such as workspace changes against HEAD or a branch range.",
+    },
+    timed: true,
+    run: (options) => crossReview({ sessionId: options.session, mode: options.mode, background: options.background, target: options.target }),
   },
   adopt: {
     usage: "ibni adopt --pr <pull-request-url>",

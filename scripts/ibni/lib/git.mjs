@@ -34,9 +34,10 @@ export function run(command, args, options = {}) {
     const child = spawn(command, args, {
       cwd: options.cwd,
       env: { ...process.env, ...options.env },
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: [options.input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
       timeout: options.timeout,
     });
+    if (options.input !== undefined) child.stdin.end(options.input);
     const stdout = [];
     const stderr = [];
     child.stdout.on("data", (chunk) => stdout.push(chunk));

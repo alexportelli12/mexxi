@@ -53,7 +53,7 @@ Not every change needs every step. A one-line fix doesn't get an independent rev
 | Command | [`/fassal`](commands/fassal.md) | Writes or refines a product's `UX_PRINCIPLES.md` |
 | Agent | [`code-reviewer`](agent/code-reviewer.md) | Independent review via OCR delegation, plus the merge-danger call |
 | Agent | [`ui-designer`](agent/ui-designer.md) | Designs and implements UI grounded in the repo |
-| Skill | [`rendered-qa`](skills/rendered-qa/SKILL.md) | How to exercise a running UI and capture evidence |
+| Skill | [`rendered-qa`](skills/rendered-qa/SKILL.md) | How to exercise a running UI and capture evidence, with a three-viewport sweep script |
 | Skill | [`implement-review`](skills/implement-review/SKILL.md) | `/wettaq`'s review gate, remediation and follow-up path, loaded only when a review runs |
 | Skill | [`commit-pr-writing`](skills/commit-pr-writing/SKILL.md) | Commit messages and PR descriptions that prove their claims |
 | Skill | [`repo-context`](skills/repo-context/SKILL.md) | Evidence-based map of an unfamiliar repository |
@@ -65,7 +65,7 @@ Not every change needs every step. A one-line fix doesn't get an independent rev
 | Skill | [`skill-creator`](skills/skill-creator/SKILL.md) | Creating and evaluating skills |
 | Skill | [`workflow-for-alex`](skills/workflow-for-alex/SKILL.md) | Governance for changing this workflow |
 | Skill | [`verifika`](https://github.com/alexportelli12/verifika/blob/main/skills/verifika/SKILL.md) | Running and diagnosing Verifika checks; linked from the pinned npm package |
-| Script | [`ibni`](scripts/ibni/ibni.mjs) | Worktree lifecycle: prepare, publish, PR media, adopt, timings, cleanup |
+| Script | [`ibni`](scripts/ibni/ibni.mjs) | Worktree lifecycle: prepare, publish, PR media, adopt, timings, QA-check issues, cross-family review, cleanup |
 | Script | [`install.mjs`](scripts/install.mjs) | Links shared configuration into all three hosts |
 | Hook | [`guard.mjs`](scripts/hooks/guard.mjs) | Refuses force pushes, pushes to the default branch, merges, destructive Git outside an owned worktree, `guard.deny` commands and Shopify Admin API writes, on every host |
 | Hook | [`loop-breaker.mjs`](scripts/hooks/loop-breaker.mjs) | Tells the agent to stop and re-diagnose when the same command fails a third time |

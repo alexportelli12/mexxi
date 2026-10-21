@@ -456,7 +456,7 @@ In environments without subagent support (e.g., some hosted AI tools), the core 
 
 **The iteration loop**: Same as before — improve the skill, rerun the test cases, ask for feedback — just without the browser reviewer in the middle. You can still organize results into iteration directories on the filesystem if you have one.
 
-**Description optimization**: This section requires a local coding-agent CLI (`claude -p` or `opencode -p`). The helper selects the active host, or `SKILL_CREATOR_HOST=claude|opencode` in a normal terminal. Skip it in environments without a local CLI.
+**Description optimization**: This section requires a local coding-agent CLI (`claude -p` or `opencode -p`). The helper selects the active host, or `SKILL_CREATOR_HOST=claude|opencode` in a normal terminal. `run_eval.py` alone (trigger evals, not description rewriting) also takes `SKILL_CREATOR_HOST=codex`: it runs `codex exec --json` and counts a query as triggered when Codex reads the installed skill's SKILL.md. Skip it in environments without a local CLI.
 
 **Blind comparison**: Requires subagents. Skip it.
 

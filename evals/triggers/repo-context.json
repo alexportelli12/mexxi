@@ -1,0 +1,66 @@
+[
+  {
+    "query": "I'm new to this codebase. Before we change anything, map out its stack, structure, testing setup and how CI/CD works.",
+    "should_trigger": true
+  },
+  {
+    "query": "What frameworks, build tooling and test runners does this repository use? Give me evidence for each, not guesses.",
+    "should_trigger": true
+  },
+  {
+    "query": "We are about to add a feature that crosses several packages. First, get a picture of the architecture patterns already in use here.",
+    "should_trigger": true
+  },
+  {
+    "query": "Can you inspect this monorepo and tell me where infrastructure is defined and how deploys happen?",
+    "should_trigger": true
+  },
+  {
+    "query": "Scan the repo and report its conventions: how modules are laid out, how state is managed, and what the tests look like.",
+    "should_trigger": true
+  },
+  {
+    "query": "I inherited this project with thin docs. Work out what it is made of and how it is wired together before I plan the refactor.",
+    "should_trigger": true
+  },
+  {
+    "query": "Give me a concise map of the repository's CI workflows, linting and test commands so the implementation follows them.",
+    "should_trigger": true
+  },
+  {
+    "query": "Understand how this app is structured end to end, then tell me which patterns I should follow for the new endpoint.",
+    "should_trigger": true
+  },
+  {
+    "query": "Rename the function getUser to fetchUser across the codebase.",
+    "should_trigger": false
+  },
+  {
+    "query": "Explain what this regular expression does.",
+    "should_trigger": false
+  },
+  {
+    "query": "Why is the build failing on this TypeScript error in utils.ts?",
+    "should_trigger": false
+  },
+  {
+    "query": "Decide whether we should move from REST to GraphQL and write the ADR.",
+    "should_trigger": false
+  },
+  {
+    "query": "Run the test suite and fix whatever fails.",
+    "should_trigger": false
+  },
+  {
+    "query": "Write a README section describing how to install the package.",
+    "should_trigger": false
+  },
+  {
+    "query": "Review my diff for security problems.",
+    "should_trigger": false
+  },
+  {
+    "query": "Create a Dockerfile for this Node service.",
+    "should_trigger": false
+  }
+]

@@ -42,6 +42,27 @@ repository-specific tooling from this global configuration. Classify the
 opportunity for the repository's own `verify`, tests, architecture checks, or
 other appropriate owner instead.
 
+## Re-run Trigger Evals
+
+When a change edits the `description` of a core skill (`rendered-qa`,
+`repo-context`, `commit-pr-writing`, `verifika`), run that skill's eval set
+before reporting. These need model calls, so they are not part of `npm run
+verify` (which only checks the sets are well formed). From
+`skills/skill-creator` in the checkout, once per installed host:
+
+```bash
+for host in claude opencode codex; do
+  SKILL_CREATOR_HOST=$host python -m scripts.run_eval \
+    --eval-set ../../evals/triggers/<skill>.json --skill-path <skill-folder> \
+    --runs-per-query 3 --timeout 120 --verbose
+done
+```
+
+`<skill-folder>` is `../<skill>`, or `../../node_modules/verifika/skills/verifika`
+for `verifika`. Every query must pass on every host (`summary.failed` is 0);
+fix the description, not the eval, unless a query is wrong. The Codex run tests
+the skill as installed, so run it after the installation step below.
+
 ## Reconcile Host Installation
 
 After a workflow change passes this repository's `npm run verify`, run

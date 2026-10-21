@@ -57,7 +57,7 @@
             "explore": { "description": "OpenCode's built-in explore subagent.", "type": ["string", "null"], "default": "openai/gpt-5.6-luna" },
             "uiDesigner": { "description": "The shared ui-designer agent.", "type": ["string", "null"], "default": "opencode-go/kimi-k2.7-code" },
             "reviewer": { "description": "The shared code-reviewer agent.", "type": ["string", "null"], "default": null },
-            "crossFamilyReviewer": { "description": "A reviewer model from a different family to the implementer's; null falls back to the reviewer's model.", "type": ["string", "null"], "default": null }
+            "crossFamilyReviewer": { "description": "A reviewer model from a different family to the implementer's, as provider/model; rendered as the code-reviewer's model in place of reviewer. null falls back to the reviewer's model.", "type": ["string", "null"], "default": null }
           }
         },
         "claude": {
@@ -68,7 +68,7 @@
           "properties": {
             "uiDesigner": { "description": "The shared ui-designer agent.", "type": ["string", "null"], "default": null },
             "reviewer": { "description": "The shared code-reviewer agent.", "type": ["string", "null"], "default": null },
-            "crossFamilyReviewer": { "description": "A reviewer model from a different family to the implementer's; null falls back to the reviewer's model.", "type": ["string", "null"], "default": null }
+            "crossFamilyReviewer": { "description": "A Codex model that `ibni cross-review` runs the code-reviewer on through codex exec in a read-only sandbox, so the reviewer is not the implementer's family. null, or Codex not installed, falls back to the reviewer's model and says so in the pull request's Evidence.", "type": ["string", "null"], "default": null }
           }
         },
         "codex": {
@@ -79,7 +79,7 @@
           "properties": {
             "uiDesigner": { "description": "The shared ui-designer agent.", "type": ["string", "null"], "default": null },
             "reviewer": { "description": "The shared code-reviewer agent.", "type": ["string", "null"], "default": null },
-            "crossFamilyReviewer": { "description": "A reviewer model from a different family to the implementer's; null falls back to the reviewer's model.", "type": ["string", "null"], "default": null }
+            "crossFamilyReviewer": { "description": "Codex has only one family, so this is simply used in place of reviewer as the code-reviewer's model; null falls back to the reviewer's model.", "type": ["string", "null"], "default": null }
           }
         }
       }

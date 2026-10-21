@@ -411,6 +411,31 @@ test("models and hosts come from config.json, and --check notices a config chang
   await assert.rejects(install({ home, checkout }), /models\.claude\.reviewer: expected string or null/);
 });
 
+test("the cross-family reviewer is the code-reviewer's model on OpenCode and Codex, and stays a Codex model for Claude Code", async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-cross-family-"));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  await configure(home, { models: {
+    opencode: { reviewer: "openai/gpt-5.6-luna", crossFamilyReviewer: "anthropic/claude-opus-4-8" },
+    claude: { reviewer: "sonnet", crossFamilyReviewer: "gpt-5.6-review" },
+    codex: { crossFamilyReviewer: "gpt-5.6-xhigh" },
+  } });
+  await registerPlaywright(home);
+  await install({ home, checkout });
+  const opencode = JSON.parse(await readFile(path.join(home, ".config/opencode/opencode.json"), "utf8"));
+  assert.equal(opencode.agent["code-reviewer"].model, "anthropic/claude-opus-4-8");
+  assert.match(await readFile(path.join(home, ".codex/agents/code-reviewer.toml"), "utf8"), /^model = "gpt-5\.6-xhigh"$/m);
+  // Claude Code's subagent keeps the reviewer model; the Codex model is only used by ibni cross-review.
+  const claude = await readFile(path.join(home, ".claude/agents/code-reviewer.md"), "utf8");
+  assert.match(claude, /^model: "sonnet"$/m);
+  assert.doesNotMatch(claude, /gpt-5\.6-review/);
+
+  await configure(home, { models: { opencode: { reviewer: "openai/gpt-5.6-luna" } } });
+  await install({ home, checkout });
+  const fallback = JSON.parse(await readFile(path.join(home, ".config/opencode/opencode.json"), "utf8"));
+  assert.equal(fallback.agent["code-reviewer"].model, "openai/gpt-5.6-luna", "null falls back to the reviewer's model");
+  assert.doesNotMatch(await readFile(path.join(home, ".codex/agents/code-reviewer.toml"), "utf8"), /^model =/m);
+});
+
 test("first run writes a minimal config.json, and only the configured clone may install", async (t) => {
   const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-first-run-"));
   t.after(() => rm(home, { recursive: true, force: true }));

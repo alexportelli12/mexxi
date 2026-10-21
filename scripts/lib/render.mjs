@@ -29,7 +29,11 @@ async function sharedAgentBody(checkout, name) {
   return body;
 }
 
-function modelFor(models, name) {
+// Claude Code's cross-family reviewer is a Codex model run by `ibni cross-review`
+// (the subagent keeps the reviewer model), so only the other hosts render it as
+// the code-reviewer's own model; null falls back to the reviewer's model.
+function modelFor(models, name, { crossFamily = false } = {}) {
+  if (name === "code-reviewer" && crossFamily && models.crossFamilyReviewer) return models.crossFamilyReviewer;
   return agentRoles[name] ? models[agentRoles[name]] ?? null : null;
 }
 
@@ -80,7 +84,7 @@ async function renderCodex(checkout, config, files) {
   for (const [name, fields] of Object.entries(metadata)) {
     const body = await sharedAgentBody(checkout, agentName(name));
     const lines = [`name = ${JSON.stringify(name)}`];
-    const model = modelFor(config.models.codex, name);
+    const model = modelFor(config.models.codex, name, { crossFamily: true });
     for (const [key, value] of Object.entries({ ...fields, ...(model ? { model } : {}) })) {
       if (!["description", "sandbox_mode", "model", "model_reasoning_effort"].includes(key) ||
           typeof value !== "string" || value.includes("\n")) throw new Error(`invalid ${name}.${key}`);
@@ -116,7 +120,7 @@ async function renderOpencode(checkout, config, files) {
     // opencode.json symlink before reading {file:} references.
     const prompt = `{file:${path.join(checkout, "agent", `${name}.md`)}}`;
     const { description, mode, ...rest } = agent[name];
-    agent[name] = { description, mode, ...(modelFor(models, name) ? { model: modelFor(models, name) } : {}), prompt, ...rest };
+    agent[name] = { description, mode, ...(modelFor(models, name, { crossFamily: true }) ? { model: modelFor(models, name, { crossFamily: true }) } : {}), prompt, ...rest };
   }
   const worktreeRoots = [config.paths.worktreeRoot, ...legacyWorktreeRoots];
   const permission = {

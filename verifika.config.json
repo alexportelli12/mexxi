@@ -26,6 +26,14 @@
       "command": "node --test skills/repo-context/tests/inspect.test.js",
       "paths": ["skills/repo-context/**"]
     },
+    "rendered-qa": {
+      "command": "node --test skills/rendered-qa/tests/sweep.test.mjs",
+      "paths": ["skills/rendered-qa/**", "scripts/lib/config.mjs", "config.schema.json"]
+    },
+    "evals": {
+      "command": "node --test scripts/evals.test.mjs",
+      "paths": ["evals/**", "scripts/evals.test.mjs", "skills/*/SKILL.md", "package.json"]
+    },
     "integration": {
       "command": "node --test scripts/integration.test.mjs",
       "dependsOn": ["config"]

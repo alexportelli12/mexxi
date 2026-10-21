@@ -33,19 +33,31 @@ applicable.
 If delegation or rule resolution fails, the review gate is not clear; report
 the failure.
 
+The implementer and reviewer share blind spots when they share a model family,
+so where the host can name a reviewer model from another family it does:
+OpenCode and Codex render it as `code-reviewer`'s model, and Claude Code runs the
+review through `ibni cross-review` (its overlay says how). When the other
+family is not available, the same-model reviewer runs instead and the pull
+request's Evidence says so.
+
 ## Review Remediation
 
 Investigate every finding with repository evidence; resolve it with a bounded
 fix or by establishing that it does not apply. Do not blindly accept subjective
 or out-of-scope findings.
 
-`critical`, `high`, and `medium` findings block and must be resolved. `low`
-findings are reported, not churned, unless the user asks. Keep a concise
-finding ledger in session context only: each finding's severity and
-disposition, and the remediation for each blocker.
+`critical`, `high`, and `medium` findings block and must be resolved. A `low`
+finding inside the task's scope with a bounded fix is fixed in the same
+remediation batch, because deferred lows were the strongest source of rework;
+it needs no review pass of its own. A `low` that is out of scope or a matter of
+taste is left alone and listed in the pull request. This rule lives here, where
+remediation does, and not in `AGENTS.md`. Keep a concise finding ledger in
+session context only: each finding's severity and disposition, and the
+remediation for each blocker.
 
-If discovery has no applicable blockers, the gate is complete. Otherwise, batch
-all blocker fixes (delegate only when specialist expertise helps, never to the
+If discovery has no applicable blockers, fix any in-scope lows, rerun
+`npm run verify`, and the gate is complete. Otherwise, batch all blocker and
+in-scope low fixes (delegate only when specialist expertise helps, never to the
 reviewer), rerun `npm run verify`, refresh rendered evidence when UI is
 affected, and invoke the same reviewer once in `confirmation` mode with the
 original requirements, the ledger, a concise remediation summary, the current

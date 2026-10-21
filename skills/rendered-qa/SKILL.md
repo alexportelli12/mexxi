@@ -37,12 +37,48 @@ parallel worktrees never collide. Note the URL and port, wait until it serves, a
 stop any server you started when finished. If the app cannot start, report that as the result instead of
 guessing from source.
 
+## Readiness Rules
+
+Agents lost the most time to fixed waits and guessed selectors. Always:
+
+1. **Wait for a readiness signal, not a timer.** A selector that appears, a
+   response that lands, `document.fonts.ready`; never a fixed sleep.
+2. **Confirm no dev-error overlay** (Vite, Next.js, webpack, Angular) before
+   judging a page; an overlay hides the app and is itself a finding.
+3. **Take an accessibility snapshot before guessing selectors**, then act on
+   what it shows.
+4. **Dismiss overlays that intercept clicks** (cookie banners, dialogs, toasts)
+   instead of retrying the click or forcing it.
+5. **Use 5-second action timeouts.** A click or fill that has not landed in 5s
+   is blocked or mistargeted; diagnose it rather than waiting longer.
+
+## The Sweep Helper
+
+Do not write the three-viewport pass by hand. From this skill's folder:
+
+```bash
+node scripts/sweep.mjs --url <url> --out <evidenceDir> --name <route-slug> --phase <before|after>
+```
+
+It screenshots `<phase>-<route-slug>-<width>.png` at each width in
+`workflow.viewports` (default 1440, 768, 390; heights 900, 1024, 844), and
+reports as JSON, per viewport: horizontal overflow (`scrollWidth` against
+`clientWidth`, with the elements reaching past the edge), interactive elements
+smaller than 44×44 CSS px, a visible dev-error overlay, and console errors.
+`--wait-for <selector>` supplies the readiness signal when load is not enough;
+`node scripts/sweep.mjs --help` lists the rest. It finds Playwright through the
+pinned MCP's npx cache or the target repository, and says how to provide it
+when neither exists. Its findings need judgement: an overflow or a
+`below-24` target is a defect to report with the evidence path, `below-44` is
+advisory, and inline links in a sentence are exempt (WCAG 2.5.8).
+
+The helper covers viewports, overflow, touch targets and console errors for one
+URL. The checks below still apply for everything it cannot see.
+
 ## Checks
 
-**Viewports.** Desktop (about 1440×900), tablet (about 768×1024) and mobile
-(about 390×844). Check that the hierarchy survives, nothing important
-disappears, and nothing overflows horizontally: compare
-`document.documentElement.scrollWidth` with `clientWidth` at each width.
+**Viewports.** Read the sweep's screenshots at each width: the hierarchy
+survives and nothing important disappears.
 
 **Motion.** Entrance and scroll-triggered animations cannot be judged from one
 screenshot. Prefer a Playwright video (a context with `recordVideo`, or the
@@ -77,11 +113,7 @@ states where they apply. Then operate the flow with the keyboard only: logical
 tab order, visible focus on every stop, Enter/Space activate, Escape closes
 overlays, and focus returns sensibly afterwards.
 
-**Touch targets.** At the mobile viewport, measure interactive elements with
-`getBoundingClientRect`. Flag targets smaller than 24×24 CSS px (WCAG 2.5.8)
-and note those under about 44×44 on primary actions.
-
-**Console and network.** Collect console errors and warnings for the whole
+**Console and network.** Beyond the sweep's console errors, collect warnings for the whole
 pass, including hydration-mismatch messages, plus failed requests. Report
 each one that is new or relevant to the change.
 
@@ -138,4 +170,6 @@ any limit on the evidence (for example, video recording unavailable).
 End with **Could become executable checks**: findings or checks that the app
 repository could automate, such as failing on console errors, asserting no
 horizontal overflow at mobile width, or loading under reduced motion. Suggest
-them; do not add them.
+them; do not add them. Write each as one line that works as an issue title
+(for example "Fail on console errors at every route"): `/wettaq` files them as
+`qa-check` issues with `ibni file-qa-checks`.

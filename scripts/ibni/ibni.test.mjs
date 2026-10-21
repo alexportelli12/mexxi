@@ -1411,3 +1411,130 @@ test("prepare runs the baseline when the CI run cannot be proven for the exact b
     assert.equal(prepared.json.baseline.url, undefined, name);
   }
 });
+
+// A gh stand-in that keeps labels and issues in a JSON file, and logs what it
+// was asked to create.
+async function issueGhStub(t, { labels = [], issues = [] } = {}) {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "mexxi-issue-gh-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const state = path.join(directory, "state.json");
+  await writeFile(state, JSON.stringify({ labels, issues, created: [] }));
+  await writeFile(path.join(directory, "gh"), `#!${process.execPath}
+const fs = require("node:fs");
+const state = JSON.parse(fs.readFileSync(${JSON.stringify(state)}, "utf8"));
+const args = process.argv.slice(2);
+const value = (flag) => args[args.indexOf(flag) + 1];
+const save = () => fs.writeFileSync(${JSON.stringify(state)}, JSON.stringify(state));
+const [group, action] = args;
+if (group === "label" && action === "list") console.log(JSON.stringify(state.labels.map((name) => ({ name }))));
+else if (group === "label" && action === "create") { state.labels.push(args[2]); save(); }
+else if (group === "issue" && action === "list") {
+  if (value("--label") !== "qa-check" || value("--state") !== "all") process.exit(3);
+  console.log(JSON.stringify(state.issues.map((title) => ({ title }))));
+} else if (group === "issue" && action === "create") {
+  if (value("--label") !== "qa-check") process.exit(3);
+  state.issues.push(value("--title")); state.created.push({ title: value("--title"), body: value("--body") }); save();
+  console.log("https://github.com/example/app/issues/" + (100 + state.issues.length));
+} else { console.error("gh stub: unexpected " + args.join(" ")); process.exit(1); }
+`);
+  await chmod(path.join(directory, "gh"), 493);
+  return { directory, env: { PATH: `${directory}:${process.env.PATH ?? ""}` }, read: async () => JSON.parse(await readFile(state, "utf8")) };
+}
+
+test("file-qa-checks files each suggestion as a qa-check issue, creating the label and skipping duplicates", async (t) => {
+  const fixture = await createFixture(t);
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "qa checks" });
+  const { sessionId, evidenceDir } = prepared.json;
+  const from = path.join(evidenceDir, "qa-checks.txt");
+  await writeFile(from, "- Fail on console errors at every route\n\n2. Assert no horizontal overflow at 390px\n* assert no horizontal overflow at  390px\n");
+
+  const gh = await issueGhStub(t, { issues: ["Fail on console errors at every route"] });
+  // Run from the evidence directory: the session is found from its metadata.
+  const first = await lifecycle(fixture, evidenceDir, "file-qa-checks", { session: sessionId, from }, [0], gh.env);
+  assert.deepEqual(first.json.created.map((issue) => issue.title), ["Assert no horizontal overflow at 390px"]);
+  assert.match(first.json.created[0].url, /issues\/\d+$/);
+  assert.deepEqual(first.json.skipped, ["Fail on console errors at every route", "assert no horizontal overflow at  390px"]);
+  const state = await gh.read();
+  assert.deepEqual(state.labels, ["qa-check"]);
+  assert.equal(state.created.length, 1);
+  assert.match(state.created[0].body, /Suggested by rendered QA of branch /);
+
+  // A repeat delivery files nothing and does not recreate the label.
+  const again = await lifecycle(fixture, evidenceDir, "file-qa-checks", { session: sessionId, from }, [0], gh.env);
+  assert.deepEqual(again.json.created, []);
+  assert.equal(again.json.skipped.length, 3);
+  assert.equal((await gh.read()).labels.length, 1);
+
+  await writeFile(from, `${"x".repeat(201)}\n`);
+  const tooLong = await lifecycle(fixture, evidenceDir, "file-qa-checks", { session: sessionId, from }, [2], gh.env);
+  assert.match(tooLong.stderr, /longer than 200 characters/);
+  const missing = await lifecycle(fixture, evidenceDir, "file-qa-checks", { session: sessionId }, [2], gh.env);
+  assert.match(missing.stderr, /requires --from/);
+});
+
+// A codex stand-in: records its arguments and stdin, answers --version, and
+// writes the reviewer's final message to the -o file as the real CLI does.
+async function codexStub(t) {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "mexxi-codex-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await writeFile(path.join(directory, "codex"), `#!${process.execPath}
+const fs = require("node:fs");
+const args = process.argv.slice(2);
+if (args[0] === "--version") { console.log("codex-cli stub"); process.exit(0); }
+fs.writeFileSync(${JSON.stringify(path.join(directory, "call.json"))}, JSON.stringify({ args, stdin: fs.readFileSync(0, "utf8") }));
+fs.writeFileSync(args[args.indexOf("-o") + 1], "Mode: stub review\\nNo findings.\\n");
+`);
+  await chmod(path.join(directory, "codex"), 493);
+  return { directory, env: { PATH: `${directory}:${process.env.PATH ?? ""}` }, call: async () => JSON.parse(await readFile(path.join(directory, "call.json"), "utf8")) };
+}
+
+async function crossReviewSetup(t, claudeModels) {
+  const fixture = await createFixture(t);
+  await writeFile(fixture.config, JSON.stringify({ paths: { worktreeRoot: fixture.worktrees }, models: { claude: claudeModels } }));
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "cross review" });
+  const background = path.join(prepared.json.evidenceDir, "review-background.md");
+  await writeFile(background, "Purpose: demo\n");
+  const options = { session: prepared.json.sessionId, mode: "discovery", background, target: "workspace changes against HEAD" };
+  return { fixture, prepared, options };
+}
+
+test("cross-review runs the shared reviewer through codex exec in a read-only sandbox with the configured model", async (t) => {
+  const { fixture, prepared, options } = await crossReviewSetup(t, { crossFamilyReviewer: "gpt-5.6-review" });
+  const codex = await codexStub(t);
+  const result = await lifecycle(fixture, prepared.json.evidenceDir, "cross-review", options, [0], codex.env);
+  const outputFile = path.join(prepared.json.evidenceDir, "cross-review-discovery.md");
+  assert.deepEqual(
+    { delegated: result.json.delegated, model: result.json.model, outputFile: result.json.outputFile },
+    { delegated: true, model: "gpt-5.6-review", outputFile },
+  );
+  assert.match(result.json.review, /No findings/);
+  const { args, stdin } = await codex.call();
+  assert.deepEqual(args, [
+    "exec", "--sandbox", "read-only", "--ephemeral", "--color", "never",
+    "-C", prepared.json.worktreePath, "-m", "gpt-5.6-review", "-o", outputFile, "-",
+  ]);
+  assert.match(stdin, /^# Code Reviewer/);
+  assert.match(stdin, /- Mode: discovery\n- Worktree: .+\n- Review target: workspace changes against HEAD\n- Background file \(read it first\): .+review-background\.md/);
+
+  const badMode = await lifecycle(fixture, prepared.json.worktreePath, "cross-review", { ...options, mode: "polish" }, [2], codex.env);
+  assert.match(badMode.stderr, /--mode discovery or confirmation/);
+});
+
+test("cross-review falls back to the same-model reviewer and says why", async (t) => {
+  const unset = await crossReviewSetup(t, {});
+  const codex = await codexStub(t);
+  const noModel = await lifecycle(unset.fixture, unset.prepared.json.worktreePath, "cross-review", unset.options, [0], codex.env);
+  assert.equal(noModel.json.delegated, false);
+  assert.match(noModel.json.reason, /crossFamilyReviewer is not set/);
+  await assert.rejects(readFile(path.join(codex.directory, "call.json")), /ENOENT/, "codex was not run");
+
+  const configured = await crossReviewSetup(t, { crossFamilyReviewer: "gpt-5.6-review" });
+  // A PATH holding git and nothing else: no codex.
+  const bare = await mkdtemp(path.join(os.tmpdir(), "mexxi-bare-path-"));
+  t.after(() => rm(bare, { recursive: true, force: true }));
+  const gitPath = (await run("sh", ["-c", "command -v git"])).stdout.trim();
+  await symlink(gitPath, path.join(bare, "git"));
+  const missing = await lifecycle(configured.fixture, configured.prepared.json.worktreePath, "cross-review", configured.options, [0], { PATH: bare });
+  assert.equal(missing.json.delegated, false);
+  assert.match(missing.json.reason, /codex is not installed/);
+});

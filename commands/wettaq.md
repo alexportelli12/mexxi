@@ -179,6 +179,12 @@ that gate leave no unresolved blockers.
    For follow-up delivery, update the existing pull request instead of
    creating another.
 8. Run `ibni mark-pr --session "<sessionId>" --url "<pr-url>"`.
+9. When rendered QA ended with **Could become executable checks**, write them
+   one per line to a file in `evidenceDir` and run `ibni file-qa-checks
+   --session "<sessionId>" --from "<file>"`. It files each as a `qa-check`
+   issue in the repository, skipping titles already filed. Mention the created
+   issues in your report; if it fails (for example `gh` is unauthenticated),
+   report that and carry on, since the pull request is already delivered.
 
 If any delivery stage fails, preserve the worktree and any commit, and report
 the failed stage with the tool's diagnostic. The guard hook refuses the
