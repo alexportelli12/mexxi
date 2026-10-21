@@ -79,15 +79,17 @@ test('a finished run reads as a card with a status capsule and progress, then th
     expect(await text(/Independent review/)).toBe('✓ Independent review  2 passes · 4 findings · cross-family')
     expect(await text(/^✓ Pull request/)).toBe('✓ Pull request  #42 open')
     expect(await ui.find({ type: 'Link' })).toMatchObject({ props: { href: 'https://github.com/alexportelli12/example/pull/42' } })
-    expect(await text(/JEV TRIAGE/)).toBe(' JEV TRIAGE   shadow · changes nothing')
+    expect(await text(/JEV TRIAGE/)).toBe(' JEV TRIAGE   shadow')
     const rows = (await ui.findAll({ type: 'Text', text: /^\S.*%$/ })).map(row => row.text)
     expect(rows).toEqual([
-      'One-way door?         no     ▰▰▰▰▰▰▰▰▰▰  95%',
-      'User-facing?          no     ▰▰▰▰▰▰▰▰▰▱  90%',
-      'Change size           local  ▰▰▰▰▰▰▰▰▱▱  80%',
-      'Changes existing UI?  no     ▰▰▰▰▰▰▰▰▱▱  80%',
-      'Review value          2.4    ▰▰▰▰▰▰▱▱▱▱  60%',
+      '1-way   no     ▰▰▰▰▰▰▰▰▰▰  95%',
+      'users   no     ▰▰▰▰▰▰▰▰▰▱  90%',
+      'size    local  ▰▰▰▰▰▰▰▰▱▱  80%',
+      'UI      no     ▰▰▰▰▰▰▰▰▱▱  80%',
+      'review  2.4    ▰▰▰▰▰▰▱▱▱▱  60%',
     ])
+    expect(await text(/^1-way: /)).toBe('1-way: one-way door · users: user-facing · size: change size · UI: changes existing UI · review: review value')
+    expect(await text(/^Recorded only/)).toBeDefined()
     expect(await text(/worktrees\/control/)).toBeUndefined()
     await ui.unmount()
   }

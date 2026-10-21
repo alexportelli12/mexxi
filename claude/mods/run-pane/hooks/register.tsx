@@ -162,7 +162,7 @@ export const register: Register = on => {
           <Box borderStyle="round" borderColor="suggestion" paddingX={1} flexDirection="column">
             <Text>
               <Text backgroundColor="suggestion" color="inverseText" weight="bold">{' JEV TRIAGE '}</Text>
-              <Text dimColor>{'  shadow · changes nothing'}</Text>
+              <Text dimColor>{'  shadow'}</Text>
             </Text>
             {triage.map(row => {
               const cells = bar(row.percent)
@@ -176,6 +176,8 @@ export const register: Register = on => {
                 </Text>
               )
             })}
+            <Text dimColor wrap="wrap">{triage.filter(row => row.question !== row.meaning).map(row => `${row.question}: ${row.meaning}`).join(' · ')}</Text>
+            <Text dimColor wrap="wrap">Recorded only; changes nothing.</Text>
           </Box>
         ) : null}
 

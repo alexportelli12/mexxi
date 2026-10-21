@@ -169,15 +169,17 @@ export function since(iso: string | undefined, now: number): string | undefined 
 // Jev's answers, most confident first, each with the question asked in plain
 // words and its confidence as a percentage. Questions Jev did not answer, or
 // answered without a confidence, are left out.
-const QUESTIONS: Record<string, string> = {
-  oneWayDoor: 'One-way door?',
-  userFacing: 'User-facing?',
-  existingUi: 'Changes existing UI?',
-  size: 'Change size',
-  reviewValue: 'Review value',
+// Each question as a short label for the row and its full wording for the
+// muted legend underneath, so the panel stays narrow.
+const QUESTIONS: Record<string, { short: string; full: string }> = {
+  oneWayDoor: { short: '1-way', full: 'one-way door' },
+  userFacing: { short: 'users', full: 'user-facing' },
+  existingUi: { short: 'UI', full: 'changes existing UI' },
+  size: { short: 'size', full: 'change size' },
+  reviewValue: { short: 'review', full: 'review value' },
 }
 
-export type TriageRow = { key: string; question: string; answer: string; percent: number }
+export type TriageRow = { key: string; question: string; meaning: string; answer: string; percent: number }
 
 export function triageRanking(run: RunPaneSnapshot): TriageRow[] {
   const answers = run.triage ?? {}
@@ -186,7 +188,7 @@ export function triageRanking(run: RunPaneSnapshot): TriageRow[] {
       const item = record(value)
       const confidence = Number(item.confidence)
       if (!('answer' in item) || !Number.isFinite(confidence)) return null
-      return { key, question: QUESTIONS[key] ?? key, answer: String(item.answer), percent: Math.round(Math.min(1, Math.max(0, confidence)) * 100) }
+      return { key, question: QUESTIONS[key]?.short ?? key, meaning: QUESTIONS[key]?.full ?? key, answer: String(item.answer), percent: Math.round(Math.min(1, Math.max(0, confidence)) * 100) }
     })
     .filter((row): row is TriageRow => row !== null)
     .sort((a, b) => b.percent - a.percent || a.question.localeCompare(b.question))
