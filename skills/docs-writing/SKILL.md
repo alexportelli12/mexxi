@@ -1,6 +1,6 @@
 ---
 name: docs-writing
-description: Write or edit the Markdown that people read in this repository, such as the README, the hand-written docs pages and the landing page copy. Use when creating or changing any of them, or when the prose check fails. Do not use for agent instructions in commands, skills or agents.
+description: Write or edit the Markdown that people read in the mexxi repository, such as its README, hand-written docs pages and landing page copy. Use when creating or changing any of them there, or when mexxi's prose check fails. Do not use in other repositories, or for agent instructions in commands, skills or agents.
 ---
 
 # Docs Writing
