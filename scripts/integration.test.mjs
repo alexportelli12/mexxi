@@ -738,14 +738,28 @@ async function documentedMigration() {
     // Every block of the move, run together as one paste.
     sequence: [...section.matchAll(/```bash\n([\s\S]*?)```/g)].map((block) => block[1]).join(""),
     recovery: section.match(/`(rmdir ~\/\.config\/opencode && mv [^`]*)`/)?.[1],
+    // The rule for a stop after the move: restore only while ~/.claude/CLAUDE.md
+    // does not yet point under this directory; otherwise rerun this command.
+    movedOnceUnder: section.match(/`readlink ~\/\.claude\/CLAUDE\.md`[^`]*`(~\/[^`]+)`/)?.[1],
+    rerun: section.match(/rerun `(node scripts\/install\.mjs --migrate-from [^`]*)`/)?.[1],
   };
+}
+
+// Which way the documented rule sends someone whose install stopped after the move.
+async function documentedRecovery(home, movedOnceUnder) {
+  const target = path.resolve(path.join(home, ".claude"), await readlink(path.join(home, ".claude/CLAUDE.md")));
+  return within(target, movedOnceUnder.replace(/^~/, home)) ? "rerun" : "restore";
+}
+
+function within(target, base) {
+  return target === base || target.startsWith(`${base}${path.sep}`);
 }
 
 test("the documented move from ~/.config/opencode stops before moving anything on a settings conflict, and the recovery line undoes a move", async (t) => {
   const { home, clone, old } = await preMoveHome(t);
   const settingsFile = path.join(home, ".claude/settings.json");
   await writeFile(settingsFile, JSON.stringify({ env: { BASH_MAX_TIMEOUT_MS: "600000" } }));
-  const { sequence, recovery } = await documentedMigration();
+  const { sequence, recovery, movedOnceUnder } = await documentedMigration();
 
   const stopped = await documentedShell(home, sequence);
   assert.notEqual(stopped.code, 0);
@@ -761,6 +775,8 @@ test("the documented move from ~/.config/opencode stops before moving anything o
   const moved = await documentedShell(home, "mv ~/.config/opencode ~/.config/opencode.pre-move && mkdir ~/.config/opencode");
   assert.equal(moved.code, 0, moved.output);
   await assert.rejects(readFile(path.join(home, ".claude/CLAUDE.md")), /ENOENT/);
+  assert.ok(movedOnceUnder, "getting-started.md says when not to restore");
+  assert.equal(await documentedRecovery(home, movedOnceUnder), "restore");
   const recovered = await documentedShell(home, recovery);
   assert.equal(recovered.code, 0, recovered.output);
   assert.equal(await readFile(path.join(home, ".claude/CLAUDE.md"), "utf8"), "old\n");
@@ -778,6 +794,30 @@ test("the documented move from ~/.config/opencode stops before moving anything o
   assert.equal(await readFile(path.join(home, ".config/opencode/skills/synced/borrowed/SKILL.md"), "utf8"), "borrowed\n");
   const ignored = await execute("git", ["check-ignore", "skills/synced/borrowed/SKILL.md", "skills-lock.json"], clone);
   assert.equal(ignored.code, 0, ignored.output);
+});
+
+// A stop after the links have moved (here the mods, applied last, with a
+// claude CLI that cannot reach the network) must not send anyone back to the
+// old clone: the documented rule says rerun, and the rerun completes.
+test("the documented move that stops after the links moved says to fix the cause and rerun, not to restore", async (t) => {
+  const { home, old } = await preMoveHome(t);
+  const { sequence, movedOnceUnder, rerun } = await documentedMigration();
+  const offline = path.join(home, "offline");
+  await mkdir(offline);
+  await writeFile(path.join(offline, "claude"), `#!/bin/sh\nif [ "$2" = marketplace ]; then echo 'network unreachable' >&2; exit 1; fi\nexec ${JSON.stringify(path.join(claudeStub, "claude"))} "$@"\n`, { mode: 0o755 });
+
+  const stopped = await documentedShell(home, `export PATH="${offline}:$PATH"\n${sequence}`);
+  assert.notEqual(stopped.code, 0);
+  assert.match(stopped.output, /network unreachable\nFix the cause and rerun the install/);
+  assert.ok(movedOnceUnder && rerun, "getting-started.md gives the rule and the rerun command");
+  assert.equal(await documentedRecovery(home, movedOnceUnder), "rerun");
+
+  const rerunResult = await documentedShell(home, `cd ~/workspace/mexxi && ${rerun}`);
+  assert.equal(rerunResult.code, 0, rerunResult.output);
+  assert.equal(await readFile(path.join(`${old}.pre-move`, "AGENTS.md"), "utf8"), "old\n");
+  await registerPlaywright(home);
+  const check = await documentedShell(home, "cd ~/workspace/mexxi && node scripts/install.mjs --check");
+  assert.equal(check.code, 0, check.output);
 });
 
 // ibda's sequence adds --config, so it cannot run verbatim; it must keep the
@@ -806,6 +846,8 @@ test("ibda's pre-move sequence moves only after a passing dry run, carries over 
   }
   assert.ok(chains.indexOf(moveChain) < chains.indexOf(installChain), "the move comes before the install");
   assert.ok(skill.includes("`rmdir ~/.config/opencode && mv ~/.config/opencode.pre-move ~/.config/opencode`"));
+  // The same rule as getting-started.md for a stop after the links moved.
+  assert.match(section, /`readlink ~\/\.claude\/CLAUDE\.md`[^`]*`~\/\.local\/share\/mexxi\/generated`/);
 });
 
 test("settings.json gets only the keys mexxi owns, and --check notices a hand-removed one", async (t) => {

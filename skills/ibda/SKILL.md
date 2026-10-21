@@ -170,7 +170,11 @@ First install, in order:
    Run the installer from the new clone. If the dry run lists conflicts, the
    chain stops before the `mv`: show them to the user and resolve them first.
    If the install stops saying `~/.config/opencode` is still the old clone,
-   the move did not happen. If it stops after the move, put the old clone back first:
+   the move did not happen. If it stops after the move, run
+   `readlink ~/.claude/CLAUDE.md`, the first link the installer moves. If it
+   already points into `~/.local/share/mexxi/generated`, the links have moved:
+   don't restore anything; fix the cause the installer printed and rerun the
+   install command above. Otherwise put the old clone back first:
    `rmdir ~/.config/opencode && mv ~/.config/opencode.pre-move ~/.config/opencode`.
 5. Delete the scratch file once it is installed.
 
