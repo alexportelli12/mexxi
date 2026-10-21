@@ -30,7 +30,7 @@ jobs:
           node-version: 24
           cache: npm
       # The docs build needs no install scripts (esbuild ships its binary as an optional
-      # package), and skipping them keeps Vale's binary download out of this job.
+      # package), so skipping them is safe.
       - run: npm ci --ignore-scripts
       # Writes the generated pages to docs-site/ and builds them into site/docs/, beside
       # the hand-written landing page, so one deployment serves both.
