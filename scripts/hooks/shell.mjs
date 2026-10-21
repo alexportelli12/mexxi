@@ -443,6 +443,28 @@ function scriptOperand(args) {
   return -1;
 }
 
+// Where a shell run with -c finds its script: the first word after the
+// option words, which may follow -c itself (bash -c -x 'cmd', bash -c -o
+// pipefail 'cmd', bash -c -- 'cmd'). Returns the script's index in args, -1
+// when there is no -c, or null when -c has no script.
+function commandScript(args) {
+  let command = false;
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--" || arg === "-") {
+      if (!command) return -1;
+      return index + 1 < args.length ? index + 1 : null;
+    }
+    if (/^[-+][A-Za-z]+$/.test(arg)) {
+      if (arg.startsWith("-") && arg.includes("c")) command = true;
+      // Each o or O in a cluster takes the next word as its value.
+      index += (arg.slice(1).match(/[oO]/g) ?? []).length;
+    } else if (arg === "--rcfile" || arg === "--init-file") index += 1;
+    else if (!arg.startsWith("--")) return command ? index : -1;
+  }
+  return command ? null : -1;
+}
+
 // The text a pipe feeds the next command, when it is known without running
 // anything: a literal echo or printf, or cat of a heredoc. Otherwise null.
 function literalOutput(producer) {
@@ -473,15 +495,15 @@ export function simpleCommands(text, depth = 0) {
       continue;
     }
     if (depth < 4 && SHELLS.has(name)) {
-      const flag = args.findIndex((arg) => /^-[a-z]*c[a-z]*$/.test(arg));
-      if (flag !== -1 && args[flag + 1] !== undefined) {
-        // args[flag + 1] is commandWords[flag + 2]: commandWords starts at the name.
-        if (commandWords[flag + 2].expanded) {
+      const script = commandScript(args);
+      if (script !== null && script !== -1) {
+        // args[script] is commandWords[script + 1]: commandWords starts at the name.
+        if (commandWords[script + 1].expanded) {
           refuse(`-c runs a script built by an expansion ($(...), backticks or $VAR) the guard cannot inspect; write the commands out literally`);
-        } else found.push(...simpleCommands(args[flag + 1], depth + 1));
+        } else found.push(...simpleCommands(args[script], depth + 1));
         continue;
       }
-      const operand = flag === -1 ? scriptOperand(args) : null;
+      const operand = script === -1 ? scriptOperand(args) : null;
       if (operand !== null && operand !== -1 && commandWords[operand + 1].processSubstitution) {
         refuse(`runs a script from a process substitution the guard cannot inspect (as in bash <(curl ...)); ${RUN_IT_DIRECTLY}`);
         continue;

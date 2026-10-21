@@ -177,6 +177,19 @@ test("a script built at run time is refused: process substitutions and expansion
   ]) await assertAllowed(command);
 });
 
+test("options after -c do not hide the script: the first non-option word is what the shell runs", async () => {
+  for (const command of [
+    "bash -c -x 'git push -f origin feature'",
+    "bash -c -e 'git push -f origin feature'",
+    "bash -c -- 'git push -f origin feature'",
+    "bash -c -o pipefail 'git push -f origin feature'",
+    "sh -c +x 'git push -f origin feature'",
+    "bash -co pipefail 'git push -f origin feature'",
+  ]) await assertBlocked(command, /force/);
+  await assertBlocked("bash -c -x \"$CMD\"", /-c runs a script built by an expansion/);
+  await assertAllowed("bash -c -e 'git status' name arg");
+});
+
 test("an unquoted heredoc's body is expanded: its command substitutions run, a quoted one's do not", async () => {
   for (const command of ["cat <<EOF\n$(git stash)\nEOF", "cat <<EOF\n`git stash`\nEOF", "cat <<-EOF > notes.md\n\tbranch: $(git push --force origin x)\n\tEOF"]) {
     await assertBlocked(command, /outside an owned ibni worktree|force/, clone);
