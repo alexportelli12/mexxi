@@ -65,7 +65,9 @@ done
 `<skill-folder>` is `../<skill>`, or `../../node_modules/verifika/skills/verifika`
 for `verifika`. Every query must pass on every host (`summary.failed` is 0);
 fix the description, not the eval, unless a query is wrong. The Codex run tests
-the skill as installed, so run it after the installation step below.
+the description installed from the primary checkout, which a branch does not
+change: run it after the pull request is merged and installed, and report it as
+pending until then.
 
 ## Reconcile Host Installation
 
