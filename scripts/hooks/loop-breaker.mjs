@@ -24,7 +24,7 @@ import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { guardConfig, SHELL_TOOLS } from "./guard.mjs";
+import { guardConfig, SHELL_TOOLS } from "./guard-rules.mjs";
 
 // File-editing tools by host: Claude Code, Codex (apply_patch), OpenCode.
 const EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit", "apply_patch", "edit", "write", "patch"]);

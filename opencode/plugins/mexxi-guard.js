@@ -6,9 +6,11 @@
 // A refused call throws, which OpenCode reports to the agent as the tool's
 // error. A third identical failure appends the loop breaker's message to the
 // tool's output.
+//
+// The guard is imported when a call arrives, not when the plugin loads: a
+// guard that cannot load (a half-finished checkout, a bad edit) then refuses
+// every shell call rather than leaving OpenCode running without its plugin.
 import path from "node:path";
-import { guardConfig, guardToolCall } from "../../scripts/hooks/guard.mjs";
-import { recordToolResult } from "../../scripts/hooks/loop-breaker.mjs";
 
 // The plugin API's shape (@opencode-ai/plugin's Plugin type), written plainly
 // so nothing has to be installed for OpenCode to load it.
@@ -16,6 +18,12 @@ async function server({ directory }) {
   return {
     "tool.execute.before": async (input, output) => {
       if (input.tool !== "bash") return;
+      let guardToolCall;
+      try {
+        ({ guardToolCall } = await import("../../scripts/hooks/guard-rules.mjs"));
+      } catch (error) {
+        throw new Error(`mexxi guard could not load; refusing: ${error.message}`);
+      }
       const reason = await guardToolCall({
         tool_name: "bash",
         tool_input: { command: output.args?.command },
@@ -39,6 +47,8 @@ async function server({ directory }) {
         event = { ...base, hook_event_name: "PostToolUse" };
       }
       try {
+        const { guardConfig } = await import("../../scripts/hooks/guard-rules.mjs");
+        const { recordToolResult } = await import("../../scripts/hooks/loop-breaker.mjs");
         const { guard } = await guardConfig();
         const message = await recordToolResult(event, { limit: guard.repeatedFailureLimit });
         if (message) output.output = `${output.output ?? ""}\n\nmexxi loop breaker: ${message}`;

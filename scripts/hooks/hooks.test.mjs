@@ -440,6 +440,32 @@ test("the guard fails closed when it breaks while checking", async () => {
   }
 });
 
+test("the guard fails closed when its own code cannot load", async () => {
+  // A copy of the hook entry beside guard code that is missing or broken, as
+  // a half-finished checkout or a bad edit would leave it.
+  const missing = path.join(base, "unloadable/missing/scripts/hooks");
+  const broken = path.join(base, "unloadable/broken/scripts/hooks");
+  for (const directory of [missing, broken]) {
+    await mkdir(directory, { recursive: true });
+    await writeFile(path.join(directory, "guard.mjs"), await readFile(path.join(hooks, "guard.mjs")));
+  }
+  for (const name of ["guard-rules.mjs", "shell.mjs"]) await writeFile(path.join(broken, name), "export const = ;\n");
+  for (const directory of [missing, broken]) {
+    for (const input of [claudeInput("git status", clone), codexInput("git status", clone)]) {
+      const result = spawnSync(process.execPath, [path.join(directory, "guard.mjs")], { input: JSON.stringify(input), encoding: "utf8", env: process.env });
+      assert.equal(result.status, 2, `${directory}: ${result.stderr}`);
+      assert.match(result.stderr, /mexxi guard could not load; refusing/);
+    }
+  }
+  // OpenCode's plugin loads, and refuses each shell call while the guard cannot.
+  const plugin = path.join(base, "unloadable/broken/opencode/plugins/mexxi-guard.js");
+  await mkdir(path.dirname(plugin), { recursive: true });
+  await writeFile(plugin, await readFile(path.join(hooks, "../../opencode/plugins/mexxi-guard.js")));
+  const { default: brokenPlugin } = await import(plugin);
+  const { "tool.execute.before": before } = await brokenPlugin.server({ directory: clone });
+  await assert.rejects(before({ tool: "bash", sessionID: "s", callID: "c" }, { args: { command: "git status" } }), /mexxi guard could not load; refusing/);
+});
+
 const failure = (session, command, error = "Exit code 1\nnpm ERR! test failed") => ({
   session_id: session, transcript_path: "/tmp/t.jsonl", cwd: clone, permission_mode: "default",
   hook_event_name: "PostToolUseFailure", tool_name: "Bash", tool_input: { command }, tool_use_id: "toolu_1", error, is_interrupt: false,
