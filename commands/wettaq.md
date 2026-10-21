@@ -197,10 +197,11 @@ that gate leave no unresolved blockers.
    report that and carry on, since the pull request is already delivered.
 
 If any delivery stage fails, preserve the worktree and any commit, and report
-the failed stage with the tool's diagnostic. The guard hook refuses the
-destructive recoveries; do not attempt them by other means, and do not bypass
-permissions, guess through ambiguous ownership or conflicts, or include
-unrelated changes.
+the failed stage with the tool's diagnostic. Do not bypass permissions, guess
+through ambiguous ownership or conflicts, rewrite shared history, force push,
+stash, discard work, include unrelated changes, or improvise destructive
+recovery. The guard hook is a backup for some of these, not their owner: what
+it allows is not thereby permitted.
 
 ## Completion
 

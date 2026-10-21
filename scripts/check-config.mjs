@@ -23,6 +23,24 @@ function checkSchema(schema, at = "config") {
   if (schema.items) checkSchema(schema.items, `${at}[]`);
 }
 
+const sentences = (text) => text.replace(/\s+/g, " ").split(/(?<=[.;:!?])\s+/);
+
+// Claims in the instructions that a reader acts on and that drift silently.
+// The guard hook covers only some commands, and Codex skips it until trusted,
+// so the red lines stay rules in prose and the guard is named only as their
+// backup.
+async function checkInstructionClaims(base) {
+  const read = (name) => readFile(path.join(base, name), "utf8");
+  const wettaq = (await read("commands/wettaq.md")).replace(/\s+/g, " ");
+  assert.match(wettaq, /Do not [^.]*rewrite shared history, force push, stash, discard work,[^.]* or improvise destructive recovery\./,
+    "commands/wettaq.md must keep its delivery red lines as a rule, not leave them to the guard hook");
+  for (const name of ["commands/wettaq.md"]) {
+    for (const sentence of sentences(await read(name))) {
+      if (/\bguard\b/i.test(sentence)) assert.match(sentence, /\bbackup\b/, `${name} must name the guard hook only as a backup to its rules: "${sentence}"`);
+    }
+  }
+}
+
 export async function check(base = root) {
   const schema = await loadSchema();
   checkSchema(schema);
@@ -143,6 +161,7 @@ export async function check(base = root) {
     const flat = text.replace(/\s+/g, " ");
     for (const rule of rules) assert.ok(!flat.includes(rule), `${name} repeats the Claude Code-only rule "${rule}"`);
   }
+  await checkInstructionClaims(base);
   // Every mod config.json can name is in the marketplace the installer adds,
   // read from its own folder under claude/mods/.
   const marketplace = JSON.parse(await readFile(path.join(base, ".claude-plugin/marketplace.json"), "utf8"));
