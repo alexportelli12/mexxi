@@ -292,6 +292,20 @@ test("git stash, reset --hard and clean are blocked outside an owned ibni worktr
   await assertBlocked("git stash", /outside an owned/, base);
 });
 
+test("inside an owned worktree, destructive git aimed at another repository through --git-dir, --work-tree or GIT_DIR is blocked", async () => {
+  for (const command of [
+    `git --git-dir=${clone}/.git --work-tree=${clone} reset --hard`,
+    `git --git-dir ${clone}/.git stash`,
+    `git --work-tree=${clone} clean -fd`,
+    `git -c core.worktree=${clone} reset --hard`,
+    `GIT_DIR=${clone}/.git git reset --hard`,
+    `env GIT_WORK_TREE=${clone} git clean -fd`,
+    `export GIT_DIR=${clone}/.git; git stash`,
+  ]) await assertBlocked(command, /another repository|GIT_DIR|--git-dir|--work-tree|core\.worktree/, owned);
+  await assertAllowed("git --no-pager reset --hard", owned);
+  await assertAllowed(`git --git-dir=${clone}/.git log --oneline`, owned);
+});
+
 test("every starter deny prefix is blocked even when sidestepped with cd x && ...", async () => {
   const { guard } = await resolveConfig({});
   assert.equal(guard.deny.length, 11);

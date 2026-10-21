@@ -11,7 +11,8 @@
 //     entry (including a push of HEAD after a switch earlier in the line),
 //     and merging pull requests;
 //   - git stash, git reset --hard and git clean outside an owned ibni worktree,
-//     where they would destroy work the agent did not make;
+//     or pointed elsewhere from one (--git-dir, --work-tree, GIT_DIR), where
+//     they would destroy work the agent did not make;
 //   - every guard.deny prefix (production deploys, publishing), wherever it
 //     sits in the command line, matched on the command's words so options
 //     (firebase --project p deploy), npm's run aliases, a package name
@@ -249,15 +250,25 @@ function checkPush(args, cwd, config, head = null) {
   return null;
 }
 
-function checkGit(argv, cwd, config, heads = new Map()) {
+// Git environment variables that point a command at another repository or
+// checkout than the directory it runs in.
+const RELOCATING_ENV = /\bGIT_(?:DIR|WORK_TREE|COMMON_DIR|INDEX_FILE)\b/;
+
+// relocatedBy: what earlier in the line (GIT_DIR=..., export GIT_WORK_TREE)
+// may point git at another repository, or null.
+function checkGit(argv, cwd, config, heads = new Map(), relocatedBy = null) {
   let index = 1;
   let directory = cwd;
   while (index < argv.length && argv[index].startsWith("-")) {
-    const option = argv[index];
+    const [option, inline] = argv[index].split(/=(.*)/s);
     if (option === "-C") {
       directory = path.resolve(directory, argv[index + 1] ?? ".");
       index += 2;
-    } else if (["-c", "--git-dir", "--work-tree", "--namespace", "--exec-path", "--config-env"].includes(option)) {
+      continue;
+    }
+    if (option === "--git-dir" || option === "--work-tree") relocatedBy ??= option;
+    if (option === "-c" && /^core\.worktree=/i.test(argv[index + 1] ?? "")) relocatedBy ??= "-c core.worktree";
+    if (["-c", "--git-dir", "--work-tree", "--namespace", "--exec-path", "--config-env"].includes(option) && inline === undefined) {
       index += 2;
     } else index += 1;
   }
@@ -271,6 +282,11 @@ function checkGit(argv, cwd, config, heads = new Map()) {
   if (subcommand === "stash" && !["list", "show"].includes(args[0])) destructive = `git stash${args[0] ? ` ${args[0]}` : ""}`;
   if (subcommand === "reset" && args.includes("--hard")) destructive = "git reset --hard";
   if (subcommand === "clean" && !args.some((arg) => arg === "--dry-run" || (/^-[A-Za-z]+$/.test(arg) && arg.includes("n")))) destructive = "git clean";
+  if (destructive && relocatedBy) {
+    // ownedWorktree vouches for the directory, not for the repository these
+    // point git at.
+    return `${destructive} with ${relocatedBy} works on another repository or checkout than the owned worktree, where it would destroy changes this task did not make; leave them in place and report instead`;
+  }
   if (destructive && !ownedWorktree(directory)) {
     return `${destructive} outside an owned ibni worktree would destroy changes this task did not make (and the stash stack is shared by every worktree); leave them in place and report instead`;
   }
@@ -461,7 +477,8 @@ export function checkCommand(command, { cwd, config, home = os.homedir() }) {
       else if (target !== "-") directory = path.resolve(directory, target.replace(/^~(?=\/|$)/, home));
       continue;
     }
-    const reason = (argv[0] === "git" ? checkGit(argv, directory, config, heads) : null)
+    const relocatedBy = command.match(RELOCATING_ENV)?.[0] ?? null;
+    const reason = (argv[0] === "git" ? checkGit(argv, directory, config, heads, relocatedBy) : null)
       ?? (argv[0] === "gh" ? checkGh(argv) : null)
       ?? checkDeny(argv, config)
       ?? checkShopify(argv)
