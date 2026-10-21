@@ -356,7 +356,7 @@ test("inside an owned worktree, destructive git aimed at another repository thro
 test("doas and a command name held in a variable do not hide a guarded command", async () => {
   await assertBlocked("doas git push -f origin feature", /force/);
   await assertBlocked("doas -u root gh pr merge 1", /merge decisions/);
-  for (const command of ["v=git; $v push -f origin feature", "${GIT:-git} push --force", '"$G" push origin +feature']) {
+  for (const command of ["v=git; $v push -f origin feature", "${GIT:-git} push --force", '"$G" push origin +feature', '"$(command -v git)" push -f origin feature', "`which git` push --force"]) {
     await assertBlocked(command, /force/);
   }
   await assertBlocked("$GH pr merge 1", /merge decisions/);
@@ -365,6 +365,12 @@ test("doas and a command name held in a variable do not hide a guarded command",
   // A literal basename names the command whatever directory it is in.
   await assertBlocked("$HOME/bin/git push -f origin feature", /force/);
   await assertBlocked('"$(dirname x)/fire$X" deploy', /could be firebase/);
+  // A name that could be a shell has its -c script read.
+  for (const command of ["$SHELL -c 'git push -f origin feature'", `"$(command -v bash)" -c 'git push -f origin feature'`]) {
+    await assertBlocked(command, /force/);
+  }
+  for (const command of ["$SHELL -c 'git push origin feature'", "$GIT -c user.name=x commit -m x"]) await assertAllowed(command);
+  await assertBlocked("$GIT -c user.name=x push --force", /force/);
 });
 
 test("discarding working-tree changes through restore, checkout and switch is blocked outside an owned worktree", async () => {

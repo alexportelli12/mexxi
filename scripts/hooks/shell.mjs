@@ -523,13 +523,19 @@ export function simpleCommands(text, depth = 0, line = text) {
   for (const words of read(text, 0, false).commands) {
     const { words: commandWords, ...command } = effectiveArgv(words);
     const [name, ...args] = command.argv;
-    if (!name) continue;
-    const refuse = (reason) => found.push({ ...command, refused: `${name} ${reason}` });
+    // A name that is only a substitution ("$(command -v git)") reads as empty
+    // but still runs a command.
+    if (!name && !command.nameExpanded) continue;
+    const refuse = (reason) => found.push({ ...command, refused: `${name || "a command named by a substitution"} ${reason}` });
     if ((name === "source" || name === ".") && commandWords.some((word) => word.processSubstitution)) {
       refuse(`runs a script from a process substitution the guard cannot inspect (as in source <(curl ...)); ${RUN_IT_DIRECTLY}`);
       continue;
     }
-    if (depth < 4 && SHELLS.has(name)) {
+    // A name built by an expansion ($SHELL -c '...') could be a shell too, so
+    // its -c script is read as well as the command itself, which the guard
+    // also reads as each command it guards ($GIT -c k=v push --force).
+    const maybeShell = command.nameExpanded && !SHELLS.has(name);
+    if (depth < 4 && (SHELLS.has(name) || maybeShell)) {
       const script = commandScript(args);
       if (script !== null && script !== -1) {
         // args[script] is commandWords[script + 1]: commandWords starts at the name.
@@ -538,6 +544,13 @@ export function simpleCommands(text, depth = 0, line = text) {
         if (scriptWord.expanded && (!settledParameters(scriptWord, line) || commands.some((inner) => inner.nameExpanded))) {
           refuse(`-c runs a script built by an expansion ($(...), backticks, or a $VAR set in the line or used as a command) the guard cannot inspect; write the commands out literally`);
         } else found.push(...commands);
+        if (maybeShell) found.push(command);
+        continue;
+      }
+      // Only -c: an expanded name fed a pipe ($PAGER) is no more a shell than
+      // any other reader.
+      if (maybeShell) {
+        found.push(command);
         continue;
       }
       const operand = script === -1 ? scriptOperand(args) : null;

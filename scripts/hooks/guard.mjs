@@ -25,7 +25,8 @@
 //     live store (app deploy and release, theme publish and delete, theme
 //     push --live);
 //   - any of these behind a wrapper (sudo, doas, env, npx, ...) or a command
-//     name held in a variable ($v push -f);
+//     name held in a variable or substitution ($v push -f, "$(command -v
+//     git)" push -f), including a -c script such a name may run ($SHELL -c);
 //   - unquoted --include=* / --exclude=* globs, when guard.blockUnquotedGlobs
 //     is on (zsh aborts on them unless no_nomatch reaches the agent's shell);
 //   - a shell fed a script it cannot read: through a pipe (curl ... | sh), a
