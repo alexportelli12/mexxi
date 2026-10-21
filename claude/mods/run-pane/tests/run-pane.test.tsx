@@ -58,7 +58,7 @@ function engine(on: On, answers: Answers, percent = 20) {
   return calls
 }
 
-test('a finished run reads as a status badge, a journey of stages, the PR link and its details', async ($, on) => {
+test('a finished run reads as a card with a status capsule and progress, then the journey, the PR link and a Jev line', async ($, on) => {
   const calls = engine(on, { info, stats })
   await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
   await $.tool.call({ tool: 'Bash', command: 'ibni prepare --slug timed' })
@@ -68,9 +68,10 @@ test('a finished run reads as a status badge, a journey of stages, the PR link a
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...PANE, surface })
     const text = async (pattern: RegExp) => (await ui.find({ type: 'Text', text: pattern }))?.text
-    expect(await text(/^ PR open $/)).toBe(' PR open ')
+    expect(await text(/^ PR OPEN /)).toBe(' PR OPEN   started 12m ago')
     expect(await text(/^timed$/)).toBe('timed')
-    expect(await text(/^control · started/)).toBe('control · started 12m ago')
+    expect(await text(/^control · /)).toBe('control · port 4300')
+    expect(await text(/ of 6$/)).toBe('▰▰▰▰▰▰  6 of 6')
     expect(await text(/Workspace ready/)).toBe('✓ Workspace ready')
     expect(await text(/Build the change/)).toBe('✓ Build the change')
     expect(await text(/Verify/)).toBe('✓ Verify  green · 1 of 2 runs passed')
@@ -78,24 +79,22 @@ test('a finished run reads as a status badge, a journey of stages, the PR link a
     expect(await text(/Independent review/)).toBe('✓ Independent review  2 passes · 4 findings · cross-family')
     expect(await text(/^✓ Pull request/)).toBe('✓ Pull request  #42 open')
     expect(await ui.find({ type: 'Link' })).toMatchObject({ props: { href: 'https://github.com/alexportelli12/example/pull/42' } })
-    expect(await text(/Jev triage/)).toBeDefined()
-    expect(await text(/^User-facing/)).toBe('User-facing no · 90%')
-    expect(await text(/^Review value/)).toBe('Review value 2.4 · 60%')
-    expect(await text(/worktrees\/control/)).toBe(info.worktreePath)
-    expect(await text(/^dev server/)).toBe('dev server on port 4300')
+    expect(await text(/^Jev/)).toBe('Jev (shadow) · local change · no UI change · two-way door · review value 2.4')
+    expect(await text(/worktrees\/control/)).toBeUndefined()
     await ui.unmount()
   }
 })
 
-test('a run in progress marks the next stage as current', async ($, on) => {
+test('a run in progress names what it is doing and times the current stage', async ($, on) => {
   const active = { ...info, state: 'active', prUrl: null }
   const early = { ...stats, state: 'active', prUrl: null, steps: [stats.steps[0]], verify: undefined, qa: undefined, review: undefined }
   engine(on, { info: active, stats: early })
   await $.tool.call({ tool: 'Bash', command: `ibni info --session ${SESSION}` })
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
   const text = async (pattern: RegExp) => (await ui.find({ type: 'Text', text: pattern }))?.text
-  expect(await text(/^ Now:/)).toBe(' Now: build the change ')
-  expect(await text(/Build the change/)).toBe('● Build the change')
+  expect(await text(/^ BUILDING /)).toBe(' BUILDING   started 12m ago')
+  expect(await text(/ of 6$/)).toBe('▰▰▱▱▱▱  1 of 6')
+  expect(await text(/Build the change/)).toBe('● Build the change  12m')
   expect(await text(/Verify/)).toBe('○ Verify')
   expect(await ui.find({ type: 'Link' })).toBeUndefined()
   await ui.unmount()
@@ -108,7 +107,7 @@ test('a red verify is the headline and its stage is marked failed', async ($, on
   await $.tool.call({ tool: 'Bash', command: `ibni info --session ${SESSION}` })
   const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
   const text = async (pattern: RegExp) => (await ui.find({ type: 'Text', text: pattern }))?.text
-  expect(await text(/needs attention/)).toBe(' Verify: needs attention ')
+  expect(await text(/NEEDS ATTENTION/)).toBe(' NEEDS ATTENTION   started 12m ago')
   expect(await text(/^✗ Verify/)).toBe('✗ Verify  red · 0 of 1 run passed')
   await ui.unmount()
 })
@@ -118,7 +117,7 @@ test('Jev triage is absent until a triage call is answered', async ($, on) => {
   engine(on, { info, stats: { ...stats, triage: skipped } })
   await $.tool.call({ tool: 'Bash', command: `ibni info --session ${SESSION}` })
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect(await ui.find({ type: 'Text', text: /Jev triage/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /^Jev/ })).toBeUndefined()
   await ui.unmount()
 })
 

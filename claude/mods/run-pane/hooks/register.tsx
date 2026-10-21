@@ -8,7 +8,7 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { RunPaneSnapshot } from '../types'
 import type { StageState } from './run'
-import { headline, journey, nudge, nudgePercentFrom, sessionIdFrom, since, snapshotFrom, taskTitle, triageRows } from './run'
+import { duration, headline, journey, lastEventAt, nudge, nudgePercentFrom, progress, sessionIdFrom, since, snapshotFrom, taskTitle, triageTags } from './run'
 
 const PANE = 'run-pane'
 
@@ -99,61 +99,66 @@ export const register: Register = on => {
         </Box>
       )
     }
+    const now = await $.clock.now()
     const status = headline(current)
     const { task, repository } = taskTitle(current)
-    const started = since(current.createdAt, await $.clock.now())
-    const triage = triageRows(current)
+    const stages = journey(current)
+    const { done, total } = progress(stages)
+    const started = since(current.createdAt, now)
+    const lastEvent = lastEventAt(current)
+    const onCurrent = lastEvent ? duration(now - Date.parse(lastEvent)) : undefined
+    const tags = triageTags(current)
+    const port = current.port === null || current.port === undefined ? undefined : `port ${current.port}`
     return (
       <Box flexDirection="column" gap={1}>
-        <Box flexDirection="column">
+        {/* The card: what a glance needs, in the colour of where the run stands. */}
+        <Box borderStyle="round" borderColor={status.tone} paddingX={1} flexDirection="column">
           <Text>
-            <Text backgroundColor={status.tone} color="inverseText" weight="semibold">{` ${status.label} `}</Text>
+            <Text backgroundColor={status.tone} color="inverseText" weight="bold">{` ${status.label} `}</Text>
+            {started ? <Text dimColor>{`  started ${started}`}</Text> : null}
           </Text>
-          <Text size="heading" weight="semibold" wrap="truncate-end">{task}</Text>
-          <Text dimColor>{[repository, started && `started ${started}`].filter(Boolean).join(' · ')}</Text>
+          <Text weight="bold" wrap="truncate-end">{task}</Text>
+          <Text dimColor>{[repository, port].filter(Boolean).join(' · ') || ' '}</Text>
+          <Text>
+            {stages.map(stage => (
+              <Text color={MARK[stage.state].color}>{stage.state === 'pending' || stage.state === 'skipped' ? '▱' : '▰'}</Text>
+            ))}
+            <Text dimColor>{`  ${done} of ${total}`}</Text>
+          </Text>
         </Box>
 
-        <Box flexDirection="column">
-          {journey(current).map(stage => (
+        <Box flexDirection="column" paddingX={1}>
+          {stages.map(stage => (
             <Text>
               <Text color={MARK[stage.state].color}>{MARK[stage.state].glyph}</Text>
               {' '}
               <Text
                 weight={stage.state === 'current' || stage.state === 'failed' ? 'semibold' : 'regular'}
-                color={stage.state === 'failed' ? 'error' : undefined}
+                color={stage.state === 'failed' ? 'error' : stage.state === 'current' ? 'claude' : undefined}
                 dimColor={stage.state === 'pending' || stage.state === 'skipped'}
               >
                 {stage.label}
               </Text>
               {stage.detail ? <Text dimColor>{`  ${stage.detail}`}</Text> : null}
+              {stage.state === 'current' && onCurrent ? <Text color="claude">{`  ${onCurrent}`}</Text> : null}
             </Text>
           ))}
         </Box>
 
         {current.prUrl ? (
-          <Text>
-            <Text color="success">{'→ '}</Text>
-            <Link href={current.prUrl}>{`Open pull request #${current.prUrl.split('/').at(-1)}`}</Link>
-          </Text>
-        ) : null}
-
-        {triage.length > 0 ? (
-          <Box flexDirection="column">
-            <Text dimColor>Jev triage · shadow, changes nothing</Text>
-            {triage.map(row => (
-              <Text>
-                <Text dimColor>{`${row.question} `}</Text>
-                {row.answer}
-                {row.confidence === undefined ? null : <Text dimColor>{` · ${row.confidence}%`}</Text>}
-              </Text>
-            ))}
+          <Box paddingX={1}>
+            <Text>
+              <Text color="success" weight="bold">{'↗ '}</Text>
+              <Link href={current.prUrl}>{`Open PR #${current.prUrl.split('/').at(-1)}`}</Link>
+            </Text>
           </Box>
         ) : null}
 
-        <Box flexDirection="column">
-          <Text dimColor wrap="truncate-start">{current.worktreePath ?? 'worktree unknown'}</Text>
-          <Text dimColor>{current.port === null || current.port === undefined ? 'no dev-server port' : `dev server on port ${current.port}`}</Text>
-        </Box>
+        {tags.length > 0 ? (
+          <Box paddingX={1}>
+            <Text dimColor wrap="wrap">{`Jev (shadow) · ${tags.join(' · ')}`}</Text>
+          </Box>
+        ) : null}
 
         {current.error ? (
           <Box borderStyle="round" borderColor="warning" paddingX={1} flexDirection="column">

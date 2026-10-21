@@ -41,6 +41,7 @@ export function snapshotFrom(sessionId: string, info: unknown, stats: unknown): 
       step: String(step.step ?? '?'),
       outcome: String(step.outcome ?? '?'),
       durationMs: typeof step.durationMs === 'number' ? step.durationMs : undefined,
+      endedAt: typeof step.endedAt === 'string' ? step.endedAt : undefined,
     })),
     verify: merged.verify as RunPaneSnapshot['verify'],
     review: merged.review
@@ -101,15 +102,49 @@ export function journey(run: RunPaneSnapshot): Stage[] {
   return stages.map((stage, index) => (index === next ? { ...stage, state: 'current' } : stage))
 }
 
+// The capsule at the top: one or two words a person reads at a glance, in
+// the colour of where the run stands. Uppercase, like a status line segment.
+const DOING: Record<string, string> = {
+  workspace: 'PREPARING',
+  build: 'BUILDING',
+  verify: 'VERIFYING',
+  qa: 'TESTING UI',
+  review: 'IN REVIEW',
+  pr: 'PUBLISHING',
+}
+
 export function headline(run: RunPaneSnapshot): { label: string; tone: Tone } {
-  if (run.error) return { label: 'ibni unreachable', tone: 'warning' }
+  if (run.error) return { label: 'IBNI OFFLINE', tone: 'warning' }
   const stages = journey(run)
-  const failed = stages.find(stage => stage.state === 'failed')
-  if (failed) return { label: `${failed.label}: needs attention`, tone: 'error' }
-  if (isDelivered(run)) return { label: 'PR open', tone: 'success' }
-  if (run.state === 'published') return { label: 'Branch published', tone: 'success' }
+  if (stages.some(stage => stage.state === 'failed')) return { label: 'NEEDS ATTENTION', tone: 'error' }
+  if (isDelivered(run)) return { label: 'PR OPEN', tone: 'success' }
+  if (run.state === 'published') return { label: 'PUBLISHED', tone: 'success' }
   const current = stages.find(stage => stage.state === 'current')
-  return { label: current ? `Now: ${current.label.toLowerCase()}` : 'In progress', tone: 'claude' }
+  return { label: current ? DOING[current.key] ?? 'IN PROGRESS' : 'IN PROGRESS', tone: 'claude' }
+}
+
+// How far along the run is: stages done or skipped, out of all of them.
+export function progress(stages: Stage[]): { done: number; total: number } {
+  return { done: stages.filter(stage => stage.state === 'done' || stage.state === 'skipped').length, total: stages.length }
+}
+
+// When ibni last recorded anything for the run: the stage in progress has
+// been running since then.
+export function lastEventAt(run: RunPaneSnapshot): string | undefined {
+  const times = [
+    ...run.steps.map(step => step.endedAt),
+    ...(run.verify?.history ?? []).map(entry => (entry as { at?: string }).at),
+  ].filter((at): at is string => typeof at === 'string' && !Number.isNaN(Date.parse(at)))
+  return times.sort().at(-1) ?? run.createdAt
+}
+
+// A duration the way a status line shows one: 45s, 12m, 1h 05m.
+export function duration(ms: number): string {
+  const seconds = Math.max(0, Math.round(ms / 1000))
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.round(seconds / 60)
+  if (minutes < 60) return `${minutes}m`
+  return `${Math.floor(minutes / 60)}h ${String(minutes % 60).padStart(2, '0')}m`
 }
 
 // The task's short name and the repository it runs in, read from the branch
@@ -131,25 +166,23 @@ export function since(iso: string | undefined, now: number): string | undefined 
   return hours < 24 ? `${hours}h ${minutes % 60}m ago` : `${Math.floor(hours / 24)}d ago`
 }
 
-const QUESTIONS: Record<string, string> = {
-  existingUi: 'Changes existing UI',
-  userFacing: 'User-facing',
-  oneWayDoor: 'One-way door',
-  size: 'Size',
-  reviewValue: 'Review value',
-}
-
-// Jev's latest answers, worded for a person.
-export function triageRows(run: RunPaneSnapshot): { question: string; answer: string; confidence?: number }[] {
-  return Object.entries(run.triage ?? {}).map(([key, value]) => {
-    const item = record(value)
-    const raw = 'answer' in item ? item.answer : value
-    return {
-      question: QUESTIONS[key] ?? key,
-      answer: typeof raw === 'object' ? JSON.stringify(raw) : String(raw),
-      confidence: typeof item.confidence === 'number' ? Math.round(item.confidence * 100) : undefined,
-    }
-  })
+// Jev's answers as a few short tags on one line: it runs in shadow and
+// changes nothing, so it earns a glance, not a section.
+export function triageTags(run: RunPaneSnapshot): string[] {
+  const answers = run.triage ?? {}
+  const value = (key: string) => {
+    const item = record(answers[key])
+    return 'answer' in item ? String(item.answer) : undefined
+  }
+  const tags: string[] = []
+  const size = value('size')
+  if (size) tags.push(`${size} change`)
+  if (value('existingUi') !== undefined) tags.push(value('existingUi') === 'yes' ? 'changes UI' : 'no UI change')
+  if (value('userFacing') === 'yes') tags.push('user-facing')
+  if (value('oneWayDoor') !== undefined) tags.push(value('oneWayDoor') === 'yes' ? 'one-way door' : 'two-way door')
+  const review = Number(value('reviewValue'))
+  if (value('reviewValue') !== undefined && Number.isFinite(review)) tags.push(`review value ${review}`)
+  return tags
 }
 
 // Why the band suggests a fresh session, or null. The key changes with the
