@@ -381,7 +381,7 @@ Verifika gets the same treatment in its own repository and its own PR: a searcha
 
 ## Sequencing, running it, and your decisions
 
-Phase 0 goes first, then the CLI split, because every later phase either changes the CLI or reads what it records. Phases 3 to 8 build on those two; the docs site comes last so it documents the finished state. Phases 0 to 8 ship as one pull request on mexxi with one commit per phase, and Phase 9 as a second PR on Verifika, both built by a single Claude Code loop (the prompt is at the end of this doc).
+Phase 0 goes first, then the CLI split, because every later phase either changes the CLI or reads what it records. Phases 3 to 8 build on those two; the docs site comes last so it documents the finished state. Phases 0 to 8 ship as one pull request on mexxi with one commit per phase, and Phase 9 as a second PR on Verifika, both built by a single Claude Code loop (its prompt is in the pull request description).
 
 ```mermaid
 flowchart LR
@@ -412,4 +412,12 @@ flowchart LR
 
 ## How this plan is run
 
-One Claude Code loop on atlas implements every phase on this branch, one commit per phase, and delivers it in this pull request. The loop prompt is in the pull request description. This file is removed in the loop's final commit, once the docs site and README carry everything that lasts.
+One Claude Code loop on atlas implements every phase on this branch, one commit per phase, and delivers it in this pull request. An Opus orchestrator holds the task list, verification and commits; each phase runs in a fresh subagent, so no phase inherits another's context.
+
+| Work | Model |
+| --- | --- |
+| Orchestrator, independent review | Opus 5.5 |
+| Phases 0, 2a, 2b, 3, 6 | Opus 5.5 |
+| Phases 1, 4, 5, 7, 8, 9 | Sonnet 5.5 |
+| Searches, stale-reference sweeps, verify log triage, docs link and Vale fixes | Haiku 5.5 |
+ The loop prompt is in the pull request description. This file is removed in the loop's final commit, once the docs site and README carry everything that lasts.
