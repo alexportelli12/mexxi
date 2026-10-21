@@ -192,14 +192,19 @@ export const register: Register = on => {
     )
   })
 
+  // The band: one quiet line above the prompt, only while Claude is idle, so
+  // it never competes with the spinner.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    if (e.props.hasSurvey) return next(e)
+    if (e.props.hasSurvey || e.props.isWorking) return next(e)
     const shown = nudge(await read($, run), await read($, contextPercent), await read($, nudgePercent))
     if (!shown || (await read($, dismissed)) === shown.key) return next(e)
     const { Box, Button, Text } = $.ui.resolve(e)
     return (
-      <Box>
-        <Text color="warning">{`↻ ${shown.text} `}</Text>
+      <Box gap={1}>
+        <Text wrap="truncate-end">
+          <Text backgroundColor={shown.tone} color="inverseText" weight="bold">{` ${shown.badge} `}</Text>
+          <Text dimColor>{`  ${shown.text}`}</Text>
+        </Text>
         <Button key="dismiss" label="Dismiss" onPress={() => update($, dismissed, () => shown.key)} />
       </Box>
     )
