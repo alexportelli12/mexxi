@@ -34,7 +34,12 @@ async function checkInstructionClaims(base) {
   const wettaq = (await read("commands/wettaq.md")).replace(/\s+/g, " ");
   assert.match(wettaq, /Do not [^.]*rewrite shared history, force push, stash, discard work,[^.]* or improvise destructive recovery\./,
     "commands/wettaq.md must keep its delivery red lines as a rule, not leave them to the guard hook");
-  for (const name of ["commands/wettaq.md"]) {
+  const agents = (await read("AGENTS.md")).replace(/\s+/g, " ");
+  const redLines = agents.match(/Never merge;[^.]*\./)?.[0] ?? "";
+  for (const line of ["push to the default branch", "force push", "rewrite published or unrelated history", "stash, discard, or overwrite changes you did not make", "include unrelated changes"]) {
+    assert.ok(redLines.includes(line), `AGENTS.md must keep "${line}" in its "Never merge; ..." rule, not leave it to the guard hook`);
+  }
+  for (const name of ["AGENTS.md", "commands/wettaq.md"]) {
     for (const sentence of sentences(await read(name))) {
       if (/\bguard\b/i.test(sentence)) assert.match(sentence, /\bbackup\b/, `${name} must name the guard hook only as a backup to its rules: "${sentence}"`);
     }
