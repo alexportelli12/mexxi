@@ -135,8 +135,8 @@ and rerun it. Never weaken repository safeguards to pass. Any later code
 remediation requires another full `npm run verify`. Record each full run with `ibni record --session
 "<sessionId>" --verify pass` (or `fail`), and each rendered QA or reviewer pass
 with `--qa <finding-count>` or `--review <finding-count> --accepted <count>
---reviewer same|cross` (`cross` when `ibni cross-review` delegated the review,
-`accepted` being the findings you fixed); `ibni stats` reports them beside the
+--reviewer same|cross` (`cross` whenever the reviewer's model is from another
+family than yours, by whatever route, `accepted` being the findings you fixed); `ibni stats` reports them beside the
 lifecycle step timings.
 
 Then re-read the original request and active contract, and inspect the final

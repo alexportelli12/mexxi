@@ -35,10 +35,10 @@ the failure.
 
 The implementer and reviewer share blind spots when they share a model family,
 so where the host can name a reviewer model from another family it does:
-OpenCode and Codex render it as `code-reviewer`'s model, and Claude Code runs the
-review through `ibni cross-review` (its overlay says how). When the other
-family is not available, the same-model reviewer runs instead and the pull
-request's Evidence says so.
+OpenCode renders it as `code-reviewer`'s model, and Claude Code runs the review
+through `ibni cross-review` (its overlay says how). Codex has only one model
+family, so its review is always same-family. Whenever the reviewer shares the
+implementer's family, the pull request's Evidence says so.
 
 ## Review Remediation
 

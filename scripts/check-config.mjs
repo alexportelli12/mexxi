@@ -57,6 +57,25 @@ async function checkInstructionClaims(base, defaults) {
     const section = ibda.slice(ibda.indexOf(heading) + heading.length).split("\n## ")[0];
     assert.match(section.replace(/\s+/g, " "), /explicit yes/, `skills/ibda/SKILL.md: "${heading}" must get an explicit yes before running the installer`);
   }
+  // The schema says which hosts have only one model family; on those the
+  // review is always same-family, and the review skill must not promise
+  // otherwise. `--reviewer cross` records the reviewer's family, whichever
+  // route got it there.
+  const review = await read("skills/implement-review/SKILL.md");
+  const models = (await loadSchema()).properties.models.properties;
+  const singleFamily = Object.values(models)
+    .filter((host) => /only one family/.test(host.properties.crossFamilyReviewer.description))
+    .map((host) => host.description.match(/^(.+?) models\b/)[1]);
+  assert.ok(singleFamily.length, "config.schema.json no longer marks a single-family host; update this check with it");
+  for (const host of singleFamily) {
+    for (const paragraph of review.split(/\n\s*\n/).map((text) => text.replace(/\s+/g, " "))) {
+      if (paragraph.includes(host) && /\b(?:another|other|different) family\b/.test(paragraph)) {
+        assert.match(paragraph, new RegExp(`${host}[^.]*\\b(?:only one|the same) (?:model )?family`), `skills/implement-review/SKILL.md must say ${host}'s review is always same-family, as config.schema.json does`);
+      }
+    }
+  }
+  const recording = wettaq.match(/--reviewer same\|cross` \(([^)]*)\)/)?.[1] ?? "";
+  assert.match(recording, /`cross`[^,]*\bfamily\b/, "commands/wettaq.md must record --reviewer cross by the reviewer's model family, not by whether ibni cross-review ran");
 }
 
 export async function check(base = root) {
