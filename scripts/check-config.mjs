@@ -4,6 +4,7 @@ import { access, readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { links } from "./install.mjs";
+import { desiredSettings } from "./lib/claude-settings.mjs";
 import { loadSchema, resolveConfig, supportedKeywords, validate, withDefaults } from "./lib/config.mjs";
 import { agentRoles, commandAliases, renderHostFiles } from "./lib/render.mjs";
 
@@ -26,11 +27,11 @@ function checkSchema(schema, at = "config") {
 const sentences = (text) => text.replace(/\s+/g, " ").split(/(?<=[.;:!?])\s+/);
 
 // Claims in the instructions that a reader acts on and that drift silently.
-// The guard hook covers only some commands, and Codex skips it until trusted,
-// so the red lines stay rules in prose and the guard is named only as their
-// backup.
-async function checkInstructionClaims(base) {
+async function checkInstructionClaims(base, defaults) {
   const read = (name) => readFile(path.join(base, name), "utf8");
+  // The guard hook covers only some commands, and Codex skips it until
+  // trusted, so the red lines stay rules in prose and the guard is named only
+  // as their backup.
   const wettaq = (await read("commands/wettaq.md")).replace(/\s+/g, " ");
   assert.match(wettaq, /Do not [^.]*rewrite shared history, force push, stash, discard work,[^.]* or improvise destructive recovery\./,
     "commands/wettaq.md must keep its delivery red lines as a rule, not leave them to the guard hook");
@@ -43,6 +44,18 @@ async function checkInstructionClaims(base) {
     for (const sentence of sentences(await read(name))) {
       if (/\bguard\b/i.test(sentence)) assert.match(sentence, /\bbackup\b/, `${name} must name the guard hook only as a backup to its rules: "${sentence}"`);
     }
+  }
+  // ibda runs the installer, which merges keys into the user's own Claude Code
+  // settings.json: the skill must name each one, and ask before both a first
+  // install and an upgrade.
+  const ibda = await read("skills/ibda/SKILL.md");
+  const merged = desiredSettings(defaults);
+  const named = ["permissions.deny", ...Object.keys(merged.env), ...Object.keys(merged.hooks),
+    ...Object.entries(merged.keys).map(([key, value]) => `${key}: ${value}`)];
+  for (const item of named) assert.ok(ibda.includes(item), `skills/ibda/SKILL.md must tell the user the installer merges ${item} into ~/.claude/settings.json`);
+  for (const heading of ["## 4. Install", "## Upgrade and repair"]) {
+    const section = ibda.slice(ibda.indexOf(heading) + heading.length).split("\n## ")[0];
+    assert.match(section.replace(/\s+/g, " "), /explicit yes/, `skills/ibda/SKILL.md: "${heading}" must get an explicit yes before running the installer`);
   }
 }
 
@@ -166,7 +179,7 @@ export async function check(base = root) {
     const flat = text.replace(/\s+/g, " ");
     for (const rule of rules) assert.ok(!flat.includes(rule), `${name} repeats the Claude Code-only rule "${rule}"`);
   }
-  await checkInstructionClaims(base);
+  await checkInstructionClaims(base, defaults);
   // Every mod config.json can name is in the marketplace the installer adds,
   // read from its own folder under claude/mods/.
   const marketplace = JSON.parse(await readFile(path.join(base, ".claude-plugin/marketplace.json"), "utf8"));

@@ -18,10 +18,11 @@ Rules that hold throughout:
 - Install nothing, and run no command that changes the machine outside the
   clone and `~/.config/mexxi`, without asking first. Say what a command does
   before running it.
-- Never overwrite or hand-edit a host's existing configuration (`~/.claude`,
-  `~/.codex`, `~/.config/opencode`). The installer links mexxi's files in and
-  refuses on a conflict. When it reports one, show the user the paths, explain
-  what differs, and ask; do not delete, move or force anything.
+- Never hand-edit a host's existing configuration (`~/.claude`, `~/.codex`,
+  `~/.config/opencode`). Only the installer changes it, in the ways "What the
+  installer changes" lists, and only after the user's explicit yes to that
+  list. It refuses on a conflict. When it reports one, show the user the paths,
+  explain what differs, and ask; do not delete, move or force anything.
 - Ask only what cannot be detected. Everything else takes the defaults in
   `config.schema.json`.
 - Never write an API key into any file. Jev's key stays in `OPENROUTER_API_KEY`.
@@ -76,8 +77,43 @@ you would pick:
    `OPENROUTER_API_KEY`. Jev only records answers beside the agent's own
    decisions; it changes nothing.
 
+## What the installer changes
+
+Show the user this list before the installer first runs, on a first install
+and on an upgrade alike:
+
+- **Links** for each chosen host into `~/.claude`, `~/.codex`,
+  `~/.agents/skills` and `~/.config/opencode` (instructions, commands, skills,
+  agents), and `ibni` into `~/.local/bin`. Rendered files go to
+  `~/.local/share/mexxi/generated`.
+- **Claude Code's `~/.claude/settings.json`,** merged rather than replaced;
+  everything else in it stays the user's:
+  - a `permissions.deny` rule, `Bash(<prefix>:*)`, for each `guard.deny`
+    prefix (production deploys, `npm publish`, `gh pr merge`, force pushes);
+  - `env.BASH_MAX_TIMEOUT_MS` from `claude.bashMaxTimeoutMs` (default 15
+    minutes), the longest a foreground Bash command may run;
+  - `cleanupPeriodDays: 90` from `retro.transcriptRetentionDays`. Claude Code
+    then keeps session transcripts on disk for 90 days instead of deleting
+    them after its default 30, so a retro can read them. Transcripts hold
+    everything a session saw, so this is longer retention of that data;
+  - the guard and loop-breaker hooks, as `PreToolUse`, `PostToolUse` and
+    `PostToolUseFailure` groups.
+
+  A key the user set to a different value is a conflict: the installer stops
+  and changes nothing.
+- **Claude Code mods** (`mods`): `claude plugin` adds the `mexxi` marketplace
+  and installs each mod, which writes `extraKnownMarketplaces` and
+  `enabledPlugins` into the same `settings.json`.
+- **Codex's `~/.codex/hooks.json`:** the guard and loop-breaker groups, merged
+  in beside the user's own hooks.
+- A `post-merge` Git hook in the clone, so every `git pull` there reruns the
+  installer.
+- Ownership records in `~/.local/share/mexxi/state/`, so a later change to
+  `config.json` removes only what mexxi added.
+
 ## 4. Install
 
+Show "What the installer changes" and wait for an explicit yes before step 4.
 First install, in order:
 
 1. Clone: `git clone https://github.com/alexportelli12/mexxi.git <clone>`
@@ -155,12 +191,15 @@ On a rerun, in the clone from `paths.checkout`:
 
 1. `git status`: if it has uncommitted changes or is not on `main`, stop and
    tell the user; do not stash or discard anything.
-2. `git pull --ff-only`, then `npm ci`.
-3. `node scripts/install.mjs`, then `node scripts/install.mjs --check`. This
+2. Show "What the installer changes" and wait for an explicit yes. Get it
+   before pulling: the clone's `post-merge` hook reruns the installer as soon
+   as `git pull` brings anything in.
+3. `git pull --ff-only`, then `npm ci`.
+4. `node scripts/install.mjs`, then `node scripts/install.mjs --check`. This
    re-renders the host files from `config.json`, so it also repairs a broken
    link or a stale render. Edits to `config.json` (new models, Jev on) take
    effect the same way.
-4. Work through anything `--check` lists, as in step 5.
+5. Work through anything `--check` lists, as in section 5.
 
 Never run the installer from a feature worktree or another clone; it refuses.
 
