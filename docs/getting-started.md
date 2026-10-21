@@ -1,7 +1,8 @@
 ---
 sources:
   - scripts/install.mjs
-  - scripts/lib/**
+  - scripts/lib/config.mjs
+  - scripts/lib/claude-settings.mjs
   - config.schema.json
   - config.example.json
   - skills/ibda/SKILL.md

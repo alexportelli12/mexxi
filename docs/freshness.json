@@ -1,10 +1,10 @@
 {
   "README.md": {
-    "sources": ["commands/**", "agent/**", "skills/*/SKILL.md", "names.json", "prompts.json", "scripts/install.mjs", "config.schema.json"],
+    "sources": ["names.json", "prompts.json", "scripts/install.mjs"],
     "reviewed": "2026-10-21"
   },
   "site/index.html": {
-    "sources": ["commands/wettaq.md", "names.json", "prompts.json", "scripts/install.mjs", "claude/mods/**", "scripts/hooks/**"],
+    "sources": ["commands/wettaq.md", "names.json", "prompts.json", "scripts/install.mjs", "claude/mods/*/.claude-plugin/plugin.json", "scripts/lib/host-hooks.mjs"],
     "reviewed": "2026-10-21"
   }
 }

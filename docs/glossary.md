@@ -2,7 +2,7 @@
 sources:
   - AGENTS.md
   - skills/workflow-for-alex/SKILL.md
-  - scripts/ibni/**
+  - scripts/ibni/ibni.mjs
   - names.json
 reviewed: 2026-10-21
 ---
