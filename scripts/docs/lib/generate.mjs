@@ -11,7 +11,7 @@ const posix = path.posix;
 
 // A page is { route, title, nav, section, markdown }. Routes have no extension;
 // "index" is the Start here page.
-const SECTIONS = ["Start here", "Principles", "Commands", "Agents", "Skills", "CLI reference", "Configuration"];
+const SECTIONS = ["Start here", "Principles", "Decisions", "Commands", "Agents", "Skills", "CLI reference", "Configuration"];
 
 export class DocsError extends Error {}
 
@@ -29,6 +29,7 @@ function routeFor(file, aliasTargets) {
   if ((match = file.match(/^agent\/([^/]+)\.md$/))) return `agents/${match[1]}`;
   if ((match = file.match(/^skills\/([^/]+)\/SKILL\.md$/))) return `skills/${match[1]}`;
   if ((match = file.match(/^skills\/([^/]+)\/references\/([^/]+)\.md$/))) return `skills/${match[1]}/${match[2]}`;
+  if ((match = file.match(/^docs\/decisions\/([^/]+)\.md$/))) return `decisions/${match[1]}`;
   if ((match = file.match(/^docs\/([^/]+)\.md$/))) return match[1];
   return null;
 }
@@ -221,6 +222,35 @@ export async function generatePages({ root, files }) {
 
   // Principles.
   add({ route: "principles/agents", title: titleOf(get("AGENTS.md"), "Principles"), nav: "Engineering principles", section: "Principles", markdown: fromSource("AGENTS.md", "principles/agents") });
+
+  // Decisions: one page per record in docs/decisions/, plus an index. A record
+  // is named NNNN-slug.md, titled "# NNNN. Title", and states its status and
+  // date, so the index can list them without anyone maintaining it.
+  const decisionRows = [];
+  for (const file of [...files.keys()].filter((name) => /^docs\/decisions\/[^/]+\.md$/.test(name)).sort()) {
+    const number = posix.basename(file).match(/^(\d{4})-[a-z0-9-]+\.md$/)?.[1];
+    if (!number) throw new DocsError(`${file}: name decision records NNNN-short-slug.md`);
+    const { data, body } = parseFrontmatter(get(file));
+    const heading = body.match(/^# (\d{4})\. (.+)$/m);
+    if (!heading || heading[1] !== number) throw new DocsError(`${file}: the title must read "# ${number}. <decision>"`);
+    if (!data.status?.trim()) throw new DocsError(`${file}: state the decision's \`status\` in its frontmatter`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(data.date ?? "")) throw new DocsError(`${file}: \`date\` must be a YYYY-MM-DD date`);
+    const route = routeFor(file, aliasTargets);
+    const title = heading[2].trim();
+    const status = `**Status:** ${data.status.trim()} · **Date:** ${data.date}`;
+    const markdown = rewriteLinks(body, context(file, route)).replace(/^(# .+\n)/m, `$1\n${status}\n`);
+    add({ route, title: `${number}. ${title}`, nav: `${number} ${title}`, section: "Decisions", markdown });
+    decisionRows.push(`| [${number}. ${title}](${pageLink("decisions/index", route)}) | ${data.status.trim()} | ${data.date} |`);
+  }
+  if (decisionRows.length) {
+    add({
+      route: "decisions/index",
+      title: "Decisions",
+      nav: "All decisions",
+      section: "Decisions",
+      markdown: ["# Decisions", "", "Each record explains one architectural decision: the context, what was decided, its consequences and the alternatives turned down. Records are not edited to follow the code; a changed decision gets a new record that supersedes the old one.", "", "| Decision | Status | Date |", "| --- | --- | --- |", ...decisionRows, ""].join("\n"),
+    });
+  }
 
   // Skills (the workflow-for-alex skill is the governance page under Principles).
   const skillFiles = [...files.keys()].filter((name) => /^skills\/[^/]+\/SKILL\.md$/.test(name)).sort();

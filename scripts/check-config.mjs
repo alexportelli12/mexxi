@@ -45,7 +45,8 @@ async function checkInstructionClaims(base, defaults) {
   const enforcing = /\b(?:refuses?|blocks?|enforces?|prevents?|stops|forbids?|owns?|guarantees?|ensures?)\b/i;
   const backup = /\bbackup\b|\bback(?:s|ed)?\b[^.;]*\bup\b/i;
   const pages = ["AGENTS.md", "commands/wettaq.md", "README.md",
-    ...(await readdir(path.join(base, "docs"))).filter((name) => name.endsWith(".md")).map((name) => `docs/${name}`)];
+    ...(await readdir(path.join(base, "docs"))).filter((name) => name.endsWith(".md")).map((name) => `docs/${name}`),
+    ...(await readdir(path.join(base, "docs/decisions")).catch(() => [])).filter((name) => name.endsWith(".md")).map((name) => `docs/decisions/${name}`)];
   for (const name of pages) {
     for (const sentence of sentences(await read(name))) {
       if (/\bguard\b/i.test(sentence) && enforcing.test(sentence) && !backup.test(sentence)) {

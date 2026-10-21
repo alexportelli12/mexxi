@@ -154,3 +154,16 @@ test("the build fails on a skill without a description", async () => {
   const { out, site } = outputs(directory);
   await assert.rejects(buildDocs({ root: directory, out, site, render: false }), /skills\/angular\/SKILL\.md has no `description`/);
 });
+
+test("decision records are published with an index, and a record without a status fails the build", async () => {
+  const good = await copyRepo();
+  const built = outputs(good);
+  await buildDocs({ root: good, ...built, render: false });
+  const index = await readFile(path.join(built.out, "decisions/index.md"), "utf8");
+  assert.match(index, /\| \[0001\. One shared workflow, thin host adapters\]\(0001-shared-workflow-host-adapters\.md\) \| Accepted \| \d{4}-\d{2}-\d{2} \|/);
+  assert.match(await readFile(path.join(built.out, "decisions/0004-isolated-worktree-per-task.md"), "utf8"), /\*\*Status:\*\* Accepted/);
+
+  const bad = await copyRepo({ edit: { "docs/decisions/0001-shared-workflow-host-adapters.md": (text) => text.replace(/^status: .*\n/m, "") } });
+  const { out, site } = outputs(bad);
+  await assert.rejects(buildDocs({ root: bad, out, site, render: false }), /0001-shared-workflow-host-adapters\.md: state the decision's `status`/);
+});
