@@ -228,9 +228,36 @@ test("pushes to the default branch or a protected branch are blocked", async () 
   try {
     await assertBlocked("git push", /to main changes a protected branch/);
     await assertBlocked("git push origin HEAD", /to main/);
+    // Starting a feature branch from main and pushing it is the usual delivery.
+    await assertAllowed("git switch -c agent/new && git push -u origin HEAD");
+    await assertAllowed("git checkout -b agent/new; git push");
   } finally {
     git(clone, "switch", "--quiet", "feature");
   }
+});
+
+test("a switch earlier in the line moves HEAD: a later HEAD-relative push is checked against where it lands", async () => {
+  for (const command of [
+    "git switch main && git merge --ff-only agent/x && git push",
+    "git checkout main; git push origin HEAD",
+    "git switch -C main && git push origin @",
+    "git checkout --track origin/main && git push",
+    "git branch -m feature main && git push",
+    "git branch -M main && git push origin HEAD",
+    "git switch -c agent/x origin/main && git push",
+    "cd sub && git -C .. switch main && cd .. && git push",
+  ]) await assertBlocked(command, /to main changes a protected branch/);
+  for (const command of ["git checkout - && git push", "git switch @{-1} && git push origin HEAD", "git switch --detach main && git push"]) {
+    await assertBlocked(command, /after a switch to a branch the guard cannot name/);
+  }
+  for (const command of [
+    "git switch -c agent/new && git push -u origin HEAD",
+    "git switch main && git pull && git switch feature && git push origin feature",
+    "git switch main && git push origin feature",
+    "git switch main && cd /tmp && git push",
+  ]) await assertAllowed(command);
+  // Checking out a path switches nothing.
+  await assertAllowed("git checkout main -- README.md && git push", owned);
 });
 
 test("merging pull requests is the human's: gh pr merge and its API call are blocked", async () => {

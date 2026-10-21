@@ -8,7 +8,8 @@
 // It refuses what AGENTS.md says an agent never does and a permission prefix
 // rule cannot hold on its own, because `cd x && <command>` sidesteps a prefix:
 //   - force pushes, pushes to the default branch or a guard.protectedBranches
-//     entry, and merging pull requests;
+//     entry (including a push of HEAD after a switch earlier in the line),
+//     and merging pull requests;
 //   - git stash, git reset --hard and git clean outside an owned ibni worktree,
 //     where they would destroy work the agent did not make;
 //   - every guard.deny prefix (production deploys, publishing), wherever it
@@ -30,7 +31,9 @@
 //   - eval of an expansion (eval "$(...)"): refusing it would break common
 //     setup such as eval "$(fnm env)";
 //   - output process substitution into a shell (tee >(bash));
-//   - zsh's repeat keyword (zsh -c 'repeat 2 git stash').
+//   - zsh's repeat keyword (zsh -c 'repeat 2 git stash');
+//   - a branch creation that fails before a push of HEAD (git switch -c x;
+//     git push): creating is taken to succeed, so HEAD is read as x.
 // `npm run deploy:staging` is refused on purpose: it matches the
 // `npm run deploy` prefix's `deploy:*` scripts, and which of them reach
 // production is the repository's business, not the guard's.
@@ -116,7 +119,74 @@ function targetsBranch(target, branch) {
   return regex.test(branch) || regex.test(`refs/heads/${branch}`);
 }
 
-function checkPush(args, cwd, config) {
+// Where HEAD may be after git switch, checkout or branch -m earlier in the same
+// line, so a later push of HEAD is checked against the branch it would really
+// push. A switch that may fail leaves the old branch possible too; a
+// destination the guard cannot name (git checkout -, --detach) is unknown.
+// `head` is { branches, upstreams, unknown }, filled from Git on first use.
+function noteSwitch(subcommand, args, cwd, head) {
+  const creates = { switch: ["-c", "-C", "--create", "--force-create", "--orphan"], checkout: ["-b", "-B", "--orphan"], branch: [] }[subcommand];
+  if (!creates) return;
+  const positional = [];
+  let created = null;
+  let detached = false;
+  let renaming = false;
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--") return; // git checkout <tree-ish> -- <paths> switches nothing
+    const [option, inline] = arg.split(/=(.*)/s);
+    if (creates.includes(option)) created = inline ?? args[++index];
+    else if (arg === "--detach" || (subcommand === "switch" && arg === "-d")) detached = true;
+    else if (subcommand === "branch" && ["-m", "-M", "--move"].includes(arg)) renaming = true;
+    else if (!arg.startsWith("-") || arg === "-") positional.push(arg);
+  }
+  if (subcommand === "branch") {
+    if (!renaming || !positional.length) return;
+    const renamed = positional.at(-1);
+    if (positional.length === 1) head.branches = new Set([renamed]);
+    else head.branches.add(renamed);
+    return;
+  }
+  const unnamed = (ref) => ref === "-" || ref.startsWith("@{-") || ref.includes("$");
+  if (detached || (created ?? positional[0] ?? "").includes("$") || (!created && positional[0] && unnamed(positional[0]))) {
+    head.unknown = true;
+    return;
+  }
+  const remotes = (git(cwd, ["remote"]) ?? "").split("\n").filter(Boolean);
+  const remoteBranch = (ref) => {
+    const remote = remotes.find((name) => ref.startsWith(`${name}/`));
+    return remote ? ref.slice(remote.length + 1) : null;
+  };
+  if (created) {
+    // A new branch starts from HEAD or the start point, tracking it when the
+    // start point is a remote branch.
+    head.branches = new Set([created]);
+    const tracked = positional[0] && remoteBranch(positional[0]);
+    head.upstreams = new Set(tracked ? [tracked] : []);
+    return;
+  }
+  const target = positional[0];
+  if (!target) return;
+  // git checkout --track origin/main creates main; git switch main may
+  // create it from origin/main. Either way both names are possible.
+  for (const branch of [target, remoteBranch(target)].filter(Boolean)) {
+    head.branches.add(branch);
+    const upstream = git(cwd, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", `${branch}@{u}`]);
+    if (upstream?.includes("/")) head.upstreams.add(upstream.slice(upstream.indexOf("/") + 1));
+  }
+}
+
+function currentHead(cwd) {
+  const current = git(cwd, ["branch", "--show-current"]);
+  const upstream = git(cwd, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
+  return {
+    branches: new Set(current ? [current] : []),
+    upstreams: new Set(upstream?.includes("/") ? [upstream.slice(upstream.indexOf("/") + 1)] : []),
+    unknown: false,
+  };
+}
+
+function checkPush(args, cwd, config, head = null) {
   const positional = [];
   let mirror = false;
   let everyBranch = false;
@@ -147,19 +217,26 @@ function checkPush(args, cwd, config) {
   const remote = remoteArgument && remotes.includes(remoteArgument) ? remoteArgument
     : upstream?.split("/")[0] ?? (remotes.includes("origin") ? "origin" : remotes[0] ?? "origin");
   const branches = protectedBranches(cwd, remote, config);
-  const current = git(cwd, ["branch", "--show-current"]);
+  const { branches: heads, upstreams, unknown } = head ?? currentHead(cwd);
   const name = (ref) => ref.replace(/^refs\/heads\//, "");
   const targets = [];
+  let headRelative = false;
   if (everyBranch) targets.push(...branches);
   for (const refspec of refspecs) {
     if (refspec.startsWith("+")) return `git push ${refspec} force-updates its target; mexxi never force-pushes`;
     const [source, destination] = refspec.includes(":") ? refspec.split(/:(.*)/s) : [refspec, undefined];
     if (destination !== undefined && destination !== "") targets.push(name(destination));
-    else if (source === "HEAD" || source === "@") targets.push(current ?? "HEAD");
-    else if (source) targets.push(name(source));
+    else if (source === "HEAD" || source === "@") {
+      headRelative = true;
+      targets.push(...(heads.size ? heads : ["HEAD"]));
+    } else if (source) targets.push(name(source));
   }
   if (!refspecs.length && !everyBranch) {
-    targets.push(...[current, upstream?.slice(upstream.indexOf("/") + 1)].filter(Boolean));
+    headRelative = true;
+    targets.push(...heads, ...upstreams);
+  }
+  if (headRelative && unknown) {
+    return "git push of HEAD after a switch to a branch the guard cannot name (git checkout -, @{-1}, --detach) could land on a protected branch; push an explicit branch (git push origin <branch>)";
   }
   const hit = targets.map((target) => [...branches].find((branch) => targetsBranch(target, branch))).find(Boolean);
   if (hit) {
@@ -168,7 +245,7 @@ function checkPush(args, cwd, config) {
   return null;
 }
 
-function checkGit(argv, cwd, config) {
+function checkGit(argv, cwd, config, heads = new Map()) {
   let index = 1;
   let directory = cwd;
   while (index < argv.length && argv[index].startsWith("-")) {
@@ -181,7 +258,11 @@ function checkGit(argv, cwd, config) {
     } else index += 1;
   }
   const [subcommand, ...args] = argv.slice(index);
-  if (subcommand === "push") return checkPush(args, directory, config);
+  if (subcommand === "push") return checkPush(args, directory, config, heads.get(directory));
+  if (["switch", "checkout", "branch"].includes(subcommand)) {
+    if (!heads.has(directory)) heads.set(directory, currentHead(directory));
+    noteSwitch(subcommand, args, directory, heads.get(directory));
+  }
   let destructive = null;
   if (subcommand === "stash" && !["list", "show"].includes(args[0])) destructive = `git stash${args[0] ? ` ${args[0]}` : ""}`;
   if (subcommand === "reset" && args.includes("--hard")) destructive = "git reset --hard";
@@ -278,6 +359,8 @@ function checkGlobs(command, config) {
 // it; a `cd` earlier in the same line moves later commands.
 export function checkCommand(command, { cwd, config, home = os.homedir() }) {
   let directory = cwd;
+  // Each directory's HEAD as switches earlier in the line leave it.
+  const heads = new Map();
   for (const simple of simpleCommands(command)) {
     const { argv } = simple;
     if (simple.refused) return simple.refused;
@@ -287,7 +370,7 @@ export function checkCommand(command, { cwd, config, home = os.homedir() }) {
       else if (target !== "-") directory = path.resolve(directory, target.replace(/^~(?=\/|$)/, home));
       continue;
     }
-    const reason = (argv[0] === "git" ? checkGit(argv, directory, config) : null)
+    const reason = (argv[0] === "git" ? checkGit(argv, directory, config, heads) : null)
       ?? (argv[0] === "gh" ? checkGh(argv) : null)
       ?? checkDeny(argv, config)
       ?? checkShopify(argv)
