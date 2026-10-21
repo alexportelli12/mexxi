@@ -201,7 +201,7 @@
       "additionalProperties": false,
       "default": {},
       "properties": {
-        "output": { "description": "Report folder; a relative path is inside the clone, where it is gitignored.", "type": "string", "minLength": 1, "default": "retro/" },
+        "output": { "description": "Where /irrifletti writes its reports. A relative path is inside the clone, where retro/ is gitignored; the command refuses a folder in a Git repository unless it is gitignored there with nothing tracked, so reports never reach a public repository.", "type": "string", "minLength": 1, "default": "retro/" },
         "transcriptRetentionDays": { "description": "Days of host transcripts a retro reads.", "type": "integer", "minimum": 1, "default": 90 }
       }
     },

@@ -184,13 +184,15 @@ export const COMMANDS = {
     run: () => listWorkspaces({}),
   },
   record: {
-    usage: "ibni record --session <id> (--verify <pass|fail> | --review <count> | --qa <count> | --before-shots <taken|skipped>)",
+    usage: "ibni record --session <id> (--verify <pass|fail> | --review <count> [--accepted <count> --reviewer <same|cross>] | --qa <count> | --before-shots <taken|skipped>)",
     summary: "Record a verify run, the finding count of a review or QA pass, or the before-shots decision.",
     details: ["One result per call; stats reports them and compares the gates with Jev's triage.", SESSION_LOOKUP],
     options: {
       session: "The sessionId from prepare or adopt.",
       verify: "Outcome of a full npm run verify: pass or fail.",
       review: "Number of findings an independent review pass returned.",
+      accepted: "With --review: how many of those findings you accepted (fixed).",
+      reviewer: "With --review: same if the reviewer shares your model family, cross if it does not (cross-review delegated).",
       qa: "Number of findings a rendered QA pass returned.",
       "before-shots": "Whether before-shots of existing UI were taken or skipped.",
     },
@@ -200,6 +202,8 @@ export const COMMANDS = {
       review: options.review,
       qa: options.qa,
       beforeShots: options["before-shots"],
+      accepted: options.accepted,
+      reviewer: options.reviewer,
     }),
   },
   triage: {

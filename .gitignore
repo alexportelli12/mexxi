@@ -6,3 +6,6 @@ skills-lock.json
 skills/synced/
 __pycache__/
 *.skill
+
+# Retrospective reports hold transcript-derived data: private, never committed
+/retro/

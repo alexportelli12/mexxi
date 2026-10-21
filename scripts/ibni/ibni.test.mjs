@@ -1246,11 +1246,13 @@ test("lifecycle steps, verify attempts and finding counts are recorded and repor
   const triaged = await lifecycle(fixture, fixture.control, "triage", { session: sessionId, ...await triageFiles(prepared.json.evidenceDir) }, [0], { OPENROUTER_API_KEY: "test-key" });
   assert.equal(triaged.json.outcome, "answered");
   await commit(worktreePath, "feature.txt", "feature\n", "feature");
-  for (const options of [{ "before-shots": "skipped" }, { verify: "fail" }, { verify: "pass" }, { review: "3" }, { qa: "0" }, { review: "1" }]) {
+  for (const options of [{ "before-shots": "skipped" }, { verify: "fail" }, { verify: "pass" }, { review: "3", accepted: "2", reviewer: "same" }, { qa: "0" }, { review: "1", accepted: "1", reviewer: "cross" }]) {
     const recorded = await lifecycle(fixture, fixture.control, "record", { session: sessionId, ...options });
     assert.equal(recorded.json.operation, "record");
   }
-  for (const options of [{}, { verify: "maybe" }, { review: "-1" }, { verify: "pass", qa: "1" }, { "before-shots": "maybe" }]) {
+  for (const options of [{}, { verify: "maybe" }, { review: "-1" }, { verify: "pass", qa: "1" }, { "before-shots": "maybe" },
+    { review: "2", accepted: "1" }, { review: "2", reviewer: "same" }, { review: "2", accepted: "3", reviewer: "same" },
+    { review: "2", accepted: "1", reviewer: "other" }, { qa: "2", accepted: "1", reviewer: "same" }]) {
     await lifecycle(fixture, fixture.control, "record", { session: sessionId, ...options }, [2]);
   }
   await lifecycle(fixture, worktreePath, "publish", { session: sessionId });
@@ -1274,6 +1276,10 @@ test("lifecycle steps, verify attempts and finding counts are recorded and repor
   assert.deepEqual({ ...stats.json.verify, history: undefined }, { attempts: 2, passed: 1, failed: 1, history: undefined });
   assert.deepEqual(stats.json.verify.history.map((entry) => entry.outcome), ["fail", "pass"]);
   assert.deepEqual([stats.json.review.rounds, stats.json.review.findings], [2, 4]);
+  assert.deepEqual(stats.json.review.byReviewer, {
+    same: { rounds: 1, findings: 3, accepted: 2 },
+    cross: { rounds: 1, findings: 1, accepted: 1 },
+  });
   assert.deepEqual([stats.json.qa.rounds, stats.json.qa.findings], [1, 0]);
   assert.equal(stats.json.triage.status, "answered");
   assert.deepEqual(stats.json.triage.answers.userFacing, { answer: "no", confidence: 0.9 });

@@ -49,6 +49,7 @@ Not every change needs every step. A one-line fix doesn't get an independent rev
 | --- | --- | --- |
 | Command | [`/wettaq`](commands/wettaq.md) | Takes a request from investigation to a reviewable PR |
 | Command | [`/ittestja`](commands/ittestja.md) | Hands-on rendered QA of a route, flow, PR or session; reports, never edits |
+| Command | [`/irrifletti`](commands/irrifletti.md) | On-demand retrospective: transcript friction signals, ibni timings, Jev agreement and review acceptance, compared with the last run; reports go only to `retro.output` (gitignored `retro/` by default) |
 | Command | [`/sewwi`](commands/sewwi.md) | Audits or changes this configuration coherently |
 | Command | [`/fassal`](commands/fassal.md) | Writes or refines a product's `UX_PRINCIPLES.md` |
 | Agent | [`code-reviewer`](agent/code-reviewer.md) | Independent review via OCR delegation, plus the merge-danger call |
@@ -72,7 +73,7 @@ Not every change needs every step. A one-line fix doesn't get an independent rev
 | Mod | [`run-pane`](claude/mods/run-pane) | Claude Code only: a pane with the current run's stage, gates, worktree, port and PR, and a band suggesting a fresh session once the PR is out or context runs high |
 | Mod | [`command-fixer`](claude/mods/command-fixer) | Claude Code only: quotes `--include=*` globs, adds `pipefail` to verify pipes, backgrounds a full verify |
 
-The previous names (`/implement`, `/qa`, `/update-my-workflow`, `/ux.principles`, Codex's `$workflow-…` wrappers and `implementation-workspace`) still work for one release, as thin aliases of the new ones.
+The previous names (`/implement`, `/qa`, `/retro`, `/update-my-workflow`, `/ux.principles`, Codex's `$workflow-…` wrappers and `implementation-workspace`) still work for one release, as thin aliases of the new ones.
 
 [`AGENTS.md`](AGENTS.md) holds the cross-project engineering principles, including when agents may branch, commit and open PRs. `opencode/opencode.json`, `claude/agents.json`, and `codex/agents.json` are templates for the host-specific bits; the installer renders them, with the agent definitions from `agent/` and Codex's explicit-invocation skill wrappers from `commands/`, using your `config.json`.
 

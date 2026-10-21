@@ -52,6 +52,17 @@ export function summarizeTimings(metadata) {
       history: rounds.map(({ at, findings: count }) => ({ at, findings: count })),
     };
   };
+  // Acceptance is recorded per review, with the reviewer's family; reviews
+  // recorded without it count in the totals above but not here.
+  const reviews = records.filter((record) => record.kind === "review");
+  const byReviewer = Object.fromEntries(["same", "cross"].map((reviewer) => {
+    const rounds = reviews.filter((record) => record.reviewer === reviewer);
+    return [reviewer, {
+      rounds: rounds.length,
+      findings: rounds.reduce((total, record) => total + record.findings, 0),
+      accepted: rounds.reduce((total, record) => total + record.accepted, 0),
+    }];
+  }));
   const verify = records.filter((record) => record.kind === "verify");
   return {
     steps: (metadata.steps ?? []).map((step) => ({
@@ -64,7 +75,7 @@ export function summarizeTimings(metadata) {
       failed: verify.filter((record) => record.outcome === "fail").length,
       history: verify.map(({ at, outcome }) => ({ at, outcome })),
     },
-    review: findings("review"),
+    review: { ...findings("review"), byReviewer },
     qa: findings("qa"),
   };
 }

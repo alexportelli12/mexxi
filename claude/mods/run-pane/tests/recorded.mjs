@@ -107,7 +107,19 @@ export const stats = {
         "at": "2026-10-21T02:30:33.484Z",
         "findings": 1
       }
-    ]
+    ],
+    "byReviewer": {
+      "same": {
+        "rounds": 1,
+        "findings": 3,
+        "accepted": 2
+      },
+      "cross": {
+        "rounds": 1,
+        "findings": 1,
+        "accepted": 1
+      }
+    }
   },
   "qa": {
     "rounds": 1,

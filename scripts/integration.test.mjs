@@ -588,11 +588,12 @@ test("settings.json gets only the keys mexxi owns, and --check notices a hand-re
     ...mine,
     permissions: { allow: mine.permissions.allow, deny: ["Bash(rm -rf:*)", "Bash(npm publish:*)", "Bash(firebase deploy:*)"] },
     env: { OTHER: "1", BASH_MAX_TIMEOUT_MS: "900000" },
+    cleanupPeriodDays: 90,
     hooks: { ...mine.hooks, ...ours },
   });
   assert.match(ours.PreToolUse[0].hooks[0].command, /^node .*scripts\/hooks\/guard\.mjs$/);
   // The user's own copy of npm publish was there first, so it is not ours to remove.
-  assert.deepEqual(JSON.parse(await readFile(stateFile, "utf8")), { deny: ["Bash(firebase deploy:*)"], env: { BASH_MAX_TIMEOUT_MS: "900000" }, hooks: ours });
+  assert.deepEqual(JSON.parse(await readFile(stateFile, "utf8")), { deny: ["Bash(firebase deploy:*)"], env: { BASH_MAX_TIMEOUT_MS: "900000" }, keys: { cleanupPeriodDays: 90 }, hooks: ours });
   const written = await readFile(settingsFile, "utf8");
   await install(options);
   await install({ ...options, check: true });
@@ -618,7 +619,14 @@ test("settings.json gets only the keys mexxi owns, and --check notices a hand-re
   const settings = await read();
   assert.deepEqual(settings.permissions.deny, ["Bash(rm -rf:*)", "Bash(npm publish:*)", "Bash(rm:*)", "Bash(gh pr merge:*)"]);
   assert.equal(settings.env.BASH_MAX_TIMEOUT_MS, "600000");
+  assert.equal(settings.cleanupPeriodDays, 90);
   assert.equal(settings.model, "opus");
+  await configure(home, { guard: { deny: ["gh pr merge"] }, claude: { bashMaxTimeoutMs: 600000 }, retro: { transcriptRetentionDays: 120 } });
+  await assert.rejects(install({ ...options, check: true }), /cleanupPeriodDays is 90, config\.json asks for 120/);
+  await install(options);
+  assert.equal((await read()).cleanupPeriodDays, 120);
+  await configure(home, { guard: { deny: ["gh pr merge"] }, claude: { bashMaxTimeoutMs: 600000 } });
+  await install(options);
   assert.deepEqual(settings.hooks, { ...mine.hooks, ...ours });
 
   // A value the user set themselves is a conflict, not something to overwrite.
@@ -626,6 +634,9 @@ test("settings.json gets only the keys mexxi owns, and --check notices a hand-re
   await rm(stateFile);
   await assert.rejects(install(options), /env\.BASH_MAX_TIMEOUT_MS is 120000, not set by mexxi/);
   assert.equal(await readFile(settingsFile, "utf8"), JSON.stringify({ env: { BASH_MAX_TIMEOUT_MS: "120000" } }));
+  await writeFile(settingsFile, JSON.stringify({ cleanupPeriodDays: 30 }));
+  await assert.rejects(install(options), /cleanupPeriodDays is 30, not set by mexxi; remove it, or set retro\.transcriptRetentionDays to 30/);
+  assert.equal(await readFile(settingsFile, "utf8"), JSON.stringify({ cleanupPeriodDays: 30 }));
   await writeFile(settingsFile, "{ not json");
   await assert.rejects(install(options), /settings\.json is not a JSON object/);
   assert.equal(await readFile(settingsFile, "utf8"), "{ not json");

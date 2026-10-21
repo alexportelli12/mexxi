@@ -14,6 +14,10 @@
       "command": "node --test scripts/ibni/ibni.test.mjs scripts/ibni/triage.test.mjs",
       "paths": ["scripts/ibni/**", "scripts/implementation-workspace*", "scripts/lib/config.mjs", "scripts/lib/redact.mjs", "scripts/lib/secret-patterns.json", "config.schema.json", "claude/mods/run-pane/tests/recorded.mjs"]
     },
+    "retro": {
+      "command": "node --test scripts/retro/retro.test.mjs",
+      "paths": ["scripts/retro/**", "scripts/lib/config.mjs", "scripts/lib/secret-patterns.json", "scripts/lib/render.mjs", "scripts/ibni/lib/timings.mjs", "scripts/ibni/commands/triage.mjs", "scripts/ibni/lib/metadata.mjs", "config.schema.json"]
+    },
     "hooks": {
       "command": "node --test scripts/hooks/hooks.test.mjs",
       "paths": ["scripts/hooks/**", "opencode/plugins/**", "scripts/lib/config.mjs", "scripts/ibni/lib/metadata.mjs", "config.schema.json"]
