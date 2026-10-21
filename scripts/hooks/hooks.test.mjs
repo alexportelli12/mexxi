@@ -304,6 +304,41 @@ test("every starter deny prefix is blocked even when sidestepped with cd x && ..
   await assertBlocked("npm run deploy:prod", /npm run deploy is on the guard\.deny list/);
 });
 
+test("a deny prefix matches the command's words, not its spelling: options, aliases and runners do not hide it", async () => {
+  for (const [command, prefix] of [
+    ["npx firebase-tools deploy", "firebase deploy"],
+    ["npx firebase-tools@13.0.0 deploy --only hosting", "firebase deploy"],
+    ["firebase --project prod deploy", "firebase deploy"],
+    ["firebase deploy:hosting", "firebase deploy"],
+    ["gcloud --project p run deploy svc", "gcloud run deploy"],
+    ["gcloud run --region=eu deploy svc", "gcloud run deploy"],
+    ["npm run --silent deploy", "npm run deploy"],
+    ["npm run-script deploy", "npm run deploy"],
+    ["npm --prefix app run deploy:prod", "npm run deploy"],
+    ["vercel deploy --prod", "vercel --prod"],
+    ["netlify deploy --dir dist --prod", "netlify deploy --prod"],
+    ["yarn firebase deploy", "firebase deploy"],
+    ["npm exec -- firebase deploy", "firebase deploy"],
+    ["npm x firebase-tools deploy", "firebase deploy"],
+    ["pnpm dlx vercel --prod", "vercel --prod"],
+    ["pnpm exec firebase deploy", "firebase deploy"],
+    ["yarn dlx firebase-tools deploy", "firebase deploy"],
+    ["pnpx firebase-tools deploy", "firebase deploy"],
+    ["gh release --repo o/r create v1", "gh release create"],
+  ]) await assertBlocked(command, new RegExp(`${prefix} is on the guard\\.deny list`));
+  for (const command of [
+    "npm run test -- deploy",
+    "npm run build && echo deploy",
+    "firebase emulators:start --only functions",
+    "firebase deployments:list",
+    "vercel dev",
+    "vercel deploy",
+    "gcloud run services list",
+    "npx eslint deploy",
+    "yarn test deploy",
+  ]) await assertAllowed(command);
+});
+
 test("Shopify Admin API writes are blocked and reads allowed", async () => {
   const api = "https://shop.myshopify.com/admin/api/2024-10";
   for (const command of [

@@ -13,7 +13,10 @@
 //   - git stash, git reset --hard and git clean outside an owned ibni worktree,
 //     where they would destroy work the agent did not make;
 //   - every guard.deny prefix (production deploys, publishing), wherever it
-//     sits in the command line;
+//     sits in the command line, matched on the command's words so options
+//     (firebase --project p deploy), npm's run aliases, a package name
+//     (npx firebase-tools) and package runners (npm exec, pnpm dlx, yarn
+//     <bin>) do not hide it;
 //   - writes to the Shopify Admin API;
 //   - unquoted --include=* / --exclude=* globs, when guard.blockUnquotedGlobs
 //     is on (zsh aborts on them unless no_nomatch reaches the agent's shell);
@@ -25,7 +28,8 @@
 // host's permission rules; it is not a sandbox):
 //   - git aliases defined on the command line (git -c alias.p=push p --force);
 //   - abbreviated long options git accepts (git push --forc);
-//   - deny prefixes reached through another runner (npm exec, pnpm dlx);
+//   - a package script run by another package manager (yarn deploy, pnpm
+//     run deploy) when guard.deny lists only npm run deploy;
 //   - a GraphQL merge mutation read from a file (gh api graphql -F query=@file);
 //   - a script written to a file and then run (bash s.sh): its content is not read;
 //   - eval of an expansion (eval "$(...)"): refusing it would break common
@@ -291,14 +295,74 @@ function checkGh(argv) {
   return null;
 }
 
-// Prefix rules as Claude Code's Bash(<prefix>:*) reads them, applied to every
-// simple command rather than only the start of the line.
+// Spellings that run the same thing: a package's name for its command
+// (npx firebase-tools@13 is firebase) and npm's aliases for run.
+const COMMAND_ALIASES = { "firebase-tools": "firebase" };
+const WORD_ALIASES = { "run-script": "run", rum: "run", urn: "run" };
+const PACKAGE_MANAGERS = new Set(["npm", "pnpm", "yarn", "bun"]);
+const PACKAGE_RUNNERS = new Set(["exec", "x", "dlx"]);
+
+function commandName(word) {
+  const name = word.replace(/(?<=.)@[^@/]*$/, "");
+  return COMMAND_ALIASES[name] ?? name;
+}
+
+// The index of the first word in args that is not an option, from `from`.
+function firstWord(args, from = 0) {
+  let index = from;
+  while (index < args.length && args[index].startsWith("-")) index += 1;
+  return index;
+}
+
+// The commands a simple command stands for, as a deny rule reads them: itself,
+// and the command a package runner runs for it (npm exec, pnpm dlx, pnpx,
+// yarn <bin>).
+function denyForms(argv) {
+  const forms = [argv];
+  const name = commandName(argv[0]);
+  if (name === "pnpx") forms.push(...denyForms(argv.slice(firstWord(argv, 1))));
+  if (PACKAGE_MANAGERS.has(name)) {
+    const at = firstWord(argv, 1);
+    if (PACKAGE_RUNNERS.has(argv[at])) forms.push(...denyForms(argv.slice(firstWord(argv, at + 1))));
+    else if (name === "yarn" && at < argv.length) forms.push(...denyForms(argv.slice(at)));
+  }
+  return forms.filter((form) => form.length);
+}
+
+// Whether argv runs a deny prefix: the prefix's words in order among the
+// command's non-option words (an option's value may sit between them, as in
+// firebase --project prod deploy), its last word also matching as word:* the
+// way a Bash(<prefix>:*) rule does, and its options anywhere in the command.
+function matchesPrefix(argv, prefix) {
+  const parts = prefix.trim().split(/\s+/);
+  const words = parts.filter((part) => !part.startsWith("-")).map((word, at) => (at ? WORD_ALIASES[word] ?? word : commandName(word)));
+  const options = parts.filter((part) => part.startsWith("-"));
+  if (commandName(argv[0]) !== words[0]) return false;
+  let needed = 1;
+  let optionValue = false;
+  for (let index = 1; index < argv.length && needed < words.length; index += 1) {
+    const arg = WORD_ALIASES[argv[index]] ?? argv[index];
+    if (arg === "--") return false;
+    if (arg.startsWith("-")) {
+      optionValue = !arg.includes("=");
+      continue;
+    }
+    const word = words[needed];
+    if (arg === word || (needed === words.length - 1 && arg.startsWith(`${word}:`))) needed += 1;
+    else if (!optionValue) return false;
+    optionValue = false;
+  }
+  if (needed < words.length) return false;
+  return options.every((option) => argv.some((arg) => arg === option || arg.startsWith(`${option}=`)
+    || (/^-[A-Za-z]$/.test(option) && /^-[A-Za-z]+$/.test(arg) && arg.includes(option[1]))));
+}
+
+// The guard.deny prefixes, applied to every simple command rather than only
+// the start of the line.
 function checkDeny(argv, config) {
-  const line = argv.join(" ");
   for (const prefix of config.guard.deny) {
-    const normalised = prefix.trim().split(/\s+/).join(" ");
-    if (line === normalised || line.startsWith(`${normalised} `) || line.startsWith(`${normalised}:`)) {
-      return `${normalised} is on the guard.deny list (production deploys, publishing and merges need a human)`;
+    if (denyForms(argv).some((form) => matchesPrefix(form, prefix))) {
+      return `${prefix.trim().split(/\s+/).join(" ")} is on the guard.deny list (production deploys, publishing and merges need a human)`;
     }
   }
   return null;
