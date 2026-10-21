@@ -25,6 +25,7 @@ export const ALLOWLIST = [
   "skills/*/SKILL.md",
   "skills/*/references/*.md",
   "docs/*.md",
+  "docs/decisions/*.md",
   "docs/freshness.json",
   "site/favicon.svg",
   "site/index.html", // read by the consistency check, never published as a docs page

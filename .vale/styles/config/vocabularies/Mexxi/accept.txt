@@ -51,3 +51,9 @@ ffmpeg
 ocr
 OCR
 zsh
+[Aa]dapters?
+[Aa]llowlist
+[Oo]rchestrator
+[Ii]mplementers?
+[Ii]mplementer's
+[Rr]enderer

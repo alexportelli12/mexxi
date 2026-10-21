@@ -275,6 +275,12 @@ When responsibility moves, establish the new authoritative owner, remove
 obsolete duplicates, search for stale references, and validate the resulting
 configuration as a whole.
 
+Architecture decisions are numbered records in `docs/decisions/`, linked
+from `AGENTS.md`. A change that contradicts one first adds a record that
+supersedes it, marking the old record's status as superseded and leaving its
+reasoning as written. A change that makes a new architectural decision adds its
+record and the `AGENTS.md` link in the same pull request.
+
 Audit semantic meaning, not just matching text. Candidate overlaps can be found
 with searches, but contradiction requires reasoning about scope and exceptions.
 If a proposed change would materially redesign the architecture or lacks
