@@ -263,6 +263,12 @@ test("a switch earlier in the line moves HEAD: a later HEAD-relative push is che
 test("merging pull requests is the human's: gh pr merge and its API call are blocked", async () => {
   await assertBlocked("gh pr merge 12 --squash", /merge decisions stay with the human/);
   await assertBlocked("cd /tmp && gh pr merge --auto", /merge decisions/);
+  // Options before the subcommand do not hide it.
+  for (const command of ["gh -R a/b pr merge 12", "gh --repo a/b pr merge 12", "gh --repo=a/b pr merge 12", "gh pr -R a/b merge 12", "gh --hostname github.com -R a/b pr merge 12"]) {
+    await assertBlocked(command, /merge decisions stay with the human/);
+  }
+  await assertBlocked("gh -R o/r api -X PUT repos/o/r/pulls/12/merge", /merge decisions/);
+  await assertAllowed("gh -R a/b pr view 12");
   await assertBlocked("gh api -X PUT repos/o/r/pulls/12/merge", /merge decisions/);
   await assertBlocked(`gh api graphql -f query='mutation { mergePullRequest(input: {pullRequestId: "PR_1"}) { clientMutationId } }'`, /merge decisions/);
   await assertBlocked(`gh api graphql -F id=PR_1 -f query=@merge.graphql -f 'query=mutation($id: ID!) { mergePullRequest(input: {pullRequestId: $id}) { clientMutationId } }'`, /merge decisions/);

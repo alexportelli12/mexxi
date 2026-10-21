@@ -273,10 +273,19 @@ function checkGit(argv, cwd, config, heads = new Map()) {
   return null;
 }
 
+// gh's options that take a value, wherever they sit before or between the
+// subcommands (gh -R o/r pr merge, gh pr --repo o/r merge).
+const GH_VALUE_OPTIONS = new Set(["-R", "--repo", "--hostname"]);
+
 function checkGh(argv) {
-  if (argv[1] === "pr" && argv[2] === "merge") return "gh pr merge: merge decisions stay with the human";
-  if (argv[1] === "api" && argv.some((arg) => /\/pulls\/[^/\s]+\/merge\b/.test(arg))) return "gh api .../merge: merge decisions stay with the human";
-  if (argv[1] === "api" && argv.includes("graphql") && argv.some((arg) => /\b(?:mergePullRequest|enablePullRequestAutoMerge)\b/.test(arg))) {
+  const words = [];
+  for (let index = 1; index < argv.length && words.length < 2; index += 1) {
+    if (GH_VALUE_OPTIONS.has(argv[index])) index += 1;
+    else if (!argv[index].startsWith("-")) words.push(argv[index]);
+  }
+  if (words[0] === "pr" && words[1] === "merge") return "gh pr merge: merge decisions stay with the human";
+  if (words[0] === "api" && argv.some((arg) => /\/pulls\/[^/\s]+\/merge\b/.test(arg))) return "gh api .../merge: merge decisions stay with the human";
+  if (words[0] === "api" && argv.includes("graphql") && argv.some((arg) => /\b(?:mergePullRequest|enablePullRequestAutoMerge)\b/.test(arg))) {
     return "gh api graphql mergePullRequest: merge decisions stay with the human";
   }
   return null;
