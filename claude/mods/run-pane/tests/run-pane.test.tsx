@@ -88,7 +88,7 @@ test('a finished run reads as a card with a status capsule and progress, then th
       'UI      no     ▰▰▰▰▰▰▰▰▱▱  80%',
       'review  2.4    ▰▰▰▰▰▰▱▱▱▱  60%',
     ])
-    expect(await text(/^1-way: /)).toBe('1-way: one-way door · users: user-facing · size: change size · UI: changes existing UI · review: review value')
+    expect(await text(/^1-way: /)).toBeUndefined()
     expect(await text(/^Recorded only/)).toBeDefined()
     expect(await text(/worktrees\/control/)).toBeUndefined()
     await ui.unmount()

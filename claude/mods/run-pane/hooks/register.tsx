@@ -176,7 +176,6 @@ export const register: Register = on => {
                 </Text>
               )
             })}
-            <Text dimColor wrap="wrap">{triage.filter(row => row.question !== row.meaning).map(row => `${row.question}: ${row.meaning}`).join(' · ')}</Text>
             <Text dimColor wrap="wrap">Recorded only; changes nothing.</Text>
           </Box>
         ) : null}
