@@ -25,7 +25,7 @@ with nothing tracked in it, so reports never reach a public repository. If it
 refuses, report that and stop; do not choose another folder yourself.
 
 Then read the printed goal-signals table and summarise what moved against the
-previous retro, which signals missed their targets in `plans/mexxi-upgrade.md`,
+previous retro, which signals missed the targets in its Target column,
 and what the ibni numbers add. The report holds transcript-derived text:
 quote counts and signal names only, never snippets, and never copy the report
 into a repository, pull request or issue.

@@ -16,13 +16,21 @@
 //   - writes to the Shopify Admin API;
 //   - unquoted --include=* / --exclude=* globs, when guard.blockUnquotedGlobs
 //     is on (zsh aborts on them unless no_nomatch reaches the agent's shell);
-//   - a shell fed a script through a pipe it cannot read (curl ... | sh).
+//   - a shell fed a script it cannot read: through a pipe (curl ... | sh), a
+//     process substitution (bash < <(curl ...), source <(...)), or an
+//     expansion (bash -c "$(...)", an unquoted heredoc that expands).
 //
 // Known gaps, accepted rather than chased (the guard backs up AGENTS.md and the
 // host's permission rules; it is not a sandbox):
 //   - git aliases defined on the command line (git -c alias.p=push p --force);
 //   - abbreviated long options git accepts (git push --forc);
-//   - deny prefixes reached through another runner (npm exec, pnpm dlx).
+//   - deny prefixes reached through another runner (npm exec, pnpm dlx);
+//   - a GraphQL merge mutation read from a file (gh api graphql -F query=@file);
+//   - a script written to a file and then run (bash s.sh): its content is not read;
+//   - eval of an expansion (eval "$(...)"): refusing it would break common
+//     setup such as eval "$(fnm env)";
+//   - output process substitution into a shell (tee >(bash));
+//   - zsh's repeat keyword (zsh -c 'repeat 2 git stash').
 // `npm run deploy:staging` is refused on purpose: it matches the
 // `npm run deploy` prefix's `deploy:*` scripts, and which of them reach
 // production is the repository's business, not the guard's.

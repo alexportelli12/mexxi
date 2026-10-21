@@ -24,19 +24,20 @@ const REPORT_PATTERN = /^retro-(\d{4}-\d{2}-\d{2}-\d{4})\.json$/;
 
 export class RetroError extends Error {}
 
-// Signals from the first retro's goal table. `from` reads the figure and the
-// number of sessions it occurred in out of the extractor's output.
+// Signals from the first retro's goal table, with the upgrade's target for
+// each. `from` reads the figure and the number of sessions it occurred in out
+// of the extractor's output.
 export const GOAL_SIGNALS = [
-  { key: "zshGlobAborts", label: "zsh glob aborts", from: (s) => [s.zsh_pitfalls.total, s.zsh_pitfalls.sessions] },
-  { key: "editBeforeRead", label: "Edit/Write refused before Read", from: (s) => family(s, "edit_before_read") },
-  { key: "bashCapHits", label: "Bash 10-minute cap hits", from: (s) => [s.slow_tool_calls.bash_hit_10_minute_cap, null] },
-  { key: "waitLoops", label: "Hand-rolled wait loops and bare sleeps", from: (s) => [s.wait_loops.total, s.wait_loops.sessions] },
-  { key: "sleepBlocks", label: "Sleep blocks refused by the harness", from: (s) => family(s, "harness_sleep_block") },
-  { key: "ibniErrors", label: "ibni (implementation-workspace) usage errors", from: (s) => family(s, "implementation_workspace") },
-  { key: "playwrightPathErrors", label: "Playwright evidence-path errors", from: (s) => family(s, "playwright_outside_allowed_roots") },
-  { key: "compactions", label: "Compactions mid-PR", from: (s) => [s.compactions.total, s.compactions.sessions] },
-  { key: "followUpPrompts", label: "Follow-up rework prompts", from: (s) => [s.follow_up_requests.total, s.follow_up_requests.sessions] },
-  { key: "hiddenExitStatus", label: "Exit status hidden by pipes", from: (s) => [s.masked_verify_failures.total, s.masked_verify_failures.sessions] },
+  { key: "zshGlobAborts", target: "near 0", label: "zsh glob aborts", from: (s) => [s.zsh_pitfalls.total, s.zsh_pitfalls.sessions] },
+  { key: "editBeforeRead", target: "under 10", label: "Edit/Write refused before Read", from: (s) => family(s, "edit_before_read") },
+  { key: "bashCapHits", target: "0", label: "Bash 10-minute cap hits", from: (s) => [s.slow_tool_calls.bash_hit_10_minute_cap, null] },
+  { key: "waitLoops", target: "under 10 (with sleep blocks)", label: "Hand-rolled wait loops and bare sleeps", from: (s) => [s.wait_loops.total, s.wait_loops.sessions] },
+  { key: "sleepBlocks", target: "under 10 (with wait loops)", label: "Sleep blocks refused by the harness", from: (s) => family(s, "harness_sleep_block") },
+  { key: "ibniErrors", target: "under 5", label: "ibni (implementation-workspace) usage errors", from: (s) => family(s, "implementation_workspace") },
+  { key: "playwrightPathErrors", target: "0", label: "Playwright evidence-path errors", from: (s) => family(s, "playwright_outside_allowed_roots") },
+  { key: "compactions", target: "half the baseline (14)", label: "Compactions mid-PR", from: (s) => [s.compactions.total, s.compactions.sessions] },
+  { key: "followUpPrompts", target: "half the baseline (8)", label: "Follow-up rework prompts", from: (s) => [s.follow_up_requests.total, s.follow_up_requests.sessions] },
+  { key: "hiddenExitStatus", target: "0", label: "Exit status hidden by pipes", from: (s) => [s.masked_verify_failures.total, s.masked_verify_failures.sessions] },
 ];
 
 function family(signals, name) {
@@ -46,9 +47,9 @@ function family(signals, name) {
 
 export function goalTable(signals) {
   const sessions = signals.inventory.sessions;
-  return Object.fromEntries(GOAL_SIGNALS.map(({ key, label, from }) => {
+  return Object.fromEntries(GOAL_SIGNALS.map(({ key, label, target, from }) => {
     const [count, inSessions] = from(signals);
-    return [key, { label, count, sessions: inSessions, per100Sessions: sessions ? Math.round((count / sessions) * 1000) / 10 : null }];
+    return [key, { label, target, count, sessions: inSessions, per100Sessions: sessions ? Math.round((count / sessions) * 1000) / 10 : null }];
   }));
 }
 
@@ -216,12 +217,12 @@ export function renderMarkdown(report) {
     "",
     "## Goal signals",
     "",
-    "| Signal | Now | In sessions | Per 100 sessions | Previous | Change |",
-    "| --- | --- | --- | --- | --- | --- |",
+    "| Signal | Now | In sessions | Per 100 sessions | Previous | Change | Target |",
+    "| --- | --- | --- | --- | --- | --- | --- |",
   ];
   for (const [key, row] of Object.entries(table)) {
     const before = previous?.goalTable[key];
-    lines.push(`| ${row.label} | ${row.count} | ${cell(row.sessions)} | ${cell(row.per100Sessions)} | ${cell(before?.count)} | ${before ? signed(row.count - before.count) : "n/a"} |`);
+    lines.push(`| ${row.label} | ${row.count} | ${cell(row.sessions)} | ${cell(row.per100Sessions)} | ${cell(before?.count)} | ${before ? signed(row.count - before.count) : "n/a"} | ${row.target} |`);
   }
   lines.push(
     "",

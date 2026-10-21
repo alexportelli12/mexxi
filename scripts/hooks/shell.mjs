@@ -8,8 +8,15 @@
 // Quoted text is data. `echo "git push --force"` is one echo command whose
 // argument happens to read like a push, so it is allowed. Text only becomes a
 // command again where a shell would run it: command substitution ($(...) and
-// backticks, quoted or not), `sh|bash|zsh -c <script>`, `eval`, and a script a
-// shell reads from its standard input (a heredoc, a herestring or a pipe).
+// backticks, quoted or not, and inside an unquoted heredoc's body),
+// `sh|bash|zsh -c <script>`, `eval`, and a script a shell reads from its
+// standard input (a heredoc, a herestring or a pipe). A script the reader
+// cannot see, because a pipe, a process substitution or an expansion
+// produces it at run time, is refused rather than guessed at.
+//
+// Arithmetic ($((...)) and ((...))) is read as arithmetic, so its << is a
+// shift and never opens a heredoc; any command substitution inside it is
+// still found.
 //
 // Compound commands are read through their keywords: `if`, `{`, `!`, `do` and
 // the rest are stripped from the front of a command, so the command they wrap
@@ -23,11 +30,14 @@ const UNKNOWN_PRODUCER = [];
 
 // Reads words up to the end of `text`, or up to the `)` closing a
 // substitution when `nested`. Returns { commands, end } where commands are
-// arrays of words: { value, globUnquoted, expanded } (globUnquoted: an
-// unquoted * ? or [ that the shell would expand; expanded: the word holds a
-// substitution or a parameter, so its value is not what runs). A command may
-// carry `stdin`, the text of a heredoc or herestring fed to it, and
-// `pipedFrom`, the command whose output a `|` feeds it.
+// arrays of words: { value, globUnquoted, expanded, processSubstitution }
+// (globUnquoted: an unquoted * ? or [ that the shell would expand; expanded:
+// the word holds a substitution or a parameter, so its value is not what
+// runs; processSubstitution: the word is a <(...) file). A command may carry
+// `stdin`, the text of a heredoc or herestring fed to it; `stdinExpanded`,
+// when the shell expands that text before feeding it; `stdinSubstituted`,
+// when its input is redirected from a process substitution; and `pipedFrom`,
+// the command whose output a `|` feeds it.
 function read(text, start, nested) {
   const commands = [];
   let words = [];
@@ -39,7 +49,11 @@ function read(text, start, nested) {
 
   const finishWord = () => {
     if (word === null) return;
-    if (redirect === "herestring") words.stdin = word.value;
+    if (redirect === "herestring") {
+      words.stdin = word.value;
+      if (word.expanded) words.stdinExpanded = true;
+    }
+    if (redirect === "input" && word.processSubstitution) words.stdinSubstituted = true;
     if (redirect) redirect = false;
     else words.push(word);
     word = null;
@@ -50,7 +64,10 @@ function read(text, start, nested) {
     const finished = words;
     words = [];
     if (!finished.length) {
-      if (finished.stdin !== undefined) words.stdin = finished.stdin;
+      // A redirection written before the command (<<<x cmd) still feeds it.
+      for (const key of ["stdin", "stdinExpanded", "stdinSubstituted"]) {
+        if (finished[key] !== undefined) words[key] = finished[key];
+      }
       return null;
     }
     if (pipedFrom) finished.pipedFrom = pipedFrom;
@@ -125,6 +142,22 @@ function read(text, start, nested) {
       index = substitution(index + 2);
       continue;
     }
+    if (char === "$" && text.startsWith("((", index + 1)) {
+      const end = arithmeticEnd(text, index + 3);
+      current().expanded = true;
+      word.value += text.slice(index, end);
+      commands.push(...arithmeticCommands(text.slice(index + 3, end)));
+      index = end;
+      continue;
+    }
+    if (char === "(" && text[index + 1] === "(" && word === null) {
+      // An arithmetic command, (( x = 1 << 2 )): it runs nothing but the
+      // substitutions inside it.
+      const end = arithmeticEnd(text, index + 2);
+      commands.push(...arithmeticCommands(text.slice(index + 2, end)));
+      index = end;
+      continue;
+    }
     if (char === "`") {
       const close = text.indexOf("`", index + 1);
       const end = close === -1 ? text.length : close;
@@ -134,8 +167,14 @@ function read(text, start, nested) {
       continue;
     }
     if (char === "<" && text[index + 1] === "(") {
+      // A process substitution: a file whose contents a command produces at
+      // run time. The command is read; the word only marks where it went.
       finishWord();
-      index = substitution(index + 2);
+      Object.assign(current(), { expanded: true, processSubstitution: true });
+      const end = substitution(index + 2);
+      word.value = text.slice(index, end);
+      index = end;
+      finishWord();
       continue;
     }
     if (char === ")" && nested) {
@@ -148,7 +187,9 @@ function read(text, start, nested) {
     }
     if (char === "\n" && heredocs.length) {
       finishCommand();
-      index = readHeredocs(text, index + 1, heredocs.splice(0));
+      const bodies = readHeredocs(text, index + 1, heredocs.splice(0));
+      commands.push(...bodies.commands);
+      index = bodies.end;
       continue;
     }
     if (char === "&" && text[index + 1] === ">") {
@@ -183,9 +224,12 @@ function read(text, start, nested) {
         const strip = text[index] === "-";
         if (strip) index += 1;
         while (text[index] === " " || text[index] === "\t") index += 1;
-        const delimiter = read(text.slice(index).split(/[\s;&|<>()]/, 1)[0], 0, false).commands[0]?.[0]?.value ?? "";
-        index += text.slice(index).split(/[\s;&|<>()]/, 1)[0].length;
-        heredocs.push({ delimiter, strip, target: words });
+        const raw = text.slice(index).split(/[\s;&|<>()]/, 1)[0];
+        const delimiter = read(raw, 0, false).commands[0]?.[0]?.value ?? "";
+        index += raw.length;
+        // Any quoting in the delimiter keeps the body literal; otherwise the
+        // shell expands it like a double-quoted string.
+        heredocs.push({ delimiter, strip, target: words, expands: !/['"\\]/.test(raw) });
         continue;
       }
       if (char === "<" && text.startsWith("<<<", index)) {
@@ -194,6 +238,7 @@ function read(text, start, nested) {
         redirect = "herestring";
         continue;
       }
+      const input = char === "<" && text[index + 1] !== "&";
       index += 1;
       if (text[index] === ">" || text[index] === "<" || text[index] === "|") index += 1;
       if (text[index] === "&") {
@@ -205,7 +250,7 @@ function read(text, start, nested) {
           continue;
         }
       }
-      redirect = true;
+      redirect = input ? "input" : true;
       continue;
     }
     if (char === " " || char === "\t") {
@@ -222,9 +267,64 @@ function read(text, start, nested) {
   return { commands, end: index };
 }
 
+// The end of an arithmetic expression opened at `from` by (( : just past the
+// matching )), or the end of the text.
+function arithmeticEnd(text, from) {
+  let depth = 2;
+  let index = from;
+  while (index < text.length && depth > 0) {
+    if (text[index] === "(") depth += 1;
+    else if (text[index] === ")") depth -= 1;
+    index += 1;
+  }
+  return index;
+}
+
+// What an arithmetic expression runs: its command substitutions. The
+// expression is read as commands too, with its shifts blanked so they open no
+// heredoc: a shell without arithmetic (dash reads ((cmd)) as two subshells)
+// would run it, and its words otherwise match no rule.
+function arithmeticCommands(expression) {
+  return read(expression.replace(/<</g, "  "), 0, false).commands;
+}
+
+// What expanding an unquoted heredoc body runs, read as a shell reads a
+// double-quoted string: its $(...) and backtick substitutions (arithmetic
+// included). `expanded` is whether the body holds any expansion at all, so
+// the text a command receives is not the text written.
+function bodyExpansion(body) {
+  const commands = [];
+  let expanded = false;
+  for (let index = 0; index < body.length; index += 1) {
+    const char = body[index];
+    if (char === "\\") index += 1;
+    else if (char === "`") {
+      expanded = true;
+      const close = body.indexOf("`", index + 1);
+      const end = close === -1 ? body.length : close;
+      commands.push(...read(body.slice(index + 1, end), 0, false).commands);
+      index = end;
+    } else if (char === "$" && body.startsWith("((", index + 1)) {
+      expanded = true;
+      const end = arithmeticEnd(body, index + 3);
+      commands.push(...arithmeticCommands(body.slice(index + 3, end)));
+      index = end - 1;
+    } else if (char === "$" && body[index + 1] === "(") {
+      expanded = true;
+      const inner = read(body, index + 2, true);
+      commands.push(...inner.commands);
+      index = inner.end - 1;
+    } else if (char === "$" && /[\w{@*#?$!-]/.test(body[index + 1] ?? "")) expanded = true;
+  }
+  return { commands, expanded };
+}
+
 // Reads each pending heredoc's body and hands it to the command it feeds.
+// Returns { commands, end }: the commands an unquoted body's expansion runs,
+// and the index after the last body.
 function readHeredocs(text, index, heredocs) {
-  for (const { delimiter, strip, target } of heredocs) {
+  const commands = [];
+  for (const { delimiter, strip, target, expands } of heredocs) {
     const lines = [];
     while (index < text.length) {
       const lineEnd = text.indexOf("\n", index);
@@ -235,8 +335,13 @@ function readHeredocs(text, index, heredocs) {
       lines.push(stripped);
     }
     target.stdin = lines.join("\n");
+    if (expands) {
+      const expansion = bodyExpansion(target.stdin);
+      commands.push(...expansion.commands);
+      if (expansion.expanded) target.stdinExpanded = true;
+    }
   }
-  return index;
+  return { commands, end: index };
 }
 
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
@@ -270,13 +375,16 @@ const HEADERS = new Set(["for", "select", "case"]);
 
 // The command a simple command finally runs: leading reserved words,
 // assignments and wrappers (sudo, env, timeout 5, npx -y, xargs) removed,
-// argv[0] reduced to its basename so /usr/bin/git is git.
+// argv[0] reduced to its basename so /usr/bin/git is git. `words` are the
+// reader's words behind argv, one for one.
 export function effectiveArgv(words) {
   let argv = words.map((word) => word.value);
   let globs = words.map((word) => word.globUnquoted);
+  let kept = words;
   const drop = (count) => {
     argv = argv.slice(count);
     globs = globs.slice(count);
+    kept = kept.slice(count);
   };
   for (;;) {
     let skip = 0;
@@ -317,21 +425,22 @@ export function effectiveArgv(words) {
     drop(next);
   }
   if (argv.length) argv[0] = argv[0].split("/").pop();
-  return { argv, globs };
+  return { argv, globs, words: kept };
 }
 
-// Whether a shell run with these arguments (and no -c) reads its script from
-// standard input: no script file named, or -s, or -.
-function readsStdin(args) {
+// Where a shell run with these arguments (and no -c) reads its script: the
+// index of the script file it names, or -1 for standard input (no script
+// file named, or -s, or -).
+function scriptOperand(args) {
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
-    if (arg === "-") return true;
-    if (arg === "--") return args[index + 1] === undefined;
+    if (arg === "-") return -1;
+    if (arg === "--") return args[index + 1] === undefined ? -1 : index + 1;
     if (/^[-+]o$/.test(arg) || arg === "--rcfile" || arg === "--init-file") index += 1;
-    else if (/^-[A-Za-z]*s[A-Za-z]*$/.test(arg)) return true;
-    else if (!arg.startsWith("-") && !arg.startsWith("+")) return false;
+    else if (/^-[A-Za-z]*s[A-Za-z]*$/.test(arg)) return -1;
+    else if (!arg.startsWith("-") && !arg.startsWith("+")) return index;
   }
-  return true;
+  return -1;
 }
 
 // The text a pipe feeds the next command, when it is known without running
@@ -339,36 +448,56 @@ function readsStdin(args) {
 function literalOutput(producer) {
   if (producer === UNKNOWN_PRODUCER || producer.some((word) => word.expanded)) return null;
   const { argv: [name, ...args] } = effectiveArgv(producer);
-  if (name === "cat" && !args.length && producer.stdin !== undefined) return producer.stdin;
+  if (name === "cat" && !args.length && producer.stdin !== undefined) return producer.stdinExpanded ? null : producer.stdin;
   if (name !== "echo" && name !== "printf") return null;
   // Escapes are read generously: finding an extra command only errs closed.
   return args.filter((arg) => !/^-[neE]+$/.test(arg)).join(" ").replace(/\\n/g, "\n");
 }
 
+const RUN_IT_DIRECTLY = "save the script to a file, read it, and run the commands it needs directly";
+
 // Every simple command the text would run, in order, each { argv, globs }.
 // Scripts handed to a shell with -c, or to eval, or fed to a shell's standard
-// input, are read in their place. A shell piped a script the reader cannot
-// see (`curl ... | sh`) comes back as { argv, globs, refused } with the reason.
+// input, are read in their place. A script the reader cannot see (`curl ... |
+// sh`, `bash < <(curl ...)`, `source <(...)`, `bash -c "$(...)"`) comes back
+// as { argv, globs, refused } with the reason.
 export function simpleCommands(text, depth = 0) {
   const found = [];
   for (const words of read(text, 0, false).commands) {
-    const command = effectiveArgv(words);
+    const { words: commandWords, ...command } = effectiveArgv(words);
     const [name, ...args] = command.argv;
     if (!name) continue;
+    const refuse = (reason) => found.push({ ...command, refused: `${name} ${reason}` });
+    if ((name === "source" || name === ".") && commandWords.some((word) => word.processSubstitution)) {
+      refuse(`runs a script from a process substitution the guard cannot inspect (as in source <(curl ...)); ${RUN_IT_DIRECTLY}`);
+      continue;
+    }
     if (depth < 4 && SHELLS.has(name)) {
       const flag = args.findIndex((arg) => /^-[a-z]*c[a-z]*$/.test(arg));
       if (flag !== -1 && args[flag + 1] !== undefined) {
-        found.push(...simpleCommands(args[flag + 1], depth + 1));
+        // args[flag + 1] is commandWords[flag + 2]: commandWords starts at the name.
+        if (commandWords[flag + 2].expanded) {
+          refuse(`-c runs a script built by an expansion ($(...), backticks or $VAR) the guard cannot inspect; write the commands out literally`);
+        } else found.push(...simpleCommands(args[flag + 1], depth + 1));
         continue;
       }
-      if (flag === -1 && readsStdin(args)) {
+      const operand = flag === -1 ? scriptOperand(args) : null;
+      if (operand !== null && operand !== -1 && commandWords[operand + 1].processSubstitution) {
+        refuse(`runs a script from a process substitution the guard cannot inspect (as in bash <(curl ...)); ${RUN_IT_DIRECTLY}`);
+        continue;
+      }
+      if (operand === -1) {
+        if (words.stdinSubstituted || (words.stdin !== undefined && words.stdinExpanded)) {
+          refuse(`reads a script the shell builds at run time (from a process substitution, as in bash < <(curl ...), or an expanding heredoc or herestring), which the guard cannot inspect; ${RUN_IT_DIRECTLY}`);
+          continue;
+        }
         const script = words.stdin ?? (words.pipedFrom ? literalOutput(words.pipedFrom) : undefined);
         if (typeof script === "string") {
           found.push(...simpleCommands(script, depth + 1));
           continue;
         }
         if (words.pipedFrom) {
-          found.push({ ...command, refused: `${name} reads its script from a pipe the guard cannot inspect (as in curl ... | sh); save the script to a file, read it, and run the commands it needs directly` });
+          refuse(`reads its script from a pipe the guard cannot inspect (as in curl ... | sh); ${RUN_IT_DIRECTLY}`);
           continue;
         }
       }
