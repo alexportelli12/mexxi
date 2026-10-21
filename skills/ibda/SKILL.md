@@ -151,21 +151,26 @@ First install, in order:
    itself, and that directory must no longer hold the old clone.
 
    ```bash
-   node scripts/install.mjs --dry-run --config <scratch-file> --migrate-from ~/.config/opencode
-   mv ~/.config/opencode ~/.config/opencode.pre-move
-   mkdir ~/.config/opencode
-   # copy back runtime-only files from ~/.config/opencode.pre-move:
-   # tui.jsonc, herdr files, personal plugins; nothing mexxi installs
-   # carry over the old clone's gitignored skill state, where it exists:
-   cp -R ~/.config/opencode.pre-move/skills/synced skills/
-   cp ~/.config/opencode.pre-move/skills-lock.json .
-   node scripts/install.mjs --config <scratch-file> --yes --migrate-from ~/.config/opencode
+   node scripts/install.mjs --dry-run --config <scratch-file> --migrate-from ~/.config/opencode &&
+     mv ~/.config/opencode ~/.config/opencode.pre-move &&
+     mkdir ~/.config/opencode
    ```
 
-   Run the installer from the new clone. If the dry run lists conflicts, stop
-   before the `mv`: show them to the user and resolve them first. If the
-   install stops saying `~/.config/opencode` is still the old clone, the move
-   did not happen. If it stops after the move, put the old clone back first:
+   Then copy back the runtime-only files from `~/.config/opencode.pre-move`
+   (`tui.jsonc`, herdr files, personal plugins; nothing mexxi installs), and
+   install, carrying over the old clone's gitignored skill state; drop a `cp`
+   whose source does not exist:
+
+   ```bash
+   cp -R ~/.config/opencode.pre-move/skills/synced skills/ &&
+     cp ~/.config/opencode.pre-move/skills-lock.json . &&
+     node scripts/install.mjs --config <scratch-file> --yes --migrate-from ~/.config/opencode
+   ```
+
+   Run the installer from the new clone. If the dry run lists conflicts, the
+   chain stops before the `mv`: show them to the user and resolve them first.
+   If the install stops saying `~/.config/opencode` is still the old clone,
+   the move did not happen. If it stops after the move, put the old clone back first:
    `rmdir ~/.config/opencode && mv ~/.config/opencode.pre-move ~/.config/opencode`.
 5. Delete the scratch file once it is installed.
 

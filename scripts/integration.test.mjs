@@ -656,7 +656,7 @@ test("--migrate-from on a clone still in place stops and names the move-aside se
   const options = { home, checkout, migrateFrom: old };
   await assert.rejects(install(options), (error) => {
     assert.match(error.message, /\.config\/opencode\/AGENTS\.md\n/);
-    assert.match(error.message, /~\/\.config\/opencode is still the old clone[\s\S]*mv ~\/\.config\/opencode ~\/\.config\/opencode\.pre-move && mkdir ~\/\.config\/opencode\n[\s\S]*tui\.jsonc[\s\S]*rerun with --migrate-from ~\/\.config\/opencode/);
+    assert.match(error.message, /~\/\.config\/opencode is still the old clone[\s\S]*node scripts\/install\.mjs --dry-run --migrate-from ~\/\.config\/opencode && mv ~\/\.config\/opencode ~\/\.config\/opencode\.pre-move && mkdir ~\/\.config\/opencode\n[\s\S]*tui\.jsonc[\s\S]*rerun with --migrate-from ~\/\.config\/opencode/);
     return true;
   });
   assert.equal(await readFile(path.join(old, "AGENTS.md"), "utf8"), "old\n");
@@ -702,14 +702,17 @@ function documentedShell(home, script) {
   const env = { ...process.env, HOME: home, PATH: `${path.join(home, ".local/bin")}${path.delimiter}${process.env.PATH}` };
   delete env.MEXXI_CONFIG;
   delete env.CODEX_HOME;
-  return execute("bash", ["-e", "-c", script], home, env);
+  // No -e: the sequence must stop on its own, as it does pasted into an
+  // interactive shell.
+  return execute("bash", ["-c", script], home, env);
 }
 
 async function documentedMigration() {
   const page = await readFile(path.join(checkout, "docs/getting-started.md"), "utf8");
-  const section = page.slice(page.indexOf("If you are moving from the old clone"));
+  const section = page.slice(page.indexOf("If you are moving from the old clone"), page.indexOf("To roll back a completed move"));
   return {
-    sequence: section.match(/```bash\n([\s\S]*?)```/)[1],
+    // Every block of the move, run together as one paste.
+    sequence: [...section.matchAll(/```bash\n([\s\S]*?)```/g)].map((block) => block[1]).join(""),
     recovery: section.match(/`(rmdir ~\/\.config\/opencode && mv [^`]*)`/)?.[1],
   };
 }
@@ -754,19 +757,30 @@ test("the documented move from ~/.config/opencode stops before moving anything o
 });
 
 // ibda's sequence adds --config, so it cannot run verbatim; it must keep the
-// safeguards of the one the test above runs.
-test("ibda's pre-move sequence dry-runs before the move, carries over gitignored skill state and gives the recovery line", async () => {
+// safeguards of the one the test above runs. An agent may run each block as
+// one Bash call without -e, so each step that must not run after a failure is
+// chained to the one before it with &&.
+test("ibda's pre-move sequence moves only after a passing dry run, carries over gitignored skill state and gives the recovery line", async () => {
   const skill = await readFile(path.join(checkout, "skills/ibda/SKILL.md"), "utf8");
-  const sequence = skill.slice(skill.indexOf("For the pre-move layout")).match(/```bash\n([\s\S]*?)```/)[1];
-  const lines = sequence.split("\n").map((line) => line.trim());
-  const dryRun = lines.findIndex((line) => /^node scripts\/install\.mjs --dry-run .*--migrate-from ~\/\.config\/opencode$/.test(line));
-  const move = lines.indexOf("mv ~/.config/opencode ~/.config/opencode.pre-move");
-  assert.ok(dryRun !== -1 && dryRun < move, "the dry run comes before the mv");
-  const install = lines.findIndex((line) => /^node scripts\/install\.mjs --config .*--yes --migrate-from/.test(line));
+  const section = skill.slice(skill.indexOf("For the pre-move layout"), skill.indexOf("5. Delete the scratch file"));
+  // Each block as its chains: lines joined across a trailing &&, comments dropped.
+  const chains = [...section.matchAll(/```bash\n([\s\S]*?)```/g)].flatMap((block) => block[1]
+    .split("\n").map((line) => line.trim()).filter((line) => line && !line.startsWith("#"))
+    .join("\n").replace(/&&\n/g, "&& ").split("\n")
+    .map((chain) => chain.split(" && ")));
+  const moveChain = chains.find((chain) => chain.includes("mv ~/.config/opencode ~/.config/opencode.pre-move"));
+  assert.ok(moveChain, "the sequence moves the old clone aside");
+  const move = moveChain.indexOf("mv ~/.config/opencode ~/.config/opencode.pre-move");
+  assert.ok(moveChain.slice(0, move).some((command) => /^node scripts\/install\.mjs --dry-run .*--migrate-from ~\/\.config\/opencode$/.test(command)),
+    "the mv runs only once the dry run passes");
+  const installChain = chains.find((chain) => chain.some((command) => /^node scripts\/install\.mjs --config .*--yes --migrate-from/.test(command)));
+  assert.ok(installChain, "the sequence installs with --migrate-from");
+  const install = installChain.findIndex((command) => /^node scripts\/install\.mjs --config .*--yes --migrate-from/.test(command));
   for (const carried of ["cp -R ~/.config/opencode.pre-move/skills/synced skills/", "cp ~/.config/opencode.pre-move/skills-lock.json ."]) {
-    const at = lines.indexOf(carried);
-    assert.ok(at > move && at < install, `${carried} runs between the mv and the install`);
+    const at = installChain.indexOf(carried);
+    assert.ok(at !== -1 && at < install, `${carried} runs, after the move, before the install and chained to it`);
   }
+  assert.ok(chains.indexOf(moveChain) < chains.indexOf(installChain), "the move comes before the install");
   assert.ok(skill.includes("`rmdir ~/.config/opencode && mv ~/.config/opencode.pre-move ~/.config/opencode`"));
 });
 

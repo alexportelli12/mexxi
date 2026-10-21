@@ -354,8 +354,8 @@ export async function install(options = {}) {
     let advice = "";
     if (!options.dryRun && oldCloneInPlace) {
       const old = abbreviateHome(migrateFrom, home);
-      advice = `\n${old} is still the old clone, so its own files sit where the new links go. Move it aside and give OpenCode an empty directory first:\n`
-        + `  mv ${old} ${old}.pre-move && mkdir ${old}\n`
+      advice = `\n${old} is still the old clone, so its own files sit where the new links go. Once a dry run passes, move it aside and give OpenCode an empty directory:\n`
+        + `  node scripts/install.mjs --dry-run --migrate-from ${old} && mv ${old} ${old}.pre-move && mkdir ${old}\n`
         + `then copy back the runtime-only files you keep there (tui.jsonc, herdr files, personal plugins) and rerun with --migrate-from ${old}.`;
     }
     throw new Error(`existing configuration differs; no changes made:\n${blocking.join("\n")}${advice}`);

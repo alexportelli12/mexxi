@@ -66,20 +66,24 @@ It renders the host files from `config.json` into `~/.local/share/mexxi/generate
 
 `install --check` renders again and fails on any difference, so a hand-edited host file or a stale render shows up as a failure.
 
-If you are moving from the old clone in `~/.config/opencode`, move it aside first, because OpenCode's links go where its files are now. Then give OpenCode an empty directory and let the installer relink everything to the new clone. The dry run comes first: it reports anything else the install would stop on, such as a `BASH_MAX_TIMEOUT_MS` or `cleanupPeriodDays` you already set in `settings.json`, and changes nothing. Resolve what it lists before you move anything.
+If you are moving from the old clone in `~/.config/opencode`, move it aside first, because OpenCode's links go where its files are now. Then give OpenCode an empty directory and let the installer relink everything to the new clone. The dry run comes first: it reports anything else the install would stop on, such as a `BASH_MAX_TIMEOUT_MS` or `cleanupPeriodDays` you already set in `settings.json`, and changes nothing. The move runs only if the dry run passes; otherwise resolve what it lists and run the block again.
 
 ```bash
-cd ~/workspace/mexxi
-node scripts/install.mjs --dry-run --migrate-from ~/.config/opencode
-mv ~/.config/opencode ~/.config/opencode.pre-move
-mkdir ~/.config/opencode
-# copy back runtime-only files you keep there, such as tui.jsonc, herdr files and personal plugins
-cp -R ~/.config/opencode.pre-move/skills/synced skills/
-cp ~/.config/opencode.pre-move/skills-lock.json .
-node scripts/install.mjs --migrate-from ~/.config/opencode
+cd ~/workspace/mexxi &&
+  node scripts/install.mjs --dry-run --migrate-from ~/.config/opencode &&
+  mv ~/.config/opencode ~/.config/opencode.pre-move &&
+  mkdir ~/.config/opencode
 ```
 
-The two `cp` lines carry over the old clone's synced skills and their lock file, which Git ignores and so the new clone does not have. Skip either one if the old clone has no such file.
+Copy back into `~/.config/opencode` the runtime-only files you keep there, such as `tui.jsonc`, `herdr` files and personal plugins, then install from the new clone:
+
+```bash
+cp -R ~/.config/opencode.pre-move/skills/synced skills/ &&
+  cp ~/.config/opencode.pre-move/skills-lock.json . &&
+  node scripts/install.mjs --migrate-from ~/.config/opencode
+```
+
+The two `cp` lines carry over the old clone's synced skills and their lock file, which Git ignores and so the new clone does not have. Delete either one if the old clone has no such file. They also stop the install when the move did not happen.
 
 `--migrate-from` names the old path, not the moved copy: it takes over the links that still point inside it. If the old clone is still in place, the installer stops and prints this sequence. If the install stops after the move, every host still links into `~/.config/opencode`, so put the old clone back before you do anything else: `rmdir ~/.config/opencode && mv ~/.config/opencode.pre-move ~/.config/opencode`. `rmdir` refuses while files you copied back are still there; delete those copies first.
 
