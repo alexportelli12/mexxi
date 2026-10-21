@@ -26,6 +26,10 @@ empty, perform a general audit. In either mode:
 6. Keep behavioural instructions in shared sources; place models, permissions,
    MCP and installation details in host adapters. Check all supported hosts and the
    configuration verification gate after changing integration.
+7. Update the docs pages the change affects in the same change, following
+   `docs-writing`. Generated pages follow their sources; for a hand-written
+   page, edit it in place (never append a duplicate) or bump its `reviewed`
+   date when nothing needs to change. `docs-fresh` names the pages to review.
 
 For a requested change, implement the smallest coherent correction justified by
 the evidence. Do not add a new agent, skill, command, or reference unless its

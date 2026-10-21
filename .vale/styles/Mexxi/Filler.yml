@@ -1,0 +1,24 @@
+extends: existence
+message: "Cut '%s': say the thing directly, without filler or marketing."
+level: error
+ignorecase: true
+tokens:
+  - it is worth noting
+  - it's worth noting
+  - please note
+  - note that
+  - in order to
+  - in this section
+  - this page describes
+  - this page explains
+  - welcome to
+  - simply
+  - easily
+  - seamless
+  - seamlessly
+  - powerful
+  - robust
+  - blazing
+  - leverage
+  - utilise
+  - utilize

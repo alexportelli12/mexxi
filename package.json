@@ -1,9 +1,15 @@
 {
   "private": true,
   "scripts": {
-    "verify": "verifika --all"
+    "verify": "verifika --all",
+    "docs:build": "node scripts/docs/build.mjs",
+    "prose": "vale --config .vale.ini README.md docs site/index.html skills/docs-writing"
   },
   "devDependencies": {
-    "verifika": "0.0.2"
+    "@vvago/vale": "3.24.0",
+    "dictionary-en-gb": "3.0.0",
+    "mermaid": "11.17.2",
+    "verifika": "0.0.2",
+    "vitepress": "1.6.4"
   }
 }

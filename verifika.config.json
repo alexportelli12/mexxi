@@ -38,6 +38,22 @@
       "command": "node --test scripts/evals.test.mjs",
       "paths": ["evals/**", "scripts/evals.test.mjs", "skills/*/SKILL.md", "package.json"]
     },
+    "docs": {
+      "command": "node scripts/docs/check.mjs",
+      "paths": ["README.md", "AGENTS.md", "docs/**", "site/**", "commands/**", "agent/**", "skills/**", "names.json", "prompts.json", "config.schema.json", "config.example.json", "claude/agents.json", "codex/agents.json", "opencode/opencode.json", "scripts/install.mjs", "scripts/ibni/**", "scripts/docs/**", "scripts/lib/**", ".github/workflows/docs.yml"]
+    },
+    "docs-tests": {
+      "command": "node --test scripts/docs/docs.test.mjs scripts/docs/fresh.test.mjs",
+      "paths": ["scripts/docs/**", "docs/**", "site/**", "names.json", "prompts.json", "skills/*/SKILL.md"]
+    },
+    "docs-fresh": {
+      "command": "node scripts/docs/fresh.mjs",
+      "paths": ["README.md", "AGENTS.md", "docs/**", "site/**", "commands/**", "agent/**", "skills/**", "names.json", "prompts.json", "config.schema.json", "config.example.json", "claude/agents.json", "codex/agents.json", "opencode/opencode.json", "scripts/install.mjs", "scripts/ibni/**", "scripts/docs/**", "scripts/lib/**"]
+    },
+    "prose": {
+      "command": "npm run --silent prose",
+      "paths": ["README.md", "docs/**", "site/index.html", "skills/docs-writing/**", ".vale.ini", ".vale/**"]
+    },
     "integration": {
       "command": "node --test scripts/integration.test.mjs",
       "dependsOn": ["config"]

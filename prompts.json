@@ -1,0 +1,10 @@
+{
+  "install": {
+    "title": "Install mexxi",
+    "text": "Set up mexxi for me. Read https://raw.githubusercontent.com/alexportelli12/mexxi/main/skills/ibda/SKILL.md and follow it."
+  },
+  "prepare": {
+    "title": "Prepare a repository",
+    "text": "Make this repository ready for mexxi: run /lesti here."
+  }
+}

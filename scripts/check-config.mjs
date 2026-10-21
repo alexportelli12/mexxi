@@ -84,6 +84,36 @@ export async function check(base = root) {
     assert.ok(alias.includes(`commands/${target}.md`), `alias ${file} must run commands/${target}.md`);
     assert.ok(alias.startsWith(`---\ndescription: Old name for /${target}, kept for one release. ${description}\n`), `alias ${file} must keep /${target}'s description`);
   }
+  // names.json is the one place the Maltese names, meanings and old names are
+  // written; the docs generator reads it. Every command, the CLI and the setup
+  // skill must have an entry, and every alias must be the name an entry replaces.
+  const names = JSON.parse(await readFile(path.join(base, "names.json"), "utf8"));
+  const byName = new Map(names.map((entry) => [entry.name, entry]));
+  assert.equal(byName.size, names.length, "names.json has a duplicate name");
+  for (const entry of names) {
+    assert.deepEqual(Object.keys(entry), ["name", "kind", "meaning", "replaces", "does", "pronunciation"], `names.json: ${entry.name} has the wrong fields`);
+    assert.ok(["repo", "cli", "command", "skill"].includes(entry.kind), `names.json: ${entry.name} has an unknown kind`);
+    for (const field of ["meaning", "does", "pronunciation"]) assert.ok(typeof entry[field] === "string" && entry[field].trim(), `names.json: ${entry.name} has no ${field}`);
+    assert.ok(entry.replaces === null || typeof entry.replaces === "string", `names.json: ${entry.name}.replaces is a name or null`);
+  }
+  const commandFiles = (await readdir(path.join(base, "commands"))).filter((name) => name.endsWith(".md") && !(name in commandAliases));
+  assert.deepEqual(names.filter((entry) => entry.kind === "command").map((entry) => `${entry.name}.md`).sort(), commandFiles.sort(), "names.json must list each command, and only commands");
+  assert.deepEqual(names.filter((entry) => entry.kind === "cli").map((entry) => entry.name), ["ibni"]);
+  assert.deepEqual(names.filter((entry) => entry.kind === "repo").map((entry) => entry.name), ["mexxi"]);
+  const skillEntries = names.filter((entry) => entry.kind === "skill");
+  assert.deepEqual(skillEntries.map((entry) => entry.name), ["ibda"]);
+  for (const entry of skillEntries) await access(path.join(base, "skills", entry.name, "SKILL.md"));
+  for (const [file, target] of Object.entries(commandAliases)) {
+    assert.equal(byName.get(target)?.replaces, file.slice(0, -3), `names.json: ${target} must replace ${file.slice(0, -3)}`);
+  }
+  // The prompts the README, landing page and docs copy come from prompts.json.
+  const prompts = JSON.parse(await readFile(path.join(base, "prompts.json"), "utf8"));
+  assert.deepEqual(Object.keys(prompts), ["install", "prepare"]);
+  assert.match(prompts.install.text, /skills\/ibda\/SKILL\.md/);
+  assert.match(prompts.prepare.text, /\/lesti/);
+  const setupSkill = await readFile(path.join(base, "skills/ibda/SKILL.md"), "utf8");
+  assert.ok(setupSkill.includes(prompts.prepare.text), "skills/ibda/SKILL.md must quote the prepare prompt from prompts.json");
+  assert.ok(setupSkill.includes(prompts.install.text.match(/https:\/\/\S+SKILL\.md/)[0]), "skills/ibda/SKILL.md must name the URL the install prompt fetches");
   for (const name of await readdir(path.join(base, "skills"))) {
     const file = path.join(base, "skills", name, "SKILL.md");
     const text = await readFile(file, "utf8").catch((error) => {

@@ -9,3 +9,7 @@ __pycache__/
 
 # Retrospective reports hold transcript-derived data: private, never committed
 /retro/
+
+# Generated docs: pages are written here, then built into site/docs/
+/docs-site/
+/site/docs/

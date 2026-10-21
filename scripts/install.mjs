@@ -4,10 +4,11 @@ import { access, chmod, lstat, mkdir, readFile, readdir, readlink, symlink, unli
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 import { registrationCommands, registrationDrift } from "./lib/browser.mjs";
 import { applyMods, planMods } from "./lib/claude-mods.mjs";
 import { desiredSettings, planSettingsMerge, writeSettingsMerge } from "./lib/claude-settings.mjs";
-import { abbreviateHome, configPath, loadConfig, minimalConfig } from "./lib/config.mjs";
+import { ConfigError, abbreviateHome, configPath, loadConfig, minimalConfig, resolveConfig } from "./lib/config.mjs";
 import { codexHooks, planCodexHooks, writeCodexHooks } from "./lib/host-hooks.mjs";
 import { codexCommandSkill, renderDrift, renderHostFiles, writeRendered } from "./lib/render.mjs";
 
@@ -183,18 +184,56 @@ export async function staleLinks({
   return stale;
 }
 
-// Reads config.json and refuses to install from any clone but the one it
-// names, so a stray clone (or the old checkout's post-merge hook during the
-// move) can never repoint the hosts.
-async function installationConfig({ home, checkout, configFile }) {
+// Reads config.json (or, for `--config`, the file the user supplies) and
+// refuses to install from any clone but the one it names, so a stray clone (or
+// the old checkout's post-merge hook during the move) can never repoint the hosts.
+async function installationConfig({ home, checkout, configFile, configSource }) {
   const { config, exists } = await loadConfig({ file: configFile, home });
-  if (config.paths.checkout !== checkout) {
-    const fix = exists
-      ? `set paths.checkout in ${configFile}`
-      : `create ${configFile} containing {"paths": {"checkout": "${abbreviateHome(checkout, home)}"}}`;
-    throw new Error(`config.json expects the mexxi clone at ${config.paths.checkout}, not ${checkout}; ${fix}, or run the installer from that clone`);
+  let installed = { config, exists, write: null };
+  if (configSource) {
+    let value;
+    try {
+      value = JSON.parse(await readFile(configSource, "utf8"));
+    } catch (error) {
+      throw new ConfigError(`${configSource} is not readable JSON: ${error.message}`);
+    }
+    // The supplied config is copied, not pointed at, so ~/.config/mexxi/config.json
+    // stays the one file a user edits. An existing, different one is never replaced.
+    if (exists && !isDeepStrictEqual(JSON.parse(await readFile(configFile, "utf8")), value)) {
+      throw new ConfigError(`${configFile} already exists and differs from ${configSource}; no changes made. Merge the settings you want into ${configFile} by hand, or move it aside, then run again`);
+    }
+    installed = { config: await resolveConfig(value, { home, source: configSource }), exists, write: exists ? null : value };
   }
-  return { config, exists };
+  if (installed.config.paths.checkout !== checkout) {
+    const fix = installed.exists || configSource
+      ? `set paths.checkout in ${configSource ?? configFile}`
+      : `create ${configFile} containing {"paths": {"checkout": "${abbreviateHome(checkout, home)}"}}`;
+    throw new Error(`config.json expects the mexxi clone at ${installed.config.paths.checkout}, not ${checkout}; ${fix}, or run the installer from that clone`);
+  }
+  return installed;
+}
+
+// `--yes` exists for one thing: `--config` writes ~/.config/mexxi/config.json,
+// which the installer otherwise only does with its own minimal first-run file,
+// so the write must be confirmed. The installer never prompts, so nothing else
+// changes with it.
+export function parseArguments(argv) {
+  const flagValue = (flag) => {
+    const index = argv.indexOf(flag);
+    if (index === -1) return undefined;
+    if (!argv[index + 1] || argv[index + 1].startsWith("--")) throw new Error(`${flag} needs a value`);
+    return argv[index + 1];
+  };
+  const options = {
+    check: argv.includes("--check"), migrateFrom: flagValue("--migrate-from"),
+    configSource: flagValue("--config") && path.resolve(flagValue("--config")),
+  };
+  if (options.configSource && !argv.includes("--yes")) {
+    throw new Error("--config copies the file to ~/.config/mexxi/config.json (it never replaces a different one); add --yes to confirm");
+  }
+  if (argv.includes("--yes") && !options.configSource) throw new Error("--yes only confirms --config; the installer never prompts");
+  if (options.configSource && options.check) throw new Error("--config installs; run --check on its own afterwards");
+  return options;
 }
 
 export async function install(options = {}) {
@@ -204,7 +243,7 @@ export async function install(options = {}) {
   const generated = options.generated ?? generatedDirectory(home);
   const migrateFrom = options.migrateFrom ? path.resolve(options.migrateFrom) : null;
   if (migrateFrom && within(checkout, migrateFrom)) throw new Error("--migrate-from must name the old checkout, not this one");
-  const { config, exists } = await installationConfig({ home, checkout, configFile });
+  const { config, exists, write: configToWrite } = await installationConfig({ home, checkout, configFile, configSource: options.configSource });
   const rendered = await renderHostFiles({ checkout, config });
   const linkOptions = { ...options, home, checkout, generated, hosts: config.hosts };
   const entries = await links(linkOptions);
@@ -301,7 +340,7 @@ export async function install(options = {}) {
   }
   if (!exists) {
     await mkdir(path.dirname(configFile), { recursive: true });
-    await writeFile(configFile, `${JSON.stringify(minimalConfig({ checkout, home }), null, 2)}\n`, { flag: "wx" });
+    await writeFile(configFile, `${JSON.stringify(configToWrite ?? minimalConfig({ checkout, home }), null, 2)}\n`, { flag: "wx" });
   }
   await writeRendered(generated, rendered);
   if (settingsPlan) await writeSettingsMerge(settingsFiles, settingsPlan);
@@ -341,6 +380,7 @@ function windowsWrapper(module) {
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
+    const parsed = parseArguments(process.argv.slice(2));
     if (!installationWorktree()) {
       if (process.argv.includes("--after-merge")) process.exit(0);
       throw new Error("install only from the primary configuration checkout on main; never link an unmerged feature worktree");
@@ -349,13 +389,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     if (!(process.env.PATH || "").split(path.delimiter).some((entry) => path.resolve(entry) === bin)) {
       throw new Error(`${bin} is not on PATH; add it to your shell/CI environment before installing`);
     }
-    const migrateIndex = process.argv.indexOf("--migrate-from");
-    const migrateFrom = migrateIndex === -1 ? undefined : process.argv[migrateIndex + 1];
-    if (migrateIndex !== -1 && (!migrateFrom || migrateFrom.startsWith("--"))) throw new Error("--migrate-from needs the old checkout's path");
     const result = await install({
-      check: process.argv.includes("--check"), hookDirectory: hookDirectory(),
+      ...parsed, hookDirectory: hookDirectory(),
       codex: process.env.CODEX_HOME ? path.resolve(process.env.CODEX_HOME) : undefined,
-      configFile: configPath(), migrateFrom,
+      configFile: configPath(),
     });
     const { registration = {}, codexHooksChanged, ...summary } = result;
     process.stdout.write(`${JSON.stringify(summary)}\n`);

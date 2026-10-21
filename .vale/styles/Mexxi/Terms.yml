@@ -1,0 +1,13 @@
+extends: substitution
+message: "Use '%s' instead of '%s' (see the glossary)."
+level: error
+ignorecase: true
+swap:
+  workspace folder: worktree
+  working folder: worktree
+  worktree folder: worktree
+  work tree: worktree
+  work-tree: worktree
+  pull-request: pull request
+  evidence folder: evidence directory
+  coding agent host: host

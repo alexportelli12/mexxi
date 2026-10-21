@@ -6,9 +6,9 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { install } from "./install.mjs";
+import { install, parseArguments } from "./install.mjs";
 import { playwrightArguments, registrationCommands } from "./lib/browser.mjs";
-import { loadConfig } from "./lib/config.mjs";
+import { ConfigError, loadConfig } from "./lib/config.mjs";
 import { claudeHooks } from "./lib/host-hooks.mjs";
 import { check } from "./check-config.mjs";
 
@@ -71,7 +71,7 @@ async function copyCheckout(base) {
   for (const directory of [".claude-plugin", "agent", "claude", "codex", "commands", "opencode", "scripts", "skills"]) {
     await cp(path.join(checkout, directory), path.join(base, directory), { recursive: true });
   }
-  for (const file of ["AGENTS.md", "config.example.json", "config.schema.json", "package.json", "verifika.config.json"]) {
+  for (const file of ["AGENTS.md", "config.example.json", "config.schema.json", "names.json", "package.json", "prompts.json", "verifika.config.json"]) {
     await cp(path.join(checkout, file), path.join(base, file));
   }
 }
@@ -355,6 +355,23 @@ test("configuration rejects a verify gate that would skip tests", async (t) => {
   await assert.rejects(check(base), /npm run verify must run every Verifika check/);
 });
 
+test("names.json must cover every command, and each alias must be the name its command replaces", async (t) => {
+  const base = await mkdtemp(path.join(os.tmpdir(), "mexxi-names-"));
+  t.after(() => rm(base, { recursive: true, force: true }));
+  await copyCheckout(base);
+  await symlink(path.join(checkout, "node_modules"), path.join(base, "node_modules"), process.platform === "win32" ? "junction" : undefined);
+  const names = JSON.parse(await readFile(path.join(base, "names.json"), "utf8"));
+  const write = (entries) => writeFile(path.join(base, "names.json"), JSON.stringify(entries));
+  await write(names.filter((entry) => entry.name !== "lesti"));
+  await assert.rejects(check(base), /names\.json must list each command/);
+  await write(names.map((entry) => entry.name === "wettaq" ? { ...entry, replaces: "qa" } : entry));
+  await assert.rejects(check(base), /wettaq must replace implement/);
+  await write(names.map((entry) => entry.name === "ibda" ? { ...entry, pronunciation: "" } : entry));
+  await assert.rejects(check(base), /ibda has no pronunciation/);
+  await write(names);
+  await check(base);
+});
+
 test("rendered host files keep command bodies canonical and --check catches drift from sources", async (t) => {
   const base = await mkdtemp(path.join(os.tmpdir(), "mexxi-render-drift-"));
   t.after(() => rm(base, { recursive: true, force: true }));
@@ -455,6 +472,54 @@ test("first run writes a minimal config.json, and only the configured clone may 
   await registerPlaywright(home);
   await install({ home, checkout: clone, check: true });
   await assert.rejects(install({ home, checkout, check: true }), /expects the mexxi clone at/);
+});
+
+// The steps the ibda setup skill relies on: a config file it wrote goes in
+// with `install --config <file> --yes`, then --check is green once the
+// Playwright registrations the printed lines ask for exist.
+test("a clean home reaches a green --check from a supplied config file, which is never replaced by a different one", async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-setup-"));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const supplied = path.join(home, "supplied.json");
+  const value = { paths: { checkout }, hosts: { opencode: true, claude: true, codex: true }, models: { claude: { reviewer: "opus" } }, jev: { enabled: true } };
+  await writeFile(supplied, JSON.stringify(value));
+  const configFile = path.join(home, ".config/mexxi/config.json");
+  const options = { home, checkout, hookDirectory: path.join(home, "git-hooks") };
+
+  // An invalid file stops before anything is written.
+  const invalid = path.join(home, "invalid.json");
+  await writeFile(invalid, JSON.stringify({ hosts: { vim: true } }));
+  await assert.rejects(install({ ...options, configSource: invalid }), (error) => error instanceof ConfigError && /hosts\.vim: unknown key/.test(error.message));
+  await assert.rejects(lstat(configFile), /ENOENT/);
+
+  const result = await install({ ...options, configSource: supplied });
+  assert.ok(result.created > 0);
+  assert.deepEqual(JSON.parse(await readFile(configFile, "utf8")), value);
+  assert.match(result.registration.claude, /^claude mcp add --scope user playwright /);
+  // Not green until the Playwright registrations the installer printed are made.
+  await assert.rejects(install({ ...options, check: true }), /Playwright MCP not registered/);
+  await registerPlaywright(home);
+  await install({ ...options, check: true });
+
+  // Rerunning with the same file is a no-op; a different one is refused, untouched.
+  assert.equal((await install({ ...options, configSource: supplied })).created, 0);
+  await writeFile(supplied, JSON.stringify({ ...value, jev: { enabled: false } }));
+  await assert.rejects(install({ ...options, configSource: supplied }), /already exists and differs[\s\S]*no changes made/);
+  assert.deepEqual(JSON.parse(await readFile(configFile, "utf8")), value);
+  // A config naming another clone cannot install from this one.
+  await rm(configFile);
+  await writeFile(supplied, JSON.stringify({ paths: { checkout: path.join(home, "elsewhere") } }));
+  await assert.rejects(install({ ...options, configSource: supplied }), /expects the mexxi clone at .*elsewhere/);
+  await assert.rejects(lstat(configFile), /ENOENT/);
+});
+
+test("--yes confirms --config and nothing else", () => {
+  assert.deepEqual(parseArguments(["--config", "c.json", "--yes"]), { check: false, migrateFrom: undefined, configSource: path.resolve("c.json") });
+  assert.throws(() => parseArguments(["--config", "c.json"]), /add --yes/);
+  assert.throws(() => parseArguments(["--yes"]), /only confirms --config/);
+  assert.throws(() => parseArguments(["--config", "c.json", "--yes", "--check"]), /run --check on its own/);
+  assert.throws(() => parseArguments(["--config"]), /--config needs a value/);
+  assert.throws(() => parseArguments(["--migrate-from"]), /--migrate-from needs a value/);
 });
 
 test("--migrate-from relinks an old checkout's links, then a hand-edited host file turns --check red", async (t) => {
