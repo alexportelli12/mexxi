@@ -4,6 +4,7 @@
 // so nothing generated is committed and nothing generated can go stale unseen.
 import { mkdir, readFile, readdir, rm, rmdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { opencodePlaywright } from "./browser.mjs";
 
 // Shared agents and the models.<host> role that sets each one's model.
 export const agentRoles = { "ui-designer": "uiDesigner", "code-reviewer": "reviewer" };
@@ -111,7 +112,7 @@ async function renderOpencode(checkout, config, files) {
     ...template.permission,
     external_directory: Object.fromEntries([...new Set(worktreeRoots)].map((root) => [`${root}/**`, "allow"])),
   };
-  const rendered = { $schema: template.$schema, agent, permission, mcp: template.mcp };
+  const rendered = { $schema: template.$schema, agent, permission, mcp: { playwright: opencodePlaywright(config.browser) } };
   files.set("opencode/opencode.json", `${JSON.stringify(rendered, null, 2)}\n`);
 }
 

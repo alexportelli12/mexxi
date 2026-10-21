@@ -40,6 +40,7 @@ export async function check(base = root) {
   for (const [name, agent] of Object.entries(template.agent)) {
     assert.ok(!("model" in agent) && !("prompt" in agent), `opencode/opencode.json: ${name} must take its model and prompt from the renderer`);
   }
+  assert.ok(!template.mcp, "opencode/opencode.json: the Playwright MCP server comes from config.json's browser group");
   assert.ok(!template.permission?.external_directory, "opencode/opencode.json: worktree roots come from config.json");
   for (const [host, metadata] of [["claude", claude], ["codex", codex]]) {
     for (const [name, fields] of Object.entries(metadata)) assert.ok(!("model" in fields), `${host}/agents.json: ${name}'s model belongs in config.json`);
@@ -56,6 +57,8 @@ export async function check(base = root) {
     "each shared agent must have a Claude Code adapter",
   );
   assert.deepEqual(Object.keys(config.agent).filter((name) => name in claude).sort(), Object.keys(claude).sort());
+  assert.ok(config.mcp.playwright.command.includes(`@playwright/mcp@${defaults.browser.playwrightMcpVersion}`) &&
+    config.mcp.playwright.command.includes(`--output-dir=${defaults.browser.outputDir}`), "OpenCode must run the pinned Playwright MCP");
   assert.ok(config.permission.external_directory[`${defaults.paths.worktreeRoot}/**`], "OpenCode must reach the configured worktree root");
   for (const name of Object.keys(claude)) {
     assert.equal(config.agent[name].prompt, `{file:${path.join(base, "agent", `${name}.md`)}}`);

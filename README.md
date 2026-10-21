@@ -91,17 +91,16 @@ The installer renders the host files from `config.json` into `~/.local/share/mex
 
 `install --check` renders again and fails on any difference, so a hand-edited host file or a stale render shows up as a red check. Moving from an older checkout (for example the clone that used to live in `~/.config/opencode`)? Pass the path its links point at, `node scripts/install.mjs --migrate-from ~/.config/opencode`, and the installer relinks them to the new clone instead of stopping on them as conflicts.
 
-For Claude Code, add Playwright in user scope:
+**Playwright MCP** for rendered QA is pinned and configured from `config.json`'s `browser` group (version, browser executable, output directory; the output directory defaults to the worktree root, so screenshots can be written straight into a workspace's evidence directory). OpenCode gets it rendered into its `opencode.json`. Claude Code and Codex keep MCP servers in files that are yours, so the installer prints the exact registration lines and never runs them:
 
 ```bash
-claude mcp add --scope user playwright -- npx -y @playwright/mcp@latest --headless --isolated
+claude mcp add --scope user playwright -- npx -y @playwright/mcp@0.0.83 --headless --isolated --executable-path=/usr/bin/chromium --output-dir=<worktree root>
+codex mcp add playwright -- npx -y @playwright/mcp@0.0.83 --headless --isolated --executable-path=/usr/bin/chromium --output-dir=<worktree root>
 ```
 
-For Codex, configure the same MCP server in user scope:
+`install --check` reads `~/.claude.json` and `~/.codex/config.toml` back and fails when an enabled host has no Playwright server registered, or one with another version or output directory (or `--allow-unrestricted-file-access`, which would let the browser open any `file://` path). To change the pin, edit `config.json`, run the installer, then `claude mcp remove --scope user playwright` / `codex mcp remove playwright` and register again with the new lines.
 
-```bash
-codex mcp add playwright -- npx -y @playwright/mcp@latest --headless --isolated
-```
+**Claude Code's `settings.json`** stays yours. The installer merges only `permissions.deny` (one `Bash(<prefix>:*)` rule per entry of `guard.deny`, the production deploy and merge commands) and `env.BASH_MAX_TIMEOUT_MS` (`claude.bashMaxTimeoutMs`, 15 minutes by default), and records what it added in `~/.local/share/mexxi/state/`. Changing `config.json` later removes only those entries, your own rules and keys are untouched, a value you set for the timeout yourself is reported as a conflict rather than overwritten, and `install --check` fails if an owned entry is missing.
 
 Start a new Codex session after installation. A non-empty `AGENTS.override.md` in Codex's home takes precedence over the installed `AGENTS.md`; remove your override when you want the shared guidance. Invoke command wrappers explicitly as `$mexxi-wettaq <request>`, `$mexxi-ittestja <request>`, `$mexxi-sewwi <request>`, or `$mexxi-fassal <request>`. These use the canonical command bodies with the invocation's request as their arguments; ordinary skills retain their existing names. Codex discovers skills through `/skills` or `$` and agents from its `agents/` directory. Unlike OpenCode and Claude's slash commands, these wrappers use Codex's native skill invocation.
 

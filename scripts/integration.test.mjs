@@ -6,6 +6,8 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { install } from "./install.mjs";
+import { playwrightArguments, registrationCommands } from "./lib/browser.mjs";
+import { loadConfig } from "./lib/config.mjs";
 import { check } from "./check-config.mjs";
 
 const checkout = fileURLToPath(new URL("../", import.meta.url));
@@ -30,6 +32,22 @@ async function copyCheckout(base) {
   }
 }
 
+// What `claude mcp add` and `codex mcp add` leave behind, so --check has the
+// registrations the installer asks the user to make. The installer never writes
+// these files itself.
+async function registerPlaywright(home, { codex = path.join(home, ".codex") } = {}) {
+  const { config } = await loadConfig({ file: path.join(home, ".config/mexxi/config.json"), home });
+  const args = ["-y", ...playwrightArguments(config.browser)];
+  if (config.hosts.claude) {
+    await writeFile(path.join(home, ".claude.json"), JSON.stringify({ mcpServers: { playwright: { type: "stdio", command: "npx", args, env: {} } } }));
+  }
+  if (!config.hosts.codex) return;
+  await mkdir(codex, { recursive: true });
+  const file = path.join(codex, "config.toml");
+  const existing = await readFile(file, "utf8").catch(() => "");
+  await writeFile(file, `${existing}[mcp_servers.playwright]\ncommand = "npx"\nargs = ${JSON.stringify(args)}\n`);
+}
+
 function execute(command, args, cwd, env = process.env) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { cwd, env, stdio: ["ignore", "pipe", "pipe"] });
@@ -45,6 +63,7 @@ test("shared setup is idempotent and installs the pinned Verifika skill", async 
   const home = await mkdtemp(path.join(os.tmpdir(), "coding-agent-install-"));
   t.after(() => rm(home, { recursive: true, force: true }));
   await configure(home);
+  await registerPlaywright(home);
   const options = { home, checkout, hookDirectory: path.join(home, "git-hooks") };
   assert.ok((await install(options)).created > 0);
   assert.equal((await install(options)).created, 0);
@@ -76,6 +95,7 @@ test("setup removes only dangling links it created for retired agents and skills
   const home = await mkdtemp(path.join(os.tmpdir(), "coding-agent-stale-"));
   t.after(() => rm(home, { recursive: true, force: true }));
   await configure(home);
+  await registerPlaywright(home);
   const options = { home, checkout, hookDirectory: path.join(home, "git-hooks") };
   await install(options);
   const retired = path.join(home, ".claude/agents/retired.md");
@@ -106,6 +126,7 @@ test("setup retires verify-runner links it installed and keeps user-owned files"
   const home = await mkdtemp(path.join(os.tmpdir(), "coding-agent-retired-runner-"));
   t.after(() => rm(home, { recursive: true, force: true }));
   await configure(home);
+  await registerPlaywright(home);
   const options = { home, checkout, hookDirectory: path.join(home, "git-hooks") };
   const bin = path.join(home, ".local/bin");
   await mkdir(bin, { recursive: true });
@@ -218,8 +239,9 @@ test("Codex setup respects a custom home and preserves personal settings", async
   const settings = '[tui]\nscreen_reader_detection_done = true\n';
   await writeFile(path.join(codex, "config.toml"), settings);
   await install({ home, checkout, codex });
+  await registerPlaywright(home, { codex });
   await install({ home, checkout, codex, check: true });
-  assert.equal(await readFile(path.join(codex, "config.toml"), "utf8"), settings);
+  assert.ok((await readFile(path.join(codex, "config.toml"), "utf8")).startsWith(settings), "personal Codex settings stay as they were");
   assert.match(await readFile(path.join(codex, "AGENTS.md"), "utf8"), /senior engineering deputy/);
   await assert.rejects(lstat(path.join(home, ".codex")), /ENOENT/);
 });
@@ -297,6 +319,7 @@ test("rendered host files keep command bodies canonical and --check catches drif
   await copyCheckout(clone);
   await symlink(path.join(checkout, "node_modules"), path.join(clone, "node_modules"), process.platform === "win32" ? "junction" : undefined);
   await configure(home, {}, clone);
+  await registerPlaywright(home);
   const options = { home, checkout: clone };
   await install(options);
   await install({ ...options, check: true });
@@ -324,6 +347,7 @@ test("models and hosts come from config.json, and --check notices a config chang
   const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-config-render-"));
   t.after(() => rm(home, { recursive: true, force: true }));
   await configure(home, { hosts: { codex: false }, models: { opencode: { explore: null }, claude: { reviewer: "opus" } } });
+  await registerPlaywright(home);
   await install({ home, checkout });
   await install({ home, checkout, check: true });
   assert.match(await readFile(path.join(home, ".claude/agents/code-reviewer.md"), "utf8"), /^model: "opus"$/m);
@@ -359,6 +383,7 @@ test("first run writes a minimal config.json, and only the configured clone may 
     $schema: path.join(clone, "config.schema.json"),
     paths: { checkout: "~/workspace/mexxi" },
   });
+  await registerPlaywright(home);
   await install({ home, checkout: clone, check: true });
   await assert.rejects(install({ home, checkout, check: true }), /expects the mexxi clone at/);
 });
@@ -367,6 +392,7 @@ test("--migrate-from relinks an old checkout's links, then a hand-edited host fi
   const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-migrate-"));
   t.after(() => rm(home, { recursive: true, force: true }));
   await configure(home);
+  await registerPlaywright(home);
   // What the previous installer left when the clone was ~/.config/opencode;
   // after the move these links dangle into the emptied directory.
   const old = path.join(home, ".config/opencode");
@@ -412,4 +438,128 @@ test("--migrate-from relinks an old checkout's links, then a hand-edited host fi
   await assert.rejects(install({ ...options, check: true }), /opencode\.json \(differs from config\.json/);
   assert.equal((await install(options)).rendered, 1);
   await install({ ...options, check: true });
+});
+
+test("Playwright MCP comes from config.json: rendered for OpenCode, printed for the others, and --check reads the hosts back", async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-playwright-"));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const output = path.join(home, "evidence");
+  await configure(home, { browser: { playwrightMcpVersion: "0.0.90", executablePath: "/opt/chrome", outputDir: output } });
+  const options = { home, checkout };
+  const result = await install(options);
+
+  const expected = ["npx", "-y", "@playwright/mcp@0.0.90", "--headless", "--isolated", "--executable-path=/opt/chrome", `--output-dir=${output}`];
+  const opencode = JSON.parse(await readFile(path.join(home, ".config/opencode/opencode.json"), "utf8"));
+  assert.deepEqual(opencode.mcp.playwright, { type: "local", command: expected, enabled: true });
+  assert.ok(!JSON.stringify(opencode).includes("allow-unrestricted-file-access"));
+  const line = `-- ${expected.join(" ")}`;
+  assert.deepEqual(result.registration, {
+    claude: `claude mcp add --scope user playwright ${line}`,
+    codex: `codex mcp add playwright ${line}`,
+  });
+  assert.deepEqual(result.registration, registrationCommands((await loadConfig({ file: path.join(home, ".config/mexxi/config.json"), home })).config.browser));
+
+  // Nothing registered yet: --check says so and prints the fix.
+  await assert.rejects(install({ ...options, check: true }), /claude: Playwright MCP not registered[\s\S]*run: claude mcp add[\s\S]*codex: Playwright MCP not registered[\s\S]*run: codex mcp add/);
+  await registerPlaywright(home);
+  await install({ ...options, check: true });
+
+  // A different version or output directory in either host is drift.
+  const claudeJson = path.join(home, ".claude.json");
+  const registered = await readFile(claudeJson, "utf8");
+  await writeFile(claudeJson, registered.replace("0.0.90", "latest"));
+  await assert.rejects(install({ ...options, check: true }), /claude: Playwright MCP runs @playwright\/mcp@latest, config\.json pins 0\.0\.90; run claude mcp remove/);
+  await writeFile(claudeJson, registered.replace(output, "/tmp/opencode-playwright"));
+  await assert.rejects(install({ ...options, check: true }), /claude: Playwright MCP writes to \/tmp\/opencode-playwright, config\.json expects/);
+  await writeFile(claudeJson, registered.replace('"--headless"', '"--allow-unrestricted-file-access","--headless"'));
+  await assert.rejects(install({ ...options, check: true }), /passes --allow-unrestricted-file-access/);
+  await writeFile(claudeJson, "{ not json");
+  await assert.rejects(install({ ...options, check: true }), /claude: Playwright MCP unreadable/);
+  await writeFile(claudeJson, registered);
+  const codexConfig = path.join(home, ".codex/config.toml");
+  const codexRegistered = await readFile(codexConfig, "utf8");
+  await writeFile(codexConfig, codexRegistered.replace("0.0.90", "0.0.83"));
+  await assert.rejects(install({ ...options, check: true }), /codex: Playwright MCP runs @playwright\/mcp@0\.0\.83, config\.json pins 0\.0\.90/);
+  // Codex users may format the table their own way: multi-line args, a trailing comma, other tables around it.
+  const args = JSON.parse(codexRegistered.match(/^args = (.*)$/m)[1]);
+  await writeFile(codexConfig, `[tui]\nx = 1\n\n[mcp_servers.playwright]\ncommand = "npx"\nargs = [\n  ${args.map((arg) => JSON.stringify(arg)).join(",\n  ")},\n]\n\n[mcp_servers.other]\nargs = ["x"]\n`);
+  await install({ ...options, check: true });
+  await rm(codexConfig);
+  await assert.rejects(install({ ...options, check: true }), /codex: Playwright MCP not registered \(.*does not exist\)/);
+
+  // A host that is switched off is not inspected.
+  await configure(home, { hosts: { codex: false }, browser: { playwrightMcpVersion: "0.0.90", executablePath: "/opt/chrome", outputDir: output } });
+  await install(options);
+  await install({ ...options, check: true });
+});
+
+test("settings.json gets only the keys mexxi owns, and --check notices a hand-removed one", async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-settings-"));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  await configure(home, { guard: { deny: ["firebase deploy", "npm publish"] } });
+  await registerPlaywright(home);
+  const settingsFile = path.join(home, ".claude/settings.json");
+  const stateFile = path.join(home, ".local/share/mexxi/state/claude-settings.json");
+  const options = { home, checkout };
+  const mine = {
+    model: "opus",
+    permissions: { allow: ["Bash(git status:*)"], deny: ["Bash(rm -rf:*)", "Bash(npm publish:*)"] },
+    env: { OTHER: "1" },
+    hooks: { Stop: [{ hooks: [{ type: "command", command: "true" }] }] },
+  };
+  await mkdir(path.dirname(settingsFile), { recursive: true });
+  await writeFile(settingsFile, JSON.stringify(mine));
+  const read = async () => JSON.parse(await readFile(settingsFile, "utf8"));
+
+  await assert.rejects(install({ ...options, check: true }), /Bash\(firebase deploy:\*\) is missing[\s\S]*env\.BASH_MAX_TIMEOUT_MS is missing/);
+  await install(options);
+  assert.deepEqual(await read(), {
+    ...mine,
+    permissions: { allow: mine.permissions.allow, deny: ["Bash(rm -rf:*)", "Bash(npm publish:*)", "Bash(firebase deploy:*)"] },
+    env: { OTHER: "1", BASH_MAX_TIMEOUT_MS: "900000" },
+  });
+  // The user's own copy of npm publish was there first, so it is not ours to remove.
+  assert.deepEqual(JSON.parse(await readFile(stateFile, "utf8")), { deny: ["Bash(firebase deploy:*)"], env: { BASH_MAX_TIMEOUT_MS: "900000" } });
+  const written = await readFile(settingsFile, "utf8");
+  await install(options);
+  await install({ ...options, check: true });
+  assert.equal(await readFile(settingsFile, "utf8"), written);
+
+  // A hand-removed owned entry turns --check red, and install puts it back.
+  await writeFile(settingsFile, written.replace('"Bash(firebase deploy:*)"', '"Bash(rm:*)"'));
+  await assert.rejects(install({ ...options, check: true }), /deny entry Bash\(firebase deploy:\*\) is missing/);
+  await install(options);
+  await install({ ...options, check: true });
+
+  // Changing config removes only what mexxi added; the timeout follows config.
+  await configure(home, { guard: { deny: ["gh pr merge"] }, claude: { bashMaxTimeoutMs: 600000 } });
+  await assert.rejects(install({ ...options, check: true }), /Bash\(firebase deploy:\*\) was added by mexxi and is no longer in config\.json/);
+  await install(options);
+  await install({ ...options, check: true });
+  const settings = await read();
+  assert.deepEqual(settings.permissions.deny, ["Bash(rm -rf:*)", "Bash(npm publish:*)", "Bash(rm:*)", "Bash(gh pr merge:*)"]);
+  assert.equal(settings.env.BASH_MAX_TIMEOUT_MS, "600000");
+  assert.equal(settings.model, "opus");
+  assert.deepEqual(settings.hooks, mine.hooks);
+
+  // A value the user set themselves is a conflict, not something to overwrite.
+  await writeFile(settingsFile, JSON.stringify({ env: { BASH_MAX_TIMEOUT_MS: "120000" } }));
+  await rm(stateFile);
+  await assert.rejects(install(options), /env\.BASH_MAX_TIMEOUT_MS is 120000, not set by mexxi/);
+  assert.equal(await readFile(settingsFile, "utf8"), JSON.stringify({ env: { BASH_MAX_TIMEOUT_MS: "120000" } }));
+  await writeFile(settingsFile, "{ not json");
+  await assert.rejects(install(options), /settings\.json is not a JSON object/);
+  assert.equal(await readFile(settingsFile, "utf8"), "{ not json");
+});
+
+test("the default deny rules are the plan's starter list, and guard has what the Phase 3 guard reads", async () => {
+  const { config } = await loadConfig({ file: path.join(os.tmpdir(), "mexxi-no-such-config.json"), home: os.tmpdir() });
+  const { desiredSettings } = await import("./lib/claude-settings.mjs");
+  assert.deepEqual(desiredSettings(config).deny, [
+    "Bash(firebase deploy:*)", "Bash(npm run deploy:*)", "Bash(npm publish:*)", "Bash(gcloud functions deploy:*)",
+    "Bash(gcloud run deploy:*)", "Bash(vercel --prod:*)", "Bash(netlify deploy --prod:*)", "Bash(gh pr merge:*)",
+    "Bash(gh release create:*)", "Bash(git push --force:*)", "Bash(git push -f:*)",
+  ]);
+  assert.deepEqual(config.guard.protectedBranches, []);
+  assert.equal(desiredSettings(config).env.BASH_MAX_TIMEOUT_MS, "900000");
 });

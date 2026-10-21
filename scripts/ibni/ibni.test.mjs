@@ -7,6 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { loadConfig } from "../lib/config.mjs";
 import { COMMANDS } from "./ibni.mjs";
 import { MEDIA_EXTENSIONS } from "./lib/media.mjs";
 
@@ -899,6 +900,10 @@ test("prepare provides an evidence directory outside the worktree that cleanup r
   assert.equal(evidenceDir, `${worktreePath}.evidence`);
   assert.equal(await pathExists(evidenceDir), true);
   assert.ok(!evidenceDir.startsWith(`${worktreePath}${path.sep}`));
+  // Playwright writes screenshots into browser.outputDir, which defaults to the
+  // worktree root, so rendered QA can save straight into evidenceDir.
+  const { config } = await loadConfig({ file: fixture.config });
+  assert.ok(evidenceDir.startsWith(`${config.browser.outputDir}${path.sep}`), `${evidenceDir} is outside ${config.browser.outputDir}`);
   const info = await lifecycle(fixture, fixture.control, "info", { session: sessionId });
   assert.equal(info.json.evidenceDir, evidenceDir);
 

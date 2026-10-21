@@ -132,7 +132,7 @@
       "default": {},
       "properties": {
         "deny": {
-          "description": "Command patterns the guard refuses, such as production deploys.",
+          "description": "Command prefixes refused on every host, such as production deploys. The installer also writes each as a Bash(<prefix>:*) permissions.deny rule in Claude Code's settings.json; the guard hook repeats them as patterns, because a prefix rule is sidestepped by cd x && <command>.",
           "type": "array",
           "items": { "type": "string", "minLength": 1 },
           "default": [
@@ -155,6 +155,15 @@
           "items": { "type": "string", "minLength": 1 },
           "default": []
         }
+      }
+    },
+    "claude": {
+      "description": "Settings the installer merges into Claude Code's own settings.json, alongside the production deny rules from guard.deny. Everything else in that file stays yours.",
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "bashMaxTimeoutMs": { "description": "Longest a foreground Bash command may run (BASH_MAX_TIMEOUT_MS), in milliseconds. Set it above your slowest repository's verify run; the default is 15 minutes.", "type": "integer", "minimum": 1000, "default": 900000 }
       }
     },
     "jev": {

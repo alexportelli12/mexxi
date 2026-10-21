@@ -4,6 +4,8 @@ import { access, chmod, lstat, mkdir, readFile, readdir, readlink, symlink, unli
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { registrationCommands, registrationDrift } from "./lib/browser.mjs";
+import { desiredSettings, planSettingsMerge, writeSettingsMerge } from "./lib/claude-settings.mjs";
 import { abbreviateHome, configPath, loadConfig, minimalConfig } from "./lib/config.mjs";
 import { codexCommandSkill, renderDrift, renderHostFiles, writeRendered } from "./lib/render.mjs";
 
@@ -251,6 +253,15 @@ export async function install(options = {}) {
       else throw error;
     }
   }
+  // Only the keys mexxi owns in Claude Code's settings.json are merged.
+  const settingsFiles = {
+    settingsFile: path.join(options.claude ?? path.join(home, ".claude"), "settings.json"),
+    stateFile: path.join(home, ".local/share/mexxi/state/claude-settings.json"),
+  };
+  const settingsPlan = config.hosts.claude
+    ? await planSettingsMerge({ ...settingsFiles, desired: desiredSettings(config) })
+    : null;
+  conflicts.push(...(settingsPlan?.conflicts ?? []));
   if (conflicts.length) throw new Error(`existing configuration differs; no changes made:\n${conflicts.join("\n")}`);
   const drift = await renderDrift(generated, rendered);
   if (options.check) {
@@ -260,6 +271,12 @@ export async function install(options = {}) {
       ...pending.map(([destination]) => destination),
       ...relinks.map(([destination]) => `${destination} (points into the old checkout)`),
       ...stale.map((link) => `${link} (stale)`),
+      ...(settingsPlan?.drift ?? []),
+      ...await registrationDrift({
+        browser: config.browser, hosts: config.hosts,
+        claudeJson: options.claudeJson ?? path.join(home, ".claude.json"),
+        codexConfig: path.join(options.codex ?? path.join(home, ".codex"), "config.toml"),
+      }),
     ];
     if (incomplete.length) throw new Error(`setup incomplete:\n${incomplete.join("\n")}`);
     return { created: 0, relinked: 0, removed: 0, rendered: 0, checked: entries.length };
@@ -269,6 +286,7 @@ export async function install(options = {}) {
     await writeFile(configFile, `${JSON.stringify(minimalConfig({ checkout, home }), null, 2)}\n`, { flag: "wx" });
   }
   await writeRendered(generated, rendered);
+  if (settingsPlan) await writeSettingsMerge(settingsFiles, settingsPlan);
   for (const link of stale) await unlink(link);
   for (const [destination, source] of [...relinks, ...pending]) {
     await mkdir(path.dirname(destination), { recursive: true });
@@ -282,7 +300,11 @@ export async function install(options = {}) {
       await symlink(source, destination, process.platform === "win32" && !source.endsWith(".md") && !source.endsWith(".json") && !source.endsWith(".toml") ? "junction" : undefined);
     }
   }
-  return { created: pending.length, relinked: relinks.length, removed: stale.length, rendered: drift.length, checked: entries.length };
+  const registration = Object.fromEntries(Object.entries(registrationCommands(config.browser)).filter(([host]) => config.hosts[host]));
+  return {
+    created: pending.length, relinked: relinks.length, removed: stale.length, rendered: drift.length, checked: entries.length,
+    settings: settingsPlan?.drift.length ?? 0, registration,
+  };
 }
 
 function windowsWrapper(module) {
@@ -308,7 +330,13 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       codex: process.env.CODEX_HOME ? path.resolve(process.env.CODEX_HOME) : undefined,
       configFile: configPath(), migrateFrom,
     });
-    process.stdout.write(`${JSON.stringify(result)}\n`);
+    const { registration = {}, ...summary } = result;
+    process.stdout.write(`${JSON.stringify(summary)}\n`);
+    // The installer never touches a host's MCP registry; these are for you to run.
+    // `install --check` fails until each registered server matches them.
+    if (Object.keys(registration).length) {
+      process.stdout.write(`Register the Playwright MCP server on each host (not run by the installer):\n${Object.values(registration).map((line) => `  ${line}`).join("\n")}\n`);
+    }
   } catch (error) {
     process.stderr.write(`${error.message}\n`);
     process.exitCode = 1;
