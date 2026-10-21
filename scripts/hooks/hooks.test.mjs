@@ -440,6 +440,31 @@ test("the guard fails closed when it breaks while checking", async () => {
   }
 });
 
+test("a command sent as an argv array is read as that argv, and one the guard cannot read is refused", async () => {
+  const withCommand = (input, command) => ({ ...input, tool_input: { ...input.tool_input, command } });
+  const { "tool.execute.before": before } = await opencodePlugin.server({ directory: clone });
+  const opencode = (command) => before({ tool: "bash", sessionID: "s", callID: "c" }, { args: { command } }).then(() => null, (error) => error.message);
+  const hosts = async (command) => [
+    runHook("guard.mjs", withCommand(claudeInput("", clone), command)),
+    runHook("guard.mjs", withCommand(codexInput("", clone), command)),
+    { code: (await opencode(command)) ? 2 : 0, stderr: (await opencode(command)) ?? "" },
+  ];
+  // Codex has sent argv arrays such as ["bash", "-lc", "<script>"].
+  for (const command of [["bash", "-lc", "git push -f origin feature"], ["git", "push", "--force"], ["sh", "-c", "cd x && gh pr merge 1"]]) {
+    for (const result of await hosts(command)) {
+      assert.equal(result.code, 2, `should block: ${JSON.stringify(command)}`);
+      assert.match(result.stderr, /force|merge decisions/);
+    }
+  }
+  for (const result of await hosts(["git", "commit", "-m", "it's done; git push --force is never used"])) assert.equal(result.code, 0, result.stderr);
+  for (const command of [{ script: "git push -f" }, 42, null, ["git", 1]]) {
+    for (const result of await hosts(command)) {
+      assert.equal(result.code, 2, `should refuse: ${JSON.stringify(command)}`);
+      assert.match(result.stderr, /could not read the command/);
+    }
+  }
+});
+
 test("the guard fails closed when its own code cannot load", async () => {
   // A copy of the hook entry beside guard code that is missing or broken, as
   // a half-finished checkout or a bad edit would leave it.

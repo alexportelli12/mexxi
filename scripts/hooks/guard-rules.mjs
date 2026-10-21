@@ -460,7 +460,19 @@ export async function guardConfig() {
 // Host-neutral entry: the tool call in Claude Code's PreToolUse shape, which
 // Codex shares and OpenCode's plugin builds.
 export async function guardToolCall(input, { config, home } = {}) {
-  const command = input?.tool_input?.command;
-  if (!SHELL_TOOLS.has(input?.tool_name) || typeof command !== "string") return null;
+  if (!SHELL_TOOLS.has(input?.tool_name)) return null;
+  const command = commandLine(input.tool_input?.command);
+  if (command === null) {
+    return `could not read the command (expected a string or an array of strings, got ${JSON.stringify(input.tool_input?.command) ?? "nothing"}); refusing it`;
+  }
   return checkCommand(command, { cwd: input.cwd || process.cwd(), config: config ?? await guardConfig(), home });
+}
+
+// The shell command line a tool call runs. Codex has sent an argv array
+// (["bash", "-lc", "<script>"]); it is quoted word by word so the reader sees
+// exactly that argv. Anything else is unreadable: null.
+function commandLine(command) {
+  if (typeof command === "string") return command;
+  if (!Array.isArray(command) || !command.length || !command.every((word) => typeof word === "string")) return null;
+  return command.map((word) => `'${word.replace(/'/g, "'\\''")}'`).join(" ");
 }
