@@ -1544,6 +1544,28 @@ test("publish retries a push once after an HTTP 5xx and never after other failur
   assert.equal(await pushes(), 2);
 });
 
+test("publish works with git before 2.46, which has no ls-remote --branches", async (t) => {
+  const fixture = await createFixture(t);
+  const stubDirectory = await mkdtemp(path.join(os.tmpdir(), "ibni-old-git-"));
+  t.after(() => rm(stubDirectory, { recursive: true, force: true }));
+  const realGit = (await run("sh", ["-c", "command -v git"])).stdout.trim();
+  await writeFile(path.join(stubDirectory, "git"), `#!/bin/sh
+if [ "$1" = "ls-remote" ] && [ "$2" = "--branches" ]; then
+  echo "error: unknown option \\\`branches'" >&2
+  exit 129
+fi
+exec "${realGit}" "$@"
+`, "utf8");
+  await chmod(path.join(stubDirectory, "git"), 493);
+  const env = { PATH: `${stubDirectory}:${ghEnv(fixture.gh).PATH}` };
+
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "old git" });
+  await commit(prepared.json.worktreePath, "feature.txt", "feature\n", "feature");
+  await recordEvidence(fixture, prepared);
+  const published = await lifecycle(fixture, prepared.json.worktreePath, "publish", { session: prepared.json.sessionId }, [0], env);
+  assert.equal(published.json.published, true);
+});
+
 async function optInToBaselineReuse(fixture, ciCheck = "verify") {
   await git(fixture.seed, "pull", "--quiet", "origin", "trunk");
   const sha = await commit(fixture.seed, ".mexxi.json", `${JSON.stringify({ ciCheck })}\n`, "name the CI check");

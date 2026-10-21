@@ -164,7 +164,7 @@ export async function fetchBranch(root, remote, branch) {
 }
 
 export async function remoteBranchSha(root, remote, branch) {
-  const result = await git(root, ["ls-remote", "--branches", remote, `refs/heads/${branch}`]);
+  const result = await git(root, ["ls-remote", "--heads", remote, `refs/heads/${branch}`]);
   const line = result.stdout.trim();
   if (!line) return null;
   const [sha, ref, ...extra] = line.split(/\s+/);

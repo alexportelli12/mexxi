@@ -203,8 +203,14 @@ test("server errors, malformed answers, network errors and timeouts fail open wi
   const offline = await call(async () => { throw new TypeError("fetch failed", { cause: new Error("getaddrinfo ENOTFOUND") }); });
   assert.deepEqual([offline.outcome, offline.reason], ["failed", "request failed: getaddrinfo ENOTFOUND"]);
 
-  // A server that never answers: the per-request timeout aborts it.
-  const hang = (init) => new Promise((_resolve, reject) => { init.signal.addEventListener("abort", () => reject(init.signal.reason)); });
+  // A server that never answers: the per-request timeout aborts it. A real
+  // request holds a socket open; the fake holds a timer instead, because the
+  // timeout's own timer does not keep Node running and Node 22's test runner
+  // would otherwise cancel the test before the abort fires.
+  const hang = (init) => new Promise((_resolve, reject) => {
+    const socket = setTimeout(() => {}, 60_000);
+    init.signal.addEventListener("abort", () => { clearTimeout(socket); reject(init.signal.reason); });
+  });
   const started = Date.now();
   const timedOut = await call(fakeFetch(hang).fetchImpl, { timeoutMs: 50 });
   assert.deepEqual([timedOut.outcome, timedOut.reason, timedOut.attempts], ["failed", "timed out after 50 ms", 1]);

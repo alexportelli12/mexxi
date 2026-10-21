@@ -40,10 +40,15 @@ test("Playwright comes from the cache of the pinned MCP version, then from the t
     await locatePlaywright({ cacheRoot: cache, mcpVersion: "0.0.83", cwd: emptyCwd }),
     path.join(cache, "bbb/node_modules/playwright-core/index.mjs"),
   );
-  await assert.rejects(
-    locatePlaywright({ cacheRoot: cache, mcpVersion: "9.9.9", cwd: emptyCwd }),
-    /Playwright was not found\. Run `npx -y @playwright\/mcp@9\.9\.9 --help`/,
-  );
+  // Node also resolves from NODE_PATH and ~/.node_modules, fixed at startup, so
+  // the not-found case runs in a process with neither.
+  const notFound = spawnSync(process.execPath, ["--input-type=module", "-e", `
+    const { locatePlaywright } = await import(${JSON.stringify(pathToFileURL(script).href)});
+    await locatePlaywright({ cacheRoot: process.argv[1], mcpVersion: "9.9.9", cwd: process.argv[2] })
+      .then(() => process.exit(0), (error) => { process.stderr.write(error.message); process.exit(3); });
+  `, cache, emptyCwd], { encoding: "utf8", env: { ...process.env, NODE_PATH: "", HOME: root, USERPROFILE: root } });
+  assert.equal(notFound.status, 3, notFound.stderr);
+  assert.match(notFound.stderr, /Playwright was not found\. Run `npx -y @playwright\/mcp@9\.9\.9 --help`/);
   const repository = path.join(root, "repository");
   await install(repository, { "playwright-core": "1.2.3" });
   await writeFile(path.join(repository, "node_modules/playwright-core/index.js"), "");
