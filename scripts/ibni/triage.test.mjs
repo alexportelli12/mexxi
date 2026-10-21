@@ -71,6 +71,11 @@ test("every shared secret pattern compiles and redacts a planted token", async (
     "Shopify token": "shpat_0123456789abcdef0123",
     JWT: "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghij",
     "bearer credential": "BEARER abcdefghijklmnopqrst",
+    "URL credentials": "postgres://u:p4ssw0rd@db",
+    "basic auth header": "Authorization: Basic dXNlcjpwYXNzd29yZA==",
+    "Stripe key": "sk_live_0123456789abcdefABCD",
+    "GitLab token": "glpat-abcdefghij0123456789",
+    "quoted secret-named field": "\"apiKey\": \"q1w2e3r4\"",
     "secret-named assignment": "db_password=hunter2",
     "long opaque token": "a1b2c3d4e5f6a7b8c9d0a1b2c3d4e5f6a7b8c9d0e1",
   };
@@ -83,6 +88,33 @@ test("every shared secret pattern compiles and redacts a planted token", async (
   assert.deepEqual(redact("rename the settings page"), { text: "rename the settings page", count: 0 });
   // A key block spanning lines goes as one, with nothing of its body left.
   assert.deepEqual(redact(`cat id_rsa\n${samples["PEM private key"]}\ndone`), { text: `cat id_rsa\n${REDACTION}\ndone`, count: 1 });
+});
+
+const CREDENTIAL_CASES = [
+  ["postgres://u:p@db.internal:5432/app", `postgres://${REDACTION}@db.internal:5432/app`],
+  ["https://deploy:s3cr@t@example.com/x", `https://${REDACTION}@example.com/x`],
+  ["curl -H 'Authorization: Basic dXNlcjpwYXNzd29yZA=='", `curl -H '${REDACTION}'`],
+  ["STRIPE=sk_test_0123456789abcdefABCD", `STRIPE=${REDACTION}`],
+  ["sk_live_0123456789abcdefABCD", REDACTION],
+  ["https://oauth2:glpat-abcdefghij0123456789@gitlab.com/a/b", `https://${REDACTION}@gitlab.com/a/b`],
+  ["export GL=glpat-abcdefghij0123456789", `export GL=${REDACTION}`],
+  ['{"apiKey": "q1w2e3r4", "name": "x"}', `{${REDACTION}, "name": "x"}`],
+  ['{"client_secret":"a b", "password": "it\'s", "access_token": "t"}', `{${REDACTION}, ${REDACTION}, ${REDACTION}}`],
+  ["{'auth': 'user:pass'}", `{${REDACTION}}`],
+];
+const CREDENTIAL_FREE = [
+  "https://example.com:8443/settings?tab=general",
+  "postgres://localhost:5432/app and git@github.com:owner/repo.git",
+  "mailto:someone@example.com, https://example.com/@user",
+  "Use basic authentication and a basic configuration",
+  "the API key lives in the vault; set a token before you sort keys",
+  '{"name": "settings", "keyboard": "qwerty", "input_tokens": 900}',
+  "sk_live_ is Stripe's live prefix",
+];
+
+test("credentials in URLs, Basic headers, Stripe and GitLab keys and quoted fields are redacted; plain text is not", () => {
+  for (const [input, expected] of CREDENTIAL_CASES) assert.equal(redact(input).text, expected, input);
+  for (const plain of CREDENTIAL_FREE) assert.deepEqual(redact(plain), { text: plain, count: 0 }, plain);
 });
 
 test("a planted token in the request is replaced before sending and the call counts as redacted", () => {

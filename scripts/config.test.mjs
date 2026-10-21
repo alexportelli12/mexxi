@@ -92,3 +92,12 @@ test("the first-run file records only the clone's location", async (t) => {
   assert.equal(exists, true);
   assert.equal(config.paths.checkout, path.join(home, "code/mexxi"));
 });
+
+test("Jev's endpoint, which receives the API key, must be HTTPS unless it is on loopback", async () => {
+  for (const endpoint of ["http://openrouter.ai/api/alpha/decisions", "http://localhost.example.com/x", "http://127.0.0.1.example.com/x", "ftp://openrouter.ai/x"]) {
+    await assert.rejects(resolveConfig({ jev: { endpoint } }, { home }), /config\.jev\.endpoint: does not match/, endpoint);
+  }
+  for (const endpoint of ["https://openrouter.ai/api/alpha/decisions", "http://127.0.0.1:4100/api/alpha/decisions", "http://localhost/x", "http://[::1]:8080/x"]) {
+    assert.equal((await resolveConfig({ jev: { endpoint } }, { home })).jev.endpoint, endpoint);
+  }
+});

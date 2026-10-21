@@ -6,6 +6,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { REDACTION, redact } from "../lib/redact.mjs";
 import { RetroError, assertPrivateOutput, goalTable, mergeSessions, renderMarkdown, retro, summarizeIbni, summarizeSession } from "./retro.mjs";
 
 const run = promisify(execFile);
@@ -96,6 +97,32 @@ test("the extractor's redaction reads every shared pattern, a PEM block across l
   const source = JSON.parse(await readFile(new URL("../lib/secret-patterns.json", import.meta.url), "utf8"));
   assert.equal(count, source.patterns.length);
   assert.equal(text, "cat key.pem\n[REDACTED]\nuse [REDACTED] here");
+});
+
+test("the extractor redacts URL credentials, Basic headers, Stripe and GitLab keys and quoted fields exactly as ibni does", async () => {
+  const program = [
+    "import importlib.util, json, sys",
+    "spec = importlib.util.spec_from_file_location('session_retro', sys.argv[1])",
+    "module = importlib.util.module_from_spec(spec)",
+    "spec.loader.exec_module(module)",
+    "print(json.dumps([module.redact(text) for text in json.loads(sys.argv[2])]))",
+  ].join("\n");
+  const texts = [
+    "postgres://u:p@db.internal:5432/app",
+    "https://deploy:s3cr@t@example.com/x",
+    "curl -H 'Authorization: Basic dXNlcjpwYXNzd29yZA=='",
+    "STRIPE=sk_test_0123456789abcdefABCD and sk_live_0123456789abcdefABCD",
+    "https://oauth2:glpat-abcdefghij0123456789@gitlab.com/a/b",
+    '{"apiKey": "q1w2e3r4", "client_secret":"a b", "password": "it\'s", "name": "x"}',
+    "{'auth': 'user:pass'}",
+    "https://example.com:8443/settings?tab=general and postgres://localhost:5432/app",
+    "Use basic authentication; the API key lives in the vault",
+    '{"name": "settings", "keyboard": "qwerty", "input_tokens": 900}',
+  ];
+  const { stdout } = await run("python3", ["-I", "-c", program, EXTRACTOR, JSON.stringify(texts)]);
+  const expected = texts.map((text) => redact(text).text);
+  assert.ok(expected[0].includes(REDACTION) && !expected[0].includes("u:p@"), "the JavaScript redactor covers URL credentials");
+  assert.deepEqual(JSON.parse(stdout), expected);
 });
 
 test("--since and --until select sessions by start, a bare --until date includes that day, and undated sessions fall outside", async (t) => {
