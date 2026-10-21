@@ -73,18 +73,19 @@ test('a finished run shows its stage, gates, worktree, port and PR link', async 
     expect(await text(/^Worktree/)).toContain(info.worktreePath)
     expect(await text(/^Port/)).toMatch(/4300/)
     expect(await ui.find({ type: 'Link' })).toMatchObject({ props: { href: 'https://github.com/alexportelli12/example/pull/42' } })
-    expect(await text(/Jev triage/)).toBeUndefined()
+    expect(await text(/Jev triage/)).toBeDefined()
+    expect(await text(/userFacing/)).toBe('  userFacing: no (90%)')
+    expect(await text(/reviewValue/)).toBe('  reviewValue: 2.4 (60%)')
     await ui.unmount()
   }
 })
 
-test("Jev's triage answers show once ibni records them", async ($, on) => {
-  const triage = { userFacing: { answer: 'yes', confidence: 0.9 }, size: { answer: 'local', confidence: 0.7 } }
-  engine(on, { info, stats: { ...stats, triage } })
+test('Jev triage is absent until a triage call is answered', async ($, on) => {
+  const skipped = { ...stats.triage, status: 'skipped', reason: 'jev.enabled is false', answers: null }
+  engine(on, { info, stats: { ...stats, triage: skipped } })
   await $.tool.call({ tool: 'Bash', command: `ibni info --session ${SESSION}` })
   const ui = await $.ui.mount({ ...PANE, surface: 'desktop' })
-  expect(await ui.find({ type: 'Text', text: /Jev triage/ })).toBeDefined()
-  expect((await ui.find({ type: 'Text', text: /userFacing/ }))?.text).toBe('  userFacing: yes (90%)')
+  expect(await ui.find({ type: 'Text', text: /Jev triage/ })).toBeUndefined()
   await ui.unmount()
 })
 

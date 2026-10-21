@@ -1,5 +1,6 @@
 import { sessionWorkspace } from "../lib/session.mjs";
 import { summarizeTimings } from "../lib/timings.mjs";
+import { summarizeTriage } from "./triage.mjs";
 
 export async function workspaceStats({ cwd = process.cwd(), sessionId }) {
   const { entry: { metadata } } = await sessionWorkspace(cwd, sessionId);
@@ -12,5 +13,6 @@ export async function workspaceStats({ cwd = process.cwd(), sessionId }) {
     createdAt: metadata.createdAt,
     adoptions: metadata.adoptions ?? [],
     ...summarizeTimings(metadata),
+    triage: summarizeTriage(metadata),
   };
 }

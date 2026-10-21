@@ -14,7 +14,7 @@ export type RunPaneGate = {
 }
 
 // The fields of `ibni info` and `ibni stats` the pane draws; triage is Jev's
-// answers once Phase 6 records them, absent before.
+// latest answers (stats' triage.answers), null until a triage call is answered.
 export type RunPaneSnapshot = {
   sessionId: string
   branch?: string

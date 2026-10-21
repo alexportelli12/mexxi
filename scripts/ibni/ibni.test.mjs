@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { access, chmod, mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
+import http from "node:http";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -93,6 +94,8 @@ async function lifecycle(fixture, cwd, operation, options = {}, allowedExitCodes
       MEXXI_CONFIG: fixture.config,
       IMPLEMENTATION_WORKTREE_ROOT: "",
       OPENCODE_WORKTREE_ROOT: "",
+      // Tests never reach OpenRouter with a real key; triage tests set their own.
+      OPENROUTER_API_KEY: "",
       ...ghEnv(fixture.gh),
       ...extraEnv,
     },
@@ -1188,16 +1191,66 @@ test("prepare assigns each workspace a free port, skipping recorded and bound on
   assert.equal((await git(fixture.control, "worktree", "list", "--porcelain")).stdout.match(/^worktree /gm).length, 3);
 });
 
+// A local stand-in for OpenRouter's Decisions API: answers each request from
+// a queue ({status, body} or {hang: true}) and keeps what it was sent.
+async function jevStub(t, responses) {
+  const requests = [];
+  const server = http.createServer((request, response) => {
+    let body = "";
+    request.on("data", (chunk) => { body += chunk; });
+    request.on("end", () => {
+      requests.push({ headers: request.headers, body: JSON.parse(body) });
+      const next = responses.shift() ?? { status: 500, body: { error: { code: 500, message: "stub exhausted" } } };
+      if (next.hang) return;
+      response.writeHead(next.status, { "content-type": "application/json" });
+      response.end(JSON.stringify(next.body));
+    });
+  });
+  await new Promise((resolve) => { server.listen(0, "127.0.0.1", resolve); });
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  return { requests, endpoint: `http://127.0.0.1:${server.address().port}/api/alpha/decisions` };
+}
+
+const JEV_ANSWERS = {
+  id: "gen-1",
+  model: "typesafe/jev-1.14-20261001",
+  answers: {
+    existingUi: { type: "noul", noul: 0.2 },
+    userFacing: { type: "noul", noul: 0.1 },
+    oneWayDoor: { type: "noul", noul: 0.05 },
+    size: { type: "choice", choice: "local", confidence: 0.8, probabilities: { local: 0.8, feature: 0.2 } },
+    reviewValue: { type: "score", score: 2.4, confidence: 0.6, probabilities: { 0: 0, 1: 0.1, 2: 0.4, 3: 0.5 } },
+  },
+  usage: { input_tokens: 900, output_tokens: 0, cost: 0.00004 },
+};
+
+async function useJev(fixture, jev) {
+  await writeFile(fixture.config, JSON.stringify({ paths: { worktreeRoot: fixture.worktrees }, jev }));
+}
+
+// The request and contract files /wettaq writes before calling triage.
+async function triageFiles(evidenceDir, request = "Rename the settings page", contract = "Goal: rename the page.") {
+  const files = { "request-file": path.join(evidenceDir, "request.md"), "contract-file": path.join(evidenceDir, "contract.md") };
+  await writeFile(files["request-file"], request);
+  await writeFile(files["contract-file"], contract);
+  return files;
+}
+
 test("lifecycle steps, verify attempts and finding counts are recorded and reported by stats", async (t) => {
   const fixture = await createFixture(t);
+  await useGithubRemote(fixture);
+  const jev = await jevStub(t, [{ status: 200, body: JEV_ANSWERS }]);
+  await useJev(fixture, { enabled: true, endpoint: jev.endpoint, owners: ["acme"], repositories: ["acme/widgets"] });
   const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "timed" });
   const { sessionId, worktreePath } = prepared.json;
+  const triaged = await lifecycle(fixture, fixture.control, "triage", { session: sessionId, ...await triageFiles(prepared.json.evidenceDir) }, [0], { OPENROUTER_API_KEY: "test-key" });
+  assert.equal(triaged.json.outcome, "answered");
   await commit(worktreePath, "feature.txt", "feature\n", "feature");
-  for (const options of [{ verify: "fail" }, { verify: "pass" }, { review: "3" }, { qa: "0" }, { review: "1" }]) {
+  for (const options of [{ "before-shots": "skipped" }, { verify: "fail" }, { verify: "pass" }, { review: "3" }, { qa: "0" }, { review: "1" }]) {
     const recorded = await lifecycle(fixture, fixture.control, "record", { session: sessionId, ...options });
     assert.equal(recorded.json.operation, "record");
   }
-  for (const options of [{}, { verify: "maybe" }, { review: "-1" }, { verify: "pass", qa: "1" }]) {
+  for (const options of [{}, { verify: "maybe" }, { review: "-1" }, { verify: "pass", qa: "1" }, { "before-shots": "maybe" }]) {
     await lifecycle(fixture, fixture.control, "record", { session: sessionId, ...options }, [2]);
   }
   await lifecycle(fixture, worktreePath, "publish", { session: sessionId });
@@ -1222,6 +1275,15 @@ test("lifecycle steps, verify attempts and finding counts are recorded and repor
   assert.deepEqual(stats.json.verify.history.map((entry) => entry.outcome), ["fail", "pass"]);
   assert.deepEqual([stats.json.review.rounds, stats.json.review.findings], [2, 4]);
   assert.deepEqual([stats.json.qa.rounds, stats.json.qa.findings], [1, 0]);
+  assert.equal(stats.json.triage.status, "answered");
+  assert.deepEqual(stats.json.triage.answers.userFacing, { answer: "no", confidence: 0.9 });
+  // Triage advised against rendered QA, which the agent ran; the other two gates agree.
+  assert.deepEqual(stats.json.triage.agreement.gates, {
+    beforeShots: { triage: false, agent: false, agree: true },
+    renderedQa: { triage: false, agent: true, agree: false },
+    review: { triage: true, agent: true, agree: true },
+  });
+  assert.deepEqual([stats.json.triage.agreement.compared, stats.json.triage.agreement.agreed], [3, 2]);
 
   // The run pane mod's tests draw from a recording of this scenario; it must
   // keep the shape ibni prints, or those tests prove nothing.
@@ -1234,6 +1296,107 @@ test("lifecycle steps, verify attempts and finding counts are recorded and repor
     const live = await lifecycle(fixture, fixture.root, operation, { session: sessionId });
     assert.deepEqual(shape(json), shape(live.json), `claude/mods/run-pane/tests/recorded.mjs no longer matches ibni ${operation}; record it again`);
   }
+});
+
+test("triage sends nothing unless enabled, listed, owned by you and keyed, and records why", async (t) => {
+  const jev = await jevStub(t, []);
+  const key = { OPENROUTER_API_KEY: "test-key" };
+  const triage = async (fixture, prepared, env = key) => {
+    const result = await lifecycle(fixture, fixture.control, "triage", { session: prepared.json.sessionId, ...await triageFiles(prepared.json.evidenceDir) }, [0], env);
+    assert.equal(result.json.stage, "shadow");
+    assert.equal(result.json.outcome, "skipped");
+    return result.json.reason;
+  };
+
+  const local = await createFixture(t);
+  const localPrepared = await lifecycle(local, local.control, "prepare", { slug: "local remote" });
+  assert.equal(await triage(local, localPrepared), "jev.enabled is false");
+  await useJev(local, { enabled: true, endpoint: jev.endpoint, owners: ["acme"], repositories: ["acme/widgets"] });
+  assert.match(await triage(local, localPrepared), /^remote origin is not a GitHub repository/);
+
+  const fixture = await createFixture(t);
+  await useGithubRemote(fixture);
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "policy" });
+  const reasons = [];
+  for (const [jevConfig, env] of [
+    [{ enabled: true, endpoint: jev.endpoint, owners: ["acme"], repositories: ["acme/other"] }, key],
+    // Listed, but owned by an organisation that is not yours: excluded by default.
+    [{ enabled: true, endpoint: jev.endpoint, owners: ["alexportelli12"], repositories: ["acme/widgets"] }, key],
+    [{ enabled: true, endpoint: jev.endpoint, owners: ["ACME"], repositories: ["Acme/Widgets"] }, {}],
+  ]) {
+    await useJev(fixture, jevConfig);
+    reasons.push(await triage(fixture, prepared, env));
+  }
+  assert.deepEqual(reasons, [
+    "acme/widgets is not listed in jev.repositories",
+    "acme/widgets is owned by acme, which is not one of jev.owners; another organisation's content is not only yours to share",
+    "OPENROUTER_API_KEY is not set",
+  ]);
+  assert.equal(jev.requests.length, 0, "no skipped triage reaches the network");
+
+  const stats = await lifecycle(fixture, fixture.root, "stats", { session: prepared.json.sessionId });
+  assert.deepEqual(stats.json.triage.calls.map((call) => [call.outcome, call.reason]), reasons.map((reason) => ["skipped", reason]));
+  assert.deepEqual([stats.json.triage.status, stats.json.triage.answers], ["skipped", null]);
+  assert.deepEqual(stats.json.triage.agreement.gates.review, { triage: null, agent: null, agree: null });
+});
+
+test("triage sends only redacted metadata, records the answers and their cost, and keeps them from the agent", async (t) => {
+  const fixture = await createFixture(t);
+  await useGithubRemote(fixture);
+  const jev = await jevStub(t, [{ status: 200, body: JEV_ANSWERS }]);
+  await useJev(fixture, { enabled: true, endpoint: jev.endpoint, owners: ["acme"], repositories: ["acme/widgets"] });
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "metadata only" });
+  const { sessionId, worktreePath, evidenceDir } = prepared.json;
+  await commit(worktreePath, "committed.txt", "COMMITTED-CONTENT\n", "committed");
+  await writeFile(path.join(worktreePath, "README.md"), "initial\nUNCOMMITTED-CONTENT\n");
+  await writeFile(path.join(worktreePath, "untracked.txt"), "UNTRACKED-CONTENT\n");
+  await writeFile(path.join(worktreePath, ".env"), "API_TOKEN=ENV-CONTENT\n");
+  const token = "ghp_abcdefghijklmnopqrstuvwxyz012345";
+  const files = await triageFiles(evidenceDir, `Rotate the deploy key; the old one is ${token}`, "Goal: rotate the key.");
+
+  const result = await lifecycle(fixture, fixture.root, "triage", { session: sessionId, ...files }, [0], { OPENROUTER_API_KEY: "test-key" });
+  assert.deepEqual(result.json, { operation: "triage", sessionId, stage: "shadow", outcome: "answered", reason: null });
+
+  assert.equal(jev.requests.length, 1);
+  const [{ headers, body }] = jev.requests;
+  assert.equal(headers.authorization, "Bearer test-key");
+  assert.equal(body.model, "typesafe/jev-1.14");
+  // Paths and counts only: an untracked .env is named, never read.
+  assert.deepEqual(body.state.changedPaths, [".env", "README.md", "committed.txt", "untracked.txt"]);
+  assert.deepEqual(body.state.diffStats, { files: 4, insertions: 2, deletions: 0, untracked: 2 });
+  const sent = JSON.stringify(body);
+  for (const secret of ["CONTENT", token, "test-key"]) assert.ok(!sent.includes(secret), `${secret} never leaves`);
+  assert.equal(body.state.request, "Rotate the deploy key; the old one is [REDACTED]");
+
+  const metadata = JSON.parse(await metadataFile(worktreePath));
+  const [call] = metadata.triage;
+  assert.deepEqual(call.sent, body.state, "the metadata keeps exactly what was sent, for retro");
+  assert.equal(call.payloadBytes, Buffer.byteLength(JSON.stringify(body)));
+  assert.ok(call.payloadBytes < 32768);
+  assert.deepEqual([call.outcome, call.model, call.redacted, call.redactions, call.cost, call.attempts], ["answered", "typesafe/jev-1.14", true, 1, 0.00004, 1]);
+  assert.deepEqual(call.answers.size, { answer: "local", confidence: 0.8, probabilities: { local: 0.8, feature: 0.2 } });
+  assert.ok(call.latencyMs >= 0);
+
+  const stats = await lifecycle(fixture, fixture.root, "stats", { session: sessionId });
+  assert.equal(stats.json.triage.calls[0].sent, undefined, "stats leaves the sent text in metadata");
+  assert.deepEqual(stats.json.triage.answers.reviewValue, { answer: 2.4, confidence: 0.6 });
+});
+
+test("triage fails open on a server error or a timeout and records why", async (t) => {
+  const fixture = await createFixture(t);
+  await useGithubRemote(fixture);
+  const jev = await jevStub(t, [{ status: 503, body: { error: { code: 503, message: "unavailable" } } }, { hang: true }]);
+  await useJev(fixture, { enabled: true, endpoint: jev.endpoint, owners: ["acme"], repositories: ["acme/widgets"], timeoutMs: 500 });
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "fails open" });
+  const options = { session: prepared.json.sessionId, ...await triageFiles(prepared.json.evidenceDir) };
+  const env = { OPENROUTER_API_KEY: "test-key" };
+  const unavailable = await lifecycle(fixture, fixture.control, "triage", options, [0], env);
+  assert.deepEqual([unavailable.json.outcome, unavailable.json.reason], ["failed", "HTTP 503: unavailable"]);
+  const timedOut = await lifecycle(fixture, fixture.control, "triage", options, [0], env);
+  assert.deepEqual([timedOut.json.outcome, timedOut.json.reason], ["failed", "timed out after 500 ms"]);
+  const stats = await lifecycle(fixture, fixture.root, "stats", { session: prepared.json.sessionId });
+  assert.deepEqual(stats.json.triage.calls.map((call) => call.httpStatus), [503, null]);
+  assert.equal(stats.json.triage.status, "failed");
 });
 
 async function metadataFile(worktreePath) {

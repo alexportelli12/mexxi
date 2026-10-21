@@ -11,8 +11,8 @@
       "paths": ["scripts/config.test.mjs", "scripts/lib/config.mjs", "config.schema.json"]
     },
     "workspace": {
-      "command": "node --test scripts/ibni/ibni.test.mjs",
-      "paths": ["scripts/ibni/**", "scripts/implementation-workspace*", "scripts/lib/config.mjs", "config.schema.json", "claude/mods/run-pane/tests/recorded.mjs"]
+      "command": "node --test scripts/ibni/ibni.test.mjs scripts/ibni/triage.test.mjs",
+      "paths": ["scripts/ibni/**", "scripts/implementation-workspace*", "scripts/lib/config.mjs", "scripts/lib/redact.mjs", "scripts/lib/secret-patterns.json", "config.schema.json", "claude/mods/run-pane/tests/recorded.mjs"]
     },
     "hooks": {
       "command": "node --test scripts/hooks/hooks.test.mjs",

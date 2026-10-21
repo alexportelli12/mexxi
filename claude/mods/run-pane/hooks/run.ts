@@ -22,11 +22,12 @@ function record(value: unknown): Json {
 }
 
 // One snapshot from both answers; stats wins where both carry a field, since
-// it is read second. Triage is taken from wherever Phase 6 puts it.
+// it is read second. Triage rows are stats' latest Jev answers, absent until
+// a triage call is answered.
 export function snapshotFrom(sessionId: string, info: unknown, stats: unknown): RunPaneSnapshot {
   const merged: Json = { ...record(info), ...record(stats) }
   const steps = Array.isArray(merged.steps) ? merged.steps.map(record) : []
-  const triage = record(stats).triage ?? record(info).triage
+  const triage = record(record(stats).triage).answers
   return {
     sessionId,
     branch: typeof merged.branch === 'string' ? merged.branch : undefined,

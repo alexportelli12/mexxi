@@ -62,6 +62,12 @@ Before changing code:
 4. Derive a concise active contract: goal, requirements, meaningful resolved
    decisions, observable behaviour and experience acceptance criteria, real
    constraints, and relevant edge cases. Omit categories that add no value.
+5. Write the request text and the contract to `request.md` and `contract.md`
+   in `evidenceDir`, then run `ibni triage --session "<sessionId>"
+   --request-file <request.md> --contract-file <contract.md>` once. Triage is
+   in shadow: it records Jev's view of the gates for later comparison and
+   changes nothing. Decide every gate below exactly as written, whatever it
+   prints, and carry on if it reports `skipped` or `failed`.
 
 Repository evidence and established product principles are the first source of
 answers. Ask the user only about genuine unresolved product behaviour, UX
@@ -94,7 +100,9 @@ and cleanup protects it because no pull request was recorded.
 
 When the change will alter existing UI, capture before-shots now, while the
 worktree is still at `baseSha`: load `rendered-qa` and follow its before-shots
-section for the affected routes. Skip this for new UI.
+section for the affected routes. Skip this for new UI. Record the decision
+either way with `ibni record --session "<sessionId>" --before-shots taken` (or
+`skipped`).
 
 ## Implementation
 

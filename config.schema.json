@@ -185,9 +185,14 @@
       "default": {},
       "properties": {
         "enabled": { "description": "Run triage at all.", "type": "boolean", "default": false },
-        "model": { "description": "Pinned Jev model.", "type": "string", "default": "typesafe/jev-1.14" },
-        "repositories": { "description": "Repositories (owner/name) triage may run in.", "type": "array", "items": { "type": "string", "pattern": "^[^/\\s]+/[^/\\s]+$" }, "default": [] },
-        "maxPayloadBytes": { "description": "Largest triage request sent, in bytes.", "type": "integer", "minimum": 1024, "default": 32768 }
+        "stage": { "description": "What triage may do with its answers. Only shadow exists: it records answers beside the agent's own gate choices and changes nothing. Escalate (add a gate on a confident answer) and skip (drop the independent review on a confident mechanical answer) come only once shadow data shows agreement.", "type": "string", "enum": ["shadow"], "default": "shadow" },
+        "model": { "description": "Pinned Jev model; not the ~typesafe/jev-latest alias, so a release cannot shift answers mid-calibration.", "type": "string", "default": "typesafe/jev-1.14" },
+        "endpoint": { "description": "OpenRouter's Decisions API, which takes the question schema triage sends.", "type": "string", "pattern": "^https?://", "default": "https://openrouter.ai/api/alpha/decisions" },
+        "owners": { "description": "GitHub accounts and organisations that are yours. A listed repository owned by anyone else is skipped, since its content is not only yours to share.", "type": "array", "items": { "type": "string", "pattern": "^[^/\\s]+$" }, "default": [] },
+        "repositories": { "description": "Repositories (owner/name, as in the push remote's GitHub URL) triage may run in.", "type": "array", "items": { "type": "string", "pattern": "^[^/\\s]+/[^/\\s]+$" }, "default": [] },
+        "maxPayloadBytes": { "description": "Each request stays below this many bytes; larger text puts Jev in a slower, less accurate long-context mode.", "type": "integer", "minimum": 4096, "default": 32768 },
+        "timeoutMs": { "description": "How long one request may take before triage gives up and the run carries on.", "type": "integer", "minimum": 500, "default": 5000 },
+        "zeroDataRetention": { "description": "Ask OpenRouter to route only to providers that retain no data (provider.zdr). If none serves the model, calls fail and are recorded with the reason.", "type": "boolean", "default": true }
       }
     },
     "retro": {

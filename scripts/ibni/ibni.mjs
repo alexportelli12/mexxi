@@ -15,6 +15,7 @@ import { publishWorkspace } from "./commands/publish.mjs";
 import { recordGate } from "./commands/record.mjs";
 import { recordEvidence } from "./commands/record-evidence.mjs";
 import { workspaceStats } from "./commands/stats.mjs";
+import { triageSession } from "./commands/triage.mjs";
 import { synchronizeWorkspace } from "./commands/sync.mjs";
 import { WorkspaceError } from "./lib/errors.mjs";
 import { MEDIA_EXTENSIONS } from "./lib/media.mjs";
@@ -33,6 +34,7 @@ export {
   recordEvidence,
   recordGate,
   synchronizeWorkspace,
+  triageSession,
   workspaceInfo,
   workspaceStats,
 };
@@ -182,20 +184,50 @@ export const COMMANDS = {
     run: () => listWorkspaces({}),
   },
   record: {
-    usage: "ibni record --session <id> (--verify <pass|fail> | --review <count> | --qa <count>)",
-    summary: "Record a verify run, or the finding count of a review or QA pass.",
-    details: ["One result per call; stats reports them.", SESSION_LOOKUP],
+    usage: "ibni record --session <id> (--verify <pass|fail> | --review <count> | --qa <count> | --before-shots <taken|skipped>)",
+    summary: "Record a verify run, the finding count of a review or QA pass, or the before-shots decision.",
+    details: ["One result per call; stats reports them and compares the gates with Jev's triage.", SESSION_LOOKUP],
     options: {
       session: "The sessionId from prepare or adopt.",
       verify: "Outcome of a full npm run verify: pass or fail.",
       review: "Number of findings an independent review pass returned.",
       qa: "Number of findings a rendered QA pass returned.",
+      "before-shots": "Whether before-shots of existing UI were taken or skipped.",
     },
-    run: (options) => recordGate({ sessionId: options.session, verify: options.verify, review: options.review, qa: options.qa }),
+    run: (options) => recordGate({
+      sessionId: options.session,
+      verify: options.verify,
+      review: options.review,
+      qa: options.qa,
+      beforeShots: options["before-shots"],
+    }),
+  },
+  triage: {
+    usage: "ibni triage --session <id> --request-file <file> --contract-file <file>",
+    summary: "Ask Jev which gates the change needs, and record the answers (shadow: nothing changes).",
+    details: [
+      "Sends one batched request to OpenRouter (jev.endpoint, jev.model) with the request text, the",
+      "task contract, the changed paths and diff stats against baseSha; never file contents, diffs,",
+      "logs, env files or command output. Secrets are redacted first, and the request stays below",
+      "jev.maxPayloadBytes by shortening the path list, then the request, then the contract.",
+      "Runs only when jev.enabled is true, the push remote's GitHub repository is listed in",
+      "jev.repositories and owned by one of jev.owners, and OPENROUTER_API_KEY is set.",
+      "Always exits 0 once the session is found: a skip, timeout, 429 (retried once), HTTP error or",
+      "malformed answer prints outcome skipped or failed with a reason, and the run carries on.",
+      "Prints the outcome only; the answers go to session metadata, where stats reports them",
+      "beside the agent's own gate choices.",
+      SESSION_LOOKUP,
+    ],
+    options: {
+      session: "The sessionId from prepare or adopt.",
+      "request-file": "File holding the user's request text.",
+      "contract-file": "File holding the active task contract.",
+    },
+    run: (options) => triageSession({ sessionId: options.session, requestFile: options["request-file"], contractFile: options["contract-file"] }),
   },
   stats: {
     usage: "ibni stats --session <id>",
-    summary: "Print the session's lifecycle step timings, verify attempts and finding counts as JSON.",
+    summary: "Print the session's step timings, verify attempts, finding counts and Jev triage as JSON.",
     details: [SESSION_LOOKUP],
     options: { session: "The sessionId from prepare or adopt." },
     run: (options) => workspaceStats({ sessionId: options.session }),

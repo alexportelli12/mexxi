@@ -69,9 +69,14 @@
   },
   "jev": {
     "enabled": false,
+    "stage": "shadow",
     "model": "typesafe/jev-1.14",
+    "endpoint": "https://openrouter.ai/api/alpha/decisions",
+    "owners": [],
     "repositories": [],
-    "maxPayloadBytes": 32768
+    "maxPayloadBytes": 32768,
+    "timeoutMs": 5000,
+    "zeroDataRetention": true
   },
   "retro": {
     "output": "retro/",

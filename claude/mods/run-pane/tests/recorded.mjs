@@ -1,82 +1,83 @@
-// ibni info and ibni stats for a finished run (prepare, a refused publish, a
-// failed sync, evidence, publish, mark-pr), recorded from the real CLI by
-// scripts/ibni/ibni.test.mjs's stats scenario. That test also checks these keys
-// still match what ibni prints, so the pane is tested against its real input.
+// ibni info and ibni stats for a finished run (prepare, an answered Jev
+// triage, a refused publish, a failed sync, evidence, publish, mark-pr),
+// recorded from the real CLI by scripts/ibni/ibni.test.mjs's stats scenario.
+// That test also checks these keys still match what ibni prints, so the pane
+// is tested against its real input.
 export const info = {
   "operation": "info",
-  "sessionId": "3b3a79258b002e4f99e8a6a1",
-  "worktreePath": "/tmp/implementation-workspace-test-CL2F9C/worktrees/control-0d80cee26e/timed",
-  "evidenceDir": "/tmp/implementation-workspace-test-CL2F9C/worktrees/control-0d80cee26e/timed.evidence",
+  "sessionId": "2c026ea35efd82bef78e30b9",
+  "worktreePath": "/tmp/implementation-workspace-test-CEZwIv/worktrees/control-d7a4ed7796/timed",
+  "evidenceDir": "/tmp/implementation-workspace-test-CEZwIv/worktrees/control-d7a4ed7796/timed.evidence",
   "branch": "agent/timed",
   "state": "pr-open",
   "prUrl": "https://github.com/alexportelli12/example/pull/42",
   "port": 4300,
   "defaultBranch": "trunk",
-  "baseSha": "42c27e562904e3fa0e6abd9d3f88170ddd493929",
-  "publishedSha": "f678bdb74a9fd6660e496a57e0f70b90bc70bd37",
+  "baseSha": "0f0d0cb4d62a1627b2939e8705f0d8958b7959b9",
+  "publishedSha": "dbbaed3077fe4576974b32f8e7f29db3f7cb3761",
   "evidenceTreeSha": "cc76f2831b4e0a213491dee367f201f30f6a7678",
-  "evidenceRecordedAt": "2026-10-21T01:36:44.006Z",
-  "createdAt": "2026-10-21T01:36:42.835Z",
-  "updatedAt": "2026-10-21T01:36:44.548Z"
+  "evidenceRecordedAt": "2026-10-21T02:30:35.087Z",
+  "createdAt": "2026-10-21T02:30:32.257Z",
+  "updatedAt": "2026-10-21T02:30:36.105Z"
 }
 
 export const stats = {
   "operation": "stats",
-  "sessionId": "3b3a79258b002e4f99e8a6a1",
+  "sessionId": "2c026ea35efd82bef78e30b9",
   "branch": "agent/timed",
   "state": "pr-open",
   "prUrl": "https://github.com/alexportelli12/example/pull/42",
-  "createdAt": "2026-10-21T01:36:42.835Z",
+  "createdAt": "2026-10-21T02:30:32.257Z",
   "adoptions": [],
   "steps": [
     {
       "step": "prepare",
-      "sessionId": "3b3a79258b002e4f99e8a6a1",
-      "startedAt": "2026-10-21T01:36:42.715Z",
-      "endedAt": "2026-10-21T01:36:42.839Z",
+      "sessionId": "2c026ea35efd82bef78e30b9",
+      "startedAt": "2026-10-21T02:30:31.945Z",
+      "endedAt": "2026-10-21T02:30:32.265Z",
       "outcome": "succeeded",
-      "durationMs": 124
+      "durationMs": 320
     },
     {
       "step": "publish",
-      "sessionId": "3b3a79258b002e4f99e8a6a1",
-      "startedAt": "2026-10-21T01:36:43.536Z",
-      "endedAt": "2026-10-21T01:36:43.712Z",
+      "sessionId": "2c026ea35efd82bef78e30b9",
+      "startedAt": "2026-10-21T02:30:34.076Z",
+      "endedAt": "2026-10-21T02:30:34.428Z",
       "outcome": "requires-evidence",
-      "durationMs": 176
+      "durationMs": 352
     },
     {
       "step": "sync",
-      "sessionId": "3b3a79258b002e4f99e8a6a1",
-      "startedAt": "2026-10-21T01:36:43.779Z",
-      "endedAt": "2026-10-21T01:36:43.842Z",
+      "sessionId": "2c026ea35efd82bef78e30b9",
+      "startedAt": "2026-10-21T02:30:34.582Z",
+      "endedAt": "2026-10-21T02:30:34.734Z",
       "outcome": "failed",
       "error": "the implementation worktree contains uncommitted or untracked work",
-      "durationMs": 63
+      "durationMs": 152
     },
     {
       "step": "record-evidence",
-      "sessionId": "3b3a79258b002e4f99e8a6a1",
-      "startedAt": "2026-10-21T01:36:43.911Z",
-      "endedAt": "2026-10-21T01:36:44.009Z",
+      "sessionId": "2c026ea35efd82bef78e30b9",
+      "startedAt": "2026-10-21T02:30:34.886Z",
+      "endedAt": "2026-10-21T02:30:35.099Z",
       "outcome": "succeeded",
-      "durationMs": 98
+      "durationMs": 213
     },
     {
       "step": "publish",
-      "sessionId": "3b3a79258b002e4f99e8a6a1",
-      "startedAt": "2026-10-21T01:36:44.088Z",
-      "endedAt": "2026-10-21T01:36:44.306Z",
+      "sessionId": "2c026ea35efd82bef78e30b9",
+      "startedAt": "2026-10-21T02:30:35.248Z",
+      "endedAt": "2026-10-21T02:30:35.720Z",
       "outcome": "succeeded",
-      "durationMs": 218
+      "durationMs": 472
     },
     {
       "step": "mark-pr",
-      "sessionId": "3b3a79258b002e4f99e8a6a1",
-      "startedAt": "2026-10-21T01:36:44.469Z",
-      "endedAt": "2026-10-21T01:36:44.550Z",
+      "sessionId": "2c026ea35efd82bef78e30b9",
+      "startedAt": "2026-10-21T02:30:36.003Z",
+      "endedAt": "2026-10-21T02:30:36.111Z",
       "outcome": "succeeded",
-      "durationMs": 81
+      "durationMs": 108
     }
   ],
   "verify": {
@@ -85,11 +86,11 @@ export const stats = {
     "failed": 1,
     "history": [
       {
-        "at": "2026-10-21T01:36:42.922Z",
+        "at": "2026-10-21T02:30:32.907Z",
         "outcome": "fail"
       },
       {
-        "at": "2026-10-21T01:36:43.002Z",
+        "at": "2026-10-21T02:30:33.041Z",
         "outcome": "pass"
       }
     ]
@@ -99,11 +100,11 @@ export const stats = {
     "findings": 4,
     "history": [
       {
-        "at": "2026-10-21T01:36:43.083Z",
+        "at": "2026-10-21T02:30:33.169Z",
         "findings": 3
       },
       {
-        "at": "2026-10-21T01:36:43.236Z",
+        "at": "2026-10-21T02:30:33.484Z",
         "findings": 1
       }
     ]
@@ -113,9 +114,114 @@ export const stats = {
     "findings": 0,
     "history": [
       {
-        "at": "2026-10-21T01:36:43.159Z",
+        "at": "2026-10-21T02:30:33.333Z",
         "findings": 0
       }
     ]
+  },
+  "triage": {
+    "status": "answered",
+    "reason": null,
+    "answers": {
+      "existingUi": {
+        "answer": "no",
+        "confidence": 0.8
+      },
+      "userFacing": {
+        "answer": "no",
+        "confidence": 0.9
+      },
+      "oneWayDoor": {
+        "answer": "no",
+        "confidence": 0.95
+      },
+      "size": {
+        "answer": "local",
+        "confidence": 0.8
+      },
+      "reviewValue": {
+        "answer": 2.4,
+        "confidence": 0.6
+      }
+    },
+    "calls": [
+      {
+        "at": "2026-10-21T02:30:32.458Z",
+        "sessionId": "2c026ea35efd82bef78e30b9",
+        "stage": "shadow",
+        "outcome": "answered",
+        "reason": null,
+        "model": "typesafe/jev-1.14",
+        "payloadBytes": 2034,
+        "redacted": false,
+        "redactions": 0,
+        "truncated": [],
+        "attempts": 1,
+        "httpStatus": 200,
+        "latencyMs": 76,
+        "cost": 4e-05,
+        "inputTokens": 900,
+        "responseModel": "typesafe/jev-1.14-20261001",
+        "responseId": "gen-1",
+        "answers": {
+          "existingUi": {
+            "answer": "no",
+            "confidence": 0.8,
+            "probability": 0.2
+          },
+          "userFacing": {
+            "answer": "no",
+            "confidence": 0.9,
+            "probability": 0.1
+          },
+          "oneWayDoor": {
+            "answer": "no",
+            "confidence": 0.95,
+            "probability": 0.05
+          },
+          "size": {
+            "answer": "local",
+            "confidence": 0.8,
+            "probabilities": {
+              "local": 0.8,
+              "feature": 0.2
+            }
+          },
+          "reviewValue": {
+            "answer": 2.4,
+            "level": 2,
+            "of": 3,
+            "confidence": 0.6,
+            "probabilities": {
+              "0": 0,
+              "1": 0.1,
+              "2": 0.4,
+              "3": 0.5
+            }
+          }
+        }
+      }
+    ],
+    "agreement": {
+      "compared": 3,
+      "agreed": 2,
+      "gates": {
+        "beforeShots": {
+          "triage": false,
+          "agent": false,
+          "agree": true
+        },
+        "renderedQa": {
+          "triage": false,
+          "agent": true,
+          "agree": false
+        },
+        "review": {
+          "triage": true,
+          "agent": true,
+          "agree": true
+        }
+      }
+    }
   }
 }

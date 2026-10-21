@@ -2,28 +2,11 @@ import { lstat, readdir } from "node:fs/promises";
 import path from "node:path";
 import { WorkspaceError } from "../lib/errors.mjs";
 import { canonicalPath } from "../lib/fs.mjs";
-import { cleanOutput, git } from "../lib/git.mjs";
+import { cleanOutput, configuredGithubRepository, git } from "../lib/git.mjs";
 import { withRepositoryLock } from "../lib/lock.mjs";
 import { MEDIA_BRANCH, MEDIA_EXTENSIONS, updateMediaBranch } from "../lib/media.mjs";
 import { evidenceDirectoryFor } from "../lib/metadata.mjs";
 import { ownedSession } from "../lib/session.mjs";
-
-function githubRepository(url) {
-  const match = url.match(
-    /^(?:https:\/\/(?:[^@/]+@)?github\.com\/|(?:ssh:\/\/)?git@github\.com[:/])([^/]+)\/([^/]+?)(?:\.git)?\/?$/i,
-  );
-  return match ? { owner: match[1], repo: match[2] } : null;
-}
-
-// The configured URL names the GitHub repository; `git remote get-url` would
-// expand insteadOf rewrites, which are transport plumbing.
-async function configuredGithubRepository(root, remote) {
-  for (const key of [`remote.${remote}.pushurl`, `remote.${remote}.url`]) {
-    const value = cleanOutput(await git(root, ["config", "--get", key], { allowedExitCodes: [0, 1] }));
-    if (value) return githubRepository(value);
-  }
-  return null;
-}
 
 async function mediaFiles(evidenceDir, requested) {
   const base = await canonicalPath(evidenceDir);
