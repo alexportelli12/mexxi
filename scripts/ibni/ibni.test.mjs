@@ -1524,6 +1524,16 @@ test("publish retries a push once after an HTTP 5xx and never after other failur
   assert.match(refused.stderr, /HTTP 403/);
   assert.equal(await pushes(), 1);
 
+  // Only git's stderr decides a retry: the failed command's line names the branch.
+  await rm(path.join(stub, "pushes"));
+  const misleading = await lifecycle(fixture, fixture.control, "prepare", { slug: "http500 fix" });
+  assert.match(misleading.json.branch, /http500-fix/);
+  await commit(misleading.json.worktreePath, "feature.txt", "feature\n", "feature");
+  await recordEvidence(fixture, misleading);
+  await writeFile(path.join(stub, "fail"), "403");
+  await lifecycle(fixture, misleading.json.worktreePath, "publish", { session: misleading.json.sessionId }, [2], env);
+  assert.equal(await pushes(), 1);
+
   await rm(path.join(stub, "pushes"));
   const flaky = await lifecycle(fixture, fixture.control, "prepare", { slug: "push flaky" });
   await commit(flaky.json.worktreePath, "feature.txt", "feature\n", "feature");

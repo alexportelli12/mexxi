@@ -56,10 +56,12 @@ export function run(command, args, options = {}) {
       if (signal || !allowedExitCodes.includes(result.code)) {
         const diagnostics = redactEndpoint(result.stderr.trim() || result.stdout.trim()) ||
           `exit code ${result.code}${signal ? ` (signal ${signal})` : ""}`;
-        reject(new WorkspaceError(
+        // The message names the command line; callers that classify a
+        // failure read the command's own stderr instead.
+        reject(Object.assign(new WorkspaceError(
           `command failed: ${command} ${args.map(redactEndpoint).join(" ")}`,
           diagnostics,
-        ));
+        ), { stderr: result.stderr }));
         return;
       }
       resolve(result);
@@ -198,7 +200,7 @@ export async function push(root, args, options = {}) {
   try {
     result = await attempt();
   } catch (error) {
-    if (error instanceof WorkspaceError && TRANSIENT_HTTP_FAILURE.test(error.message)) return attempt();
+    if (error instanceof WorkspaceError && TRANSIENT_HTTP_FAILURE.test(error.stderr ?? "")) return attempt();
     throw error;
   }
   if (result.code !== 0 && TRANSIENT_HTTP_FAILURE.test(result.stderr)) return attempt();
