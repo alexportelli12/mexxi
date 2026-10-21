@@ -7,9 +7,21 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { RunPaneSnapshot } from '../types'
-import { gateLabels, nudge, nudgePercentFrom, sessionIdFrom, snapshotFrom, stageLabel, triageRows } from './run'
+import type { StageState } from './run'
+import { headline, journey, nudge, nudgePercentFrom, sessionIdFrom, since, snapshotFrom, taskTitle, triageRows } from './run'
 
 const PANE = 'run-pane'
+
+// One mark and one theme colour per stage state, so the journey reads at a
+// glance in any theme: green done, accent for the stage in progress, red for
+// the one that needs you, quiet for what has not happened.
+const MARK: Record<StageState, { glyph: string; color: string }> = {
+  done: { glyph: '✓', color: 'success' },
+  current: { glyph: '●', color: 'claude' },
+  failed: { glyph: '✗', color: 'error' },
+  pending: { glyph: '○', color: 'inactive' },
+  skipped: { glyph: '–', color: 'inactive' },
+}
 const run = atom({ plugin: 'run-pane', key: 'run' } as const, null)
 const contextPercent = atom({ plugin: 'run-pane', key: 'contextPercent' } as const, null)
 const nudgePercent = atom({ plugin: 'run-pane', key: 'nudgePercent' } as const, 70)
@@ -43,7 +55,7 @@ async function configText($: EngineInterface): Promise<string | undefined> {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    await $.command.register({ name: 'run-pane', description: 'Show the current mexxi run: stage, gates, worktree, port and PR' })
+    await $.command.register({ name: 'run-pane', description: 'Show the current mexxi run: where it is, what passed, what needs you, and its PR' })
     const text = await configText($)
     await update($, nudgePercent, () => nudgePercentFrom(text))
     return next(e)
@@ -80,35 +92,75 @@ export const register: Register = on => {
     const { Box, Text, Link } = $.ui.resolve(e)
     const current = await read($, run)
     if (!current) {
-      return <Text dimColor>No ibni workspace in this session yet. It appears once /wettaq runs ibni prepare or adopt.</Text>
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Text bold>No run yet</Text>
+          <Text dimColor>This pane follows a /wettaq run. It fills in once ibni prepares or adopts a workspace.</Text>
+        </Box>
+      )
     }
-    const row = (label: string, value: string) => (
-      <Text>
-        <Text dimColor>{label.padEnd(9)}</Text>
-        {value}
-      </Text>
-    )
+    const status = headline(current)
+    const { task, repository } = taskTitle(current)
+    const started = since(current.createdAt, await $.clock.now())
     const triage = triageRows(current)
     return (
-      <Box flexDirection="column">
-        <Text bold>{current.branch ?? current.sessionId}</Text>
-        {row('Stage', stageLabel(current))}
-        {row('Gates', gateLabels(current).join(' · '))}
-        {row('Worktree', current.worktreePath ?? 'unknown')}
-        {row('Port', current.port === null || current.port === undefined ? 'none' : String(current.port))}
+      <Box flexDirection="column" gap={1}>
+        <Box flexDirection="column">
+          <Text>
+            <Text backgroundColor={status.tone} color="inverseText" weight="semibold">{` ${status.label} `}</Text>
+          </Text>
+          <Text size="heading" weight="semibold" wrap="truncate-end">{task}</Text>
+          <Text dimColor>{[repository, started && `started ${started}`].filter(Boolean).join(' · ')}</Text>
+        </Box>
+
+        <Box flexDirection="column">
+          {journey(current).map(stage => (
+            <Text>
+              <Text color={MARK[stage.state].color}>{MARK[stage.state].glyph}</Text>
+              {' '}
+              <Text
+                weight={stage.state === 'current' || stage.state === 'failed' ? 'semibold' : 'regular'}
+                color={stage.state === 'failed' ? 'error' : undefined}
+                dimColor={stage.state === 'pending' || stage.state === 'skipped'}
+              >
+                {stage.label}
+              </Text>
+              {stage.detail ? <Text dimColor>{`  ${stage.detail}`}</Text> : null}
+            </Text>
+          ))}
+        </Box>
+
         {current.prUrl ? (
           <Text>
-            <Text dimColor>{'PR'.padEnd(9)}</Text>
-            <Link href={current.prUrl}>{current.prUrl}</Link>
+            <Text color="success">{'→ '}</Text>
+            <Link href={current.prUrl}>{`Open pull request #${current.prUrl.split('/').at(-1)}`}</Link>
           </Text>
-        ) : (
-          row('PR', 'not opened yet')
-        )}
-        {triage.length > 0 && <Text dimColor>Jev triage</Text>}
-        {triage.map(line => (
-          <Text>{`  ${line}`}</Text>
-        ))}
-        {current.error && <Text color="red">{`ibni: ${current.error}`}</Text>}
+        ) : null}
+
+        {triage.length > 0 ? (
+          <Box flexDirection="column">
+            <Text dimColor>Jev triage · shadow, changes nothing</Text>
+            {triage.map(row => (
+              <Text>
+                <Text dimColor>{`${row.question} `}</Text>
+                {row.answer}
+                {row.confidence === undefined ? null : <Text dimColor>{` · ${row.confidence}%`}</Text>}
+              </Text>
+            ))}
+          </Box>
+        ) : null}
+
+        <Box flexDirection="column">
+          <Text dimColor wrap="truncate-start">{current.worktreePath ?? 'worktree unknown'}</Text>
+          <Text dimColor>{current.port === null || current.port === undefined ? 'no dev-server port' : `dev server on port ${current.port}`}</Text>
+        </Box>
+
+        {current.error ? (
+          <Box borderStyle="round" borderColor="warning" paddingX={1} flexDirection="column">
+            <Text color="warning" weight="semibold">ibni didn't answer</Text>
+            <Text>{current.error}</Text>
+          </Box>
+        ) : null}
       </Box>
     )
   })
@@ -120,7 +172,7 @@ export const register: Register = on => {
     const { Box, Button, Text } = $.ui.resolve(e)
     return (
       <Box>
-        <Text color="yellow">{`${shown.text} `}</Text>
+        <Text color="warning">{`↻ ${shown.text} `}</Text>
         <Button key="dismiss" label="Dismiss" onPress={() => update($, dismissed, () => shown.key)} />
       </Box>
     )

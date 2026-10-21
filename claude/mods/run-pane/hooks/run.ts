@@ -28,6 +28,7 @@ export function snapshotFrom(sessionId: string, info: unknown, stats: unknown): 
   const merged: Json = { ...record(info), ...record(stats) }
   const steps = Array.isArray(merged.steps) ? merged.steps.map(record) : []
   const triage = record(record(stats).triage).answers
+  const review = record(merged.review)
   return {
     sessionId,
     branch: typeof merged.branch === 'string' ? merged.branch : undefined,
@@ -35,61 +36,120 @@ export function snapshotFrom(sessionId: string, info: unknown, stats: unknown): 
     worktreePath: typeof merged.worktreePath === 'string' ? merged.worktreePath : undefined,
     port: typeof merged.port === 'number' ? merged.port : null,
     prUrl: typeof merged.prUrl === 'string' ? merged.prUrl : null,
+    createdAt: typeof merged.createdAt === 'string' ? merged.createdAt : undefined,
     steps: steps.map(step => ({
       step: String(step.step ?? '?'),
       outcome: String(step.outcome ?? '?'),
       durationMs: typeof step.durationMs === 'number' ? step.durationMs : undefined,
     })),
     verify: merged.verify as RunPaneSnapshot['verify'],
-    review: merged.review as RunPaneSnapshot['review'],
+    review: merged.review
+      ? { rounds: Number(review.rounds ?? 0), findings: Number(review.findings ?? 0), crossRounds: Number(record(record(review.byReviewer).cross).rounds ?? 0) }
+      : undefined,
     qa: merged.qa as RunPaneSnapshot['qa'],
     triage: triage && typeof triage === 'object' ? (triage as Record<string, unknown>) : null,
   }
 }
 
-const STATES: Record<string, string> = {
-  active: 'implementing',
-  published: 'branch published',
-  'pr-open': 'PR open',
-}
+// How the pane reads a run: a headline, then the run's journey from workspace
+// to pull request, each stage done, current, failed, pending or skipped.
+// Derived from ibni's own record only, so a run reads the same whichever host
+// started it.
+export type Tone = 'success' | 'error' | 'warning' | 'claude'
+export type StageState = 'done' | 'current' | 'failed' | 'pending' | 'skipped'
+export type Stage = { key: string; label: string; state: StageState; detail?: string }
 
-export function stageLabel(run: RunPaneSnapshot): string {
-  const state = run.state ? STATES[run.state] ?? run.state : 'unknown'
-  const last = run.steps.at(-1)
-  return last ? `${state} · last step ${last.step} ${last.outcome}` : state
-}
-
-export function gateLabels(run: RunPaneSnapshot): string[] {
-  const verify = run.verify
-  const lastVerify = verify?.history.at(-1)?.outcome
-  const rounds = (name: string, gate: RunPaneSnapshot['review']) =>
-    gate && gate.rounds > 0
-      ? `${name} ${gate.rounds} ${gate.rounds === 1 ? 'round' : 'rounds'}, ${gate.findings} ${gate.findings === 1 ? 'finding' : 'findings'}`
-      : `${name} not run`
-  return [
-    verify && verify.attempts > 0
-      ? `verify ${lastVerify === 'pass' ? 'passed' : 'failed'} (${verify.passed} of ${verify.attempts} green)`
-      : 'verify not recorded',
-    rounds('QA', run.qa),
-    rounds('review', run.review),
-  ]
-}
-
-function answer(value: unknown): string {
-  const item = record(value)
-  if ('answer' in item) {
-    const confidence = typeof item.confidence === 'number' ? ` (${Math.round(item.confidence * 100)}%)` : ''
-    return `${String(item.answer)}${confidence}`
-  }
-  return typeof value === 'object' ? JSON.stringify(value) : String(value)
-}
-
-export function triageRows(run: RunPaneSnapshot): string[] {
-  return Object.entries(run.triage ?? {}).map(([question, value]) => `${question}: ${answer(value)}`)
-}
+const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : /s$/.test(word) ? 'es' : 's'}`
 
 export function isDelivered(run: RunPaneSnapshot | null): boolean {
   return Boolean(run && (run.prUrl || run.state === 'pr-open'))
+}
+
+export function journey(run: RunPaneSnapshot): Stage[] {
+  const delivered = isDelivered(run)
+  const verify = run.verify
+  const lastVerify = verify?.history.at(-1)?.outcome
+  const lastDelivery = [...run.steps].reverse().find(step => step.step === 'publish' || step.step === 'mark-pr')
+  const ready = run.steps.some(step => (step.step === 'prepare' || step.step === 'adopt') && step.outcome === 'succeeded') || Boolean(run.worktreePath)
+  const gate = (key: string, label: string, gateRun: RunPaneSnapshot['qa'], extra = ''): Stage =>
+    gateRun && gateRun.rounds > 0
+      ? { key, label, state: 'done', detail: `${plural(gateRun.rounds, 'pass')} · ${plural(gateRun.findings, 'finding')}${extra}` }
+      : { key, label, state: delivered ? 'skipped' : 'pending', detail: delivered ? 'not run' : undefined }
+
+  const stages: Stage[] = [
+    { key: 'workspace', label: 'Workspace ready', state: ready ? 'done' : 'pending' },
+    { key: 'build', label: 'Build the change', state: verify?.attempts || lastDelivery || delivered ? 'done' : 'pending' },
+    verify && verify.attempts > 0
+      ? {
+          key: 'verify',
+          label: 'Verify',
+          state: lastVerify === 'pass' ? 'done' : 'failed',
+          detail: `${lastVerify === 'pass' ? 'green' : 'red'} · ${verify.passed} of ${plural(verify.attempts, 'run')} passed`,
+        }
+      : { key: 'verify', label: 'Verify', state: 'pending' },
+    gate('qa', 'Rendered QA', run.qa),
+    gate('review', 'Independent review', run.review, run.review?.crossRounds ? ' · cross-family' : ''),
+    run.prUrl
+      ? { key: 'pr', label: 'Pull request', state: 'done', detail: `#${run.prUrl.split('/').at(-1)} open` }
+      : lastDelivery && lastDelivery.outcome !== 'succeeded'
+        ? { key: 'pr', label: 'Pull request', state: 'failed', detail: `${lastDelivery.step} ${lastDelivery.outcome.replace(/-/g, ' ')}` }
+        : { key: 'pr', label: 'Pull request', state: delivered ? 'done' : 'pending' },
+  ]
+  // The first stage not yet done is the one in progress, unless one failed.
+  if (stages.some(stage => stage.state === 'failed')) return stages
+  const next = stages.findIndex(stage => stage.state === 'pending')
+  return stages.map((stage, index) => (index === next ? { ...stage, state: 'current' } : stage))
+}
+
+export function headline(run: RunPaneSnapshot): { label: string; tone: Tone } {
+  if (run.error) return { label: 'ibni unreachable', tone: 'warning' }
+  const stages = journey(run)
+  const failed = stages.find(stage => stage.state === 'failed')
+  if (failed) return { label: `${failed.label}: needs attention`, tone: 'error' }
+  if (isDelivered(run)) return { label: 'PR open', tone: 'success' }
+  if (run.state === 'published') return { label: 'Branch published', tone: 'success' }
+  const current = stages.find(stage => stage.state === 'current')
+  return { label: current ? `Now: ${current.label.toLowerCase()}` : 'In progress', tone: 'claude' }
+}
+
+// The task's short name and the repository it runs in, read from the branch
+// and the worktree path (<root>/<repository>-<hash>/<slug>).
+export function taskTitle(run: RunPaneSnapshot): { task: string; repository?: string } {
+  const task = (run.branch ?? run.sessionId).replace(/^agent\//, '')
+  const folder = run.worktreePath?.split('/').at(-2)
+  return { task, repository: folder?.replace(/-[0-9a-f]{10}$/, '') }
+}
+
+// "started 12m ago", from the workspace's createdAt.
+export function since(iso: string | undefined, now: number): string | undefined {
+  const at = iso ? Date.parse(iso) : Number.NaN
+  if (Number.isNaN(at)) return undefined
+  const minutes = Math.max(0, Math.round((now - at) / 60000))
+  if (minutes < 1) return 'just now'
+  if (minutes < 60) return `${minutes}m ago`
+  const hours = Math.floor(minutes / 60)
+  return hours < 24 ? `${hours}h ${minutes % 60}m ago` : `${Math.floor(hours / 24)}d ago`
+}
+
+const QUESTIONS: Record<string, string> = {
+  existingUi: 'Changes existing UI',
+  userFacing: 'User-facing',
+  oneWayDoor: 'One-way door',
+  size: 'Size',
+  reviewValue: 'Review value',
+}
+
+// Jev's latest answers, worded for a person.
+export function triageRows(run: RunPaneSnapshot): { question: string; answer: string; confidence?: number }[] {
+  return Object.entries(run.triage ?? {}).map(([key, value]) => {
+    const item = record(value)
+    const raw = 'answer' in item ? item.answer : value
+    return {
+      question: QUESTIONS[key] ?? key,
+      answer: typeof raw === 'object' ? JSON.stringify(raw) : String(raw),
+      confidence: typeof item.confidence === 'number' ? Math.round(item.confidence * 100) : undefined,
+    }
+  })
 }
 
 // Why the band suggests a fresh session, or null. The key changes with the
