@@ -21,6 +21,29 @@ test('expands a simple brace list into one option per entry, grep has no braces'
   expect(fixCommand('grep -r y --include=*.{ts}.bak .', false).changes).toEqual([])
 })
 
+test('never rewrites a heredoc body, and resumes after its delimiter', () => {
+  const body = 'grep -r x --include=*.ts .\nnpm run verify | tail\n'
+  for (const opener of ["<<'EOF'", '<<"EOF"', '<<EOF', '<< \\EOF']) {
+    const command = `cat ${opener} > notes.md\n${body}EOF`
+    expect(fixCommand(command, false)).toEqual({ command, runInBackground: false, changes: [] })
+  }
+  const indented = 'cat <<-EOF > notes.md\n\tgrep -r x --include=*.ts .\n\tEOF'
+  expect(fixCommand(indented, false).changes).toEqual([])
+  expect(fixCommand("cat <<EOF > notes.md\ndon't stop\nEOF\ngrep -r x --include=*.ts .", false).command)
+    .toBe("cat <<EOF > notes.md\ndon't stop\nEOF\ngrep -r x --include='*.ts' .")
+  expect(fixCommand("cat <<EOF | grep -r x --include=*.ts\nit's --include=*.md\nEOF", false).command)
+    .toBe("cat <<EOF | grep -r x --include='*.ts'\nit's --include=*.md\nEOF")
+  expect(fixCommand("cat <<A <<'B'\n--include=*.a\nA\n--include=*.b\nB\ngrep -r x --include=*.ts .", false).command)
+    .toBe("cat <<A <<'B'\n--include=*.a\nA\n--include=*.b\nB\ngrep -r x --include='*.ts' .")
+})
+
+test('reads a here-string as an ordinary word', () => {
+  expect(fixCommand("cat <<< \"don't\" && grep -r x --include=*.ts .", false).command)
+    .toBe("cat <<< \"don't\" && grep -r x --include='*.ts' .")
+  expect(fixCommand("grep x --include=*.ts <<<'--include=*.md'", false).command)
+    .toBe("grep x --include='*.ts' <<<'--include=*.md'")
+})
+
 test('adds pipefail to a verify pipe, not to other pipes', () => {
   expect(fixCommand('vfk --changed 2>&1 | tail -40', false).command)
     .toBe('set -o pipefail; vfk --changed 2>&1 | tail -40')
