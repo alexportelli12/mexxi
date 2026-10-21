@@ -161,6 +161,10 @@ export async function check(base = root) {
   for (const [file, target] of Object.entries(commandAliases)) {
     assert.equal(byName.get(target)?.replaces, file.slice(0, -3), `names.json: ${target} must replace ${file.slice(0, -3)}`);
   }
+  // The docs say each old command name still works, so it needs its alias.
+  for (const entry of names.filter((item) => item.kind === "command" && item.replaces)) {
+    assert.ok(`${entry.replaces}.md` in commandAliases, `names.json: ${entry.name} replaces /${entry.replaces}, which has no alias in commands/`);
+  }
   // The prompts the README, landing page and docs copy come from prompts.json.
   const prompts = JSON.parse(await readFile(path.join(base, "prompts.json"), "utf8"));
   assert.deepEqual(Object.keys(prompts), ["install", "prepare"]);

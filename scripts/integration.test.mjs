@@ -366,6 +366,8 @@ test("names.json must cover every command, and each alias must be the name its c
   await assert.rejects(check(base), /names\.json must list each command/);
   await write(names.map((entry) => entry.name === "wettaq" ? { ...entry, replaces: "qa" } : entry));
   await assert.rejects(check(base), /wettaq must replace implement/);
+  await write(names.map((entry) => entry.name === "lesti" ? { ...entry, replaces: "prepare" } : entry));
+  await assert.rejects(check(base), /lesti replaces \/prepare, which has no alias/);
   await write(names.map((entry) => entry.name === "ibda" ? { ...entry, pronunciation: "" } : entry));
   await assert.rejects(check(base), /ibda has no pronunciation/);
   await write(names);

@@ -66,7 +66,6 @@ async function renderClaude(checkout, config, files) {
 export const commandAliases = {
   "implement.md": "wettaq",
   "qa.md": "ittestja",
-  "retro.md": "irrifletti",
   "update-my-workflow.md": "sewwi",
   "ux.principles.md": "fassal",
 };

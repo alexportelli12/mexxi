@@ -51,7 +51,7 @@
     "name": "irrifletti",
     "kind": "command",
     "meaning": "reflect",
-    "replaces": "retro",
+    "replaces": null,
     "does": "the session retrospective",
     "pronunciation": "TODO: Alex"
   },
