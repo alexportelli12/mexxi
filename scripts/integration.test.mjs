@@ -71,7 +71,8 @@ async function copyCheckout(base) {
   for (const directory of [".claude-plugin", "agent", "claude", "codex", "commands", "opencode", "scripts", "skills"]) {
     await cp(path.join(checkout, directory), path.join(base, directory), { recursive: true });
   }
-  for (const file of ["AGENTS.md", "config.example.json", "config.schema.json", "names.json", "package.json", "prompts.json", "verifika.config.json"]) {
+  await cp(path.join(checkout, "docs"), path.join(base, "docs"), { recursive: true });
+  for (const file of ["AGENTS.md", "README.md", "config.example.json", "config.schema.json", "names.json", "package.json", "prompts.json", "verifika.config.json"]) {
     await cp(path.join(checkout, file), path.join(base, file));
   }
 }
@@ -353,6 +354,29 @@ test("configuration rejects a verify gate that would skip tests", async (t) => {
   const pkg = JSON.parse(await readFile(path.join(base, "package.json"), "utf8"));
   await writeFile(path.join(base, "package.json"), JSON.stringify({ ...pkg, scripts: { ...pkg.scripts, verify: "verifika" } }));
   await assert.rejects(check(base), /npm run verify must run every Verifika check/);
+});
+
+// The guard covers only some commands, and Codex skips it until it is trusted
+// in /hooks: no instruction or page may make it the owner of a rule, or say it
+// runs on every host.
+test("no instruction or page claims the guard enforces a rule or runs on every host", async (t) => {
+  const base = await mkdtemp(path.join(os.tmpdir(), "mexxi-guard-claims-"));
+  t.after(() => rm(base, { recursive: true, force: true }));
+  await copyCheckout(base);
+  await symlink(path.join(checkout, "node_modules"), path.join(base, "node_modules"), process.platform === "win32" ? "junction" : undefined);
+  const overclaims = [
+    ["commands/wettaq.md", "\nThe guard hook refuses the destructive recoveries; do not attempt them by other means.\n", /commands\/wettaq\.md[^\n]*the guard[^\n]*: "The guard hook refuses the destructive recoveries;"/],
+    ["AGENTS.md", "\nThe guard enforces these rules.\n", /AGENTS\.md[^\n]*the guard/],
+    ["docs/glossary.md", "\n| **guard** | The hook that refuses dangerous commands on every host. |\n", /docs\/glossary\.md[^\n]*every host/],
+    ["README.md", "\n- **Guardrails.** On every host, a hook backs up the rules against force pushes.\n", /README\.md[^\n]*every host/],
+  ];
+  for (const [file, sentence, reason] of overclaims) {
+    const original = await readFile(path.join(base, file), "utf8");
+    await writeFile(path.join(base, file), `${original}${sentence}`);
+    await assert.rejects(check(base), reason, `${file}: ${sentence.trim()}`);
+    await writeFile(path.join(base, file), original);
+  }
+  await check(base);
 });
 
 test("names.json must cover every command, and each alias must be the name its command replaces", async (t) => {

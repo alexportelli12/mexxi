@@ -19,7 +19,7 @@ Each concept has one name across the docs. When two words could mean the same th
 | **default branch** | The branch pull requests target, usually `main`. |
 | **evidence directory** | The folder where a run keeps screenshots, recordings and notes. `ibni prepare` reports it as `evidenceDir`. |
 | **gate** | A check a run must pass before it moves on, such as `verify`, rendered QA or review. |
-| **guard** | The hook that refuses dangerous commands on every host. |
+| **guard** | The hook that backs up the rules against dangerous commands. Codex runs it only once you trust it in `/hooks`. |
 | **host** | A coding agent that mexxi installs into: OpenCode, Claude Code or Codex. |
 | **mod** | A Claude Code plugin shipped in `claude/mods/`, such as the run pane. |
 | **pull request** | What a run delivers. Write "pull request" in full the first time; "PR" is fine after. |

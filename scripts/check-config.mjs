@@ -30,8 +30,8 @@ const sentences = (text) => text.replace(/\s+/g, " ").split(/(?<=[.;:!?])\s+/);
 async function checkInstructionClaims(base, defaults) {
   const read = (name) => readFile(path.join(base, name), "utf8");
   // The guard hook covers only some commands, and Codex skips it until
-  // trusted, so the red lines stay rules in prose and the guard is named only
-  // as their backup.
+  // trusted, so the red lines stay rules in prose and no page makes the guard
+  // their owner or says it runs on every host.
   const wettaq = (await read("commands/wettaq.md")).replace(/\s+/g, " ");
   assert.match(wettaq, /Do not [^.]*rewrite shared history, force push, stash, discard work,[^.]* or improvise destructive recovery\./,
     "commands/wettaq.md must keep its delivery red lines as a rule, not leave them to the guard hook");
@@ -40,9 +40,20 @@ async function checkInstructionClaims(base, defaults) {
   for (const line of ["push to the default branch", "force push", "rewrite published or unrelated history", "stash, discard, or overwrite changes you did not make", "include unrelated changes"]) {
     assert.ok(redLines.includes(line), `AGENTS.md must keep "${line}" in its "Never merge; ..." rule, not leave it to the guard hook`);
   }
-  for (const name of ["AGENTS.md", "commands/wettaq.md"]) {
+  // Where the guard is said to act on a rule, it is that rule's backup; and
+  // where a hook is said to run on every host, Codex's trust is named.
+  const enforcing = /\b(?:refuses?|blocks?|enforces?|prevents?|stops|forbids?|owns?|guarantees?|ensures?)\b/i;
+  const backup = /\bbackup\b|\bback(?:s|ed)?\b[^.;]*\bup\b/i;
+  const pages = ["AGENTS.md", "commands/wettaq.md", "README.md",
+    ...(await readdir(path.join(base, "docs"))).filter((name) => name.endsWith(".md")).map((name) => `docs/${name}`)];
+  for (const name of pages) {
     for (const sentence of sentences(await read(name))) {
-      if (/\bguard\b/i.test(sentence)) assert.match(sentence, /\bbackup\b/, `${name} must name the guard hook only as a backup to its rules: "${sentence}"`);
+      if (/\bguard\b/i.test(sentence) && enforcing.test(sentence) && !backup.test(sentence)) {
+        assert.fail(`${name} makes the guard hook the owner of a rule, which it only backs up: "${sentence}"`);
+      }
+      if (/\b(?:guard|hooks?)\b/i.test(sentence) && /\b(?:every|all|each) hosts?\b/i.test(sentence) && !/\btrust/i.test(sentence)) {
+        assert.fail(`${name} says the guard hook runs on every host, but Codex skips it until it is trusted in /hooks: "${sentence}"`);
+      }
     }
   }
   // ibda runs the installer, which merges keys into the user's own Claude Code
