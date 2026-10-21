@@ -12,7 +12,15 @@
     },
     "workspace": {
       "command": "node --test scripts/ibni/ibni.test.mjs",
-      "paths": ["scripts/ibni/**", "scripts/implementation-workspace*", "scripts/lib/config.mjs", "config.schema.json"]
+      "paths": ["scripts/ibni/**", "scripts/implementation-workspace*", "scripts/lib/config.mjs", "config.schema.json", "claude/mods/run-pane/tests/recorded.mjs"]
+    },
+    "hooks": {
+      "command": "node --test scripts/hooks/hooks.test.mjs",
+      "paths": ["scripts/hooks/**", "opencode/plugins/**", "scripts/lib/config.mjs", "scripts/ibni/lib/metadata.mjs", "config.schema.json"]
+    },
+    "mods": {
+      "command": "node scripts/check-mods.mjs",
+      "paths": ["claude/mods/**", ".claude-plugin/**", "scripts/check-mods.mjs"]
     },
     "repo-context": {
       "command": "node --test skills/repo-context/tests/inspect.test.js",

@@ -5,8 +5,10 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { registrationCommands, registrationDrift } from "./lib/browser.mjs";
+import { applyMods, planMods } from "./lib/claude-mods.mjs";
 import { desiredSettings, planSettingsMerge, writeSettingsMerge } from "./lib/claude-settings.mjs";
 import { abbreviateHome, configPath, loadConfig, minimalConfig } from "./lib/config.mjs";
+import { codexHooks, planCodexHooks, writeCodexHooks } from "./lib/host-hooks.mjs";
 import { codexCommandSkill, renderDrift, renderHostFiles, writeRendered } from "./lib/render.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
@@ -65,7 +67,7 @@ export async function links({
     [path.join(opencode, "commands"), path.join(checkout, "commands"), "opencode"],
     [path.join(opencode, "skills"), path.join(checkout, "skills"), "opencode"],
     [path.join(opencode, "agent"), path.join(checkout, "agent"), "opencode"],
-    [path.join(claude, "CLAUDE.md"), path.join(checkout, "AGENTS.md"), "claude"],
+    [path.join(claude, "CLAUDE.md"), path.join(generated, "claude/CLAUDE.md"), "claude"],
     [path.join(claude, "commands"), path.join(checkout, "commands"), "claude"],
     [path.join(codex, "AGENTS.md"), path.join(checkout, "AGENTS.md"), "codex"],
   ];
@@ -262,6 +264,20 @@ export async function install(options = {}) {
     ? await planSettingsMerge({ ...settingsFiles, desired: desiredSettings(config) })
     : null;
   conflicts.push(...(settingsPlan?.conflicts ?? []));
+  // Codex's hooks.json is shared with the user and other tools (herdr), so
+  // only the guard and loop-breaker groups are merged in, by ownership.
+  const codexHooksFiles = {
+    hooksFile: path.join(options.codex ?? path.join(home, ".codex"), "hooks.json"),
+    stateFile: path.join(home, ".local/share/mexxi/state/codex-hooks.json"),
+  };
+  const codexHooksPlan = config.hosts.codex
+    ? await planCodexHooks({ ...codexHooksFiles, desired: codexHooks(config) })
+    : null;
+  conflicts.push(...(codexHooksPlan?.conflicts ?? []));
+  // The claude CLI runs with this home, so a test's throwaway home is the
+  // only one it can touch.
+  const claudeCli = { cli: options.claudeCli ?? "claude", env: { ...(options.env ?? process.env), HOME: home } };
+  const modsPlan = config.hosts.claude ? planMods({ checkout, mods: config.mods, ...claudeCli }) : null;
   if (conflicts.length) throw new Error(`existing configuration differs; no changes made:\n${conflicts.join("\n")}`);
   const drift = await renderDrift(generated, rendered);
   if (options.check) {
@@ -272,6 +288,8 @@ export async function install(options = {}) {
       ...relinks.map(([destination]) => `${destination} (points into the old checkout)`),
       ...stale.map((link) => `${link} (stale)`),
       ...(settingsPlan?.drift ?? []),
+      ...(codexHooksPlan?.drift ?? []),
+      ...(modsPlan?.drift ?? []),
       ...await registrationDrift({
         browser: config.browser, hosts: config.hosts,
         claudeJson: options.claudeJson ?? path.join(home, ".claude.json"),
@@ -279,7 +297,7 @@ export async function install(options = {}) {
       }),
     ];
     if (incomplete.length) throw new Error(`setup incomplete:\n${incomplete.join("\n")}`);
-    return { created: 0, relinked: 0, removed: 0, rendered: 0, checked: entries.length };
+    return { created: 0, relinked: 0, removed: 0, rendered: 0, checked: entries.length, ...modsSummary(modsPlan) };
   }
   if (!exists) {
     await mkdir(path.dirname(configFile), { recursive: true });
@@ -287,6 +305,7 @@ export async function install(options = {}) {
   }
   await writeRendered(generated, rendered);
   if (settingsPlan) await writeSettingsMerge(settingsFiles, settingsPlan);
+  if (codexHooksPlan) await writeCodexHooks(codexHooksFiles, codexHooksPlan);
   for (const link of stale) await unlink(link);
   for (const [destination, source] of [...relinks, ...pending]) {
     await mkdir(path.dirname(destination), { recursive: true });
@@ -300,11 +319,19 @@ export async function install(options = {}) {
       await symlink(source, destination, process.platform === "win32" && !source.endsWith(".md") && !source.endsWith(".json") && !source.endsWith(".toml") ? "junction" : undefined);
     }
   }
+  if (modsPlan?.available) applyMods(modsPlan, { checkout, ...claudeCli });
   const registration = Object.fromEntries(Object.entries(registrationCommands(config.browser)).filter(([host]) => config.hosts[host]));
   return {
     created: pending.length, relinked: relinks.length, removed: stale.length, rendered: drift.length, checked: entries.length,
-    settings: settingsPlan?.drift.length ?? 0, registration,
+    settings: settingsPlan?.drift.length ?? 0, ...modsSummary(modsPlan), registration,
+    // Codex skips a new or changed hook until it is trusted in /hooks.
+    codexHooksChanged: Boolean(codexHooksPlan?.file),
   };
+}
+
+function modsSummary(plan) {
+  if (!plan) return {};
+  return { mods: plan.available ? plan.install.length + plan.uninstall.length + (plan.marketplace ? 1 : 0) : "skipped: no claude CLI" };
 }
 
 function windowsWrapper(module) {
@@ -330,8 +357,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       codex: process.env.CODEX_HOME ? path.resolve(process.env.CODEX_HOME) : undefined,
       configFile: configPath(), migrateFrom,
     });
-    const { registration = {}, ...summary } = result;
+    const { registration = {}, codexHooksChanged, ...summary } = result;
     process.stdout.write(`${JSON.stringify(summary)}\n`);
+    if (codexHooksChanged) {
+      process.stdout.write("Codex hooks changed: start codex and trust the mexxi guard and loop breaker once in /hooks (Codex skips untrusted hooks).\n");
+    }
     // The installer never touches a host's MCP registry; these are for you to run.
     // `install --check` fails until each registered server matches them.
     if (Object.keys(registration).length) {

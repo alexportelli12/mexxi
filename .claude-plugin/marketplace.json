@@ -1,0 +1,17 @@
+{
+  "name": "mexxi",
+  "owner": { "name": "Alex Portelli" },
+  "description": "Claude Code mods that make the mexxi workflow easier to watch and harder to trip over. The installer adds this clone as a folder marketplace, so a git pull updates them.",
+  "plugins": [
+    {
+      "name": "run-pane",
+      "source": "./claude/mods/run-pane",
+      "description": "A pane beside the chat showing the current /wettaq run, and a band suggesting a fresh session once the PR is delivered or context runs high."
+    },
+    {
+      "name": "command-fixer",
+      "source": "./claude/mods/command-fixer",
+      "description": "Rewrites Bash calls instead of letting them fail: quotes --include=* globs, adds pipefail to verify pipes, backgrounds a full verify."
+    }
+  ]
+}

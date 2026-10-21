@@ -1217,6 +1217,18 @@ test("lifecycle steps, verify attempts and finding counts are recorded and repor
   assert.deepEqual(stats.json.verify.history.map((entry) => entry.outcome), ["fail", "pass"]);
   assert.deepEqual([stats.json.review.rounds, stats.json.review.findings], [2, 4]);
   assert.deepEqual([stats.json.qa.rounds, stats.json.qa.findings], [1, 0]);
+
+  // The run pane mod's tests draw from a recording of this scenario; it must
+  // keep the shape ibni prints, or those tests prove nothing.
+  await lifecycle(fixture, worktreePath, "mark-pr", { session: sessionId, url: "https://github.com/alexportelli12/example/pull/42" });
+  const recorded = await import("../../claude/mods/run-pane/tests/recorded.mjs");
+  const shape = (value) => Array.isArray(value) ? [shape(value[0])]
+    : value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, shape(value[key])]))
+      : typeof value;
+  for (const [operation, json] of [["info", recorded.info], ["stats", recorded.stats]]) {
+    const live = await lifecycle(fixture, fixture.root, operation, { session: sessionId });
+    assert.deepEqual(shape(json), shape(live.json), `claude/mods/run-pane/tests/recorded.mjs no longer matches ibni ${operation}; record it again`);
+  }
 });
 
 async function metadataFile(worktreePath) {

@@ -154,16 +154,28 @@
           "type": "array",
           "items": { "type": "string", "minLength": 1 },
           "default": []
+        },
+        "blockUnquotedGlobs": {
+          "description": "Refuse unquoted --include=* and --exclude=* globs, which zsh expands (and aborts on when nothing matches) unless setopt no_nomatch reaches the agent's shell. Leave off once a fresh Claude Code session shows `grep -rn x --include=*.ts .` searching; turn on if it fails with 'no matches found'.",
+          "type": "boolean",
+          "default": false
+        },
+        "repeatedFailureLimit": {
+          "description": "How many times the same shell command may fail in one agent session, with no file edited in between, before the loop breaker tells the agent to stop retrying and re-diagnose.",
+          "type": "integer",
+          "minimum": 2,
+          "default": 3
         }
       }
     },
     "claude": {
-      "description": "Settings the installer merges into Claude Code's own settings.json, alongside the production deny rules from guard.deny. Everything else in that file stays yours.",
+      "description": "Claude Code-only settings: the ones the installer merges into Claude Code's own settings.json (alongside the deny rules and hooks it owns; everything else in that file stays yours), and the ones the mods read.",
       "type": "object",
       "additionalProperties": false,
       "default": {},
       "properties": {
-        "bashMaxTimeoutMs": { "description": "Longest a foreground Bash command may run (BASH_MAX_TIMEOUT_MS), in milliseconds. Set it above your slowest repository's verify run; the default is 15 minutes.", "type": "integer", "minimum": 1000, "default": 900000 }
+        "bashMaxTimeoutMs": { "description": "Longest a foreground Bash command may run (BASH_MAX_TIMEOUT_MS), in milliseconds. Set it above your slowest repository's verify run; the default is 15 minutes.", "type": "integer", "minimum": 1000, "default": 900000 },
+        "contextNudgePercent": { "description": "Context window fill, in percent, at which the run pane's band suggests a fresh session and ibni adopt for follow-ups.", "type": "integer", "minimum": 1, "maximum": 100, "default": 70 }
       }
     },
     "jev": {

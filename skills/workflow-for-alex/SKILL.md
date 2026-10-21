@@ -54,8 +54,9 @@ The workflow is shared across coding-agent hosts. Commands and skills stay
 canonical; agent behaviour lives in `agent/`, with host-specific definitions
 generated or configured by adapters. Anything two reasonable users would set
 differently, such as models and paths, belongs in `config.json` with a default
-and description in `config.schema.json`; permissions, MCP and environment setup
-belong to the host adapters, which the installer renders from that config.
+and description in `config.schema.json`; permissions, hooks, MCP, environment
+setup and rules for one host's own tools (such as `claude/overlay.md`) belong
+to the host adapters, which the installer renders from that config.
 `npm run verify` checks that boundary and the rendered definitions. Do not fork
 workflow semantics to accommodate a host.
 

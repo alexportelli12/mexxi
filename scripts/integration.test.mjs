@@ -1,17 +1,61 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { rmSync } from "node:fs";
 import { cp, lstat, mkdir, mkdtemp, readdir, readFile, readlink, symlink, writeFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { install } from "./install.mjs";
 import { playwrightArguments, registrationCommands } from "./lib/browser.mjs";
 import { loadConfig } from "./lib/config.mjs";
+import { claudeHooks } from "./lib/host-hooks.mjs";
 import { check } from "./check-config.mjs";
 
 const checkout = fileURLToPath(new URL("../", import.meta.url));
 const verifikaCli = path.join(checkout, "node_modules/verifika/dist/cli.js");
+
+// A stand-in for the claude CLI, first on PATH for every install in this file,
+// so no test reaches a real Claude Code installation or the real home. It
+// keeps its marketplace and plugins in the home the installer runs it with,
+// reads a folder marketplace's plugins from that folder as Claude Code does,
+// and logs each call.
+const claudeStubSource = `#!/usr/bin/env node
+const fs = require("node:fs");
+const path = require("node:path");
+const stateFile = path.join(process.env.HOME, ".claude-stub.json");
+const state = fs.existsSync(stateFile) ? JSON.parse(fs.readFileSync(stateFile, "utf8")) : { marketplace: null, plugins: [] };
+const args = process.argv.slice(2);
+fs.appendFileSync(path.join(process.env.HOME, ".claude-stub.log"), args.join(" ") + "\\n");
+const save = () => fs.writeFileSync(stateFile, JSON.stringify(state));
+const listing = () => JSON.parse(fs.readFileSync(path.join(state.marketplace, ".claude-plugin/marketplace.json"), "utf8"));
+const [noun, verb, target] = args;
+if (noun !== "plugin") process.exit(2);
+if (verb === "list") {
+  console.log(JSON.stringify(state.plugins.map((id) => {
+    const entry = listing().plugins.find((plugin) => plugin.name + "@mexxi" === id);
+    return { id, scope: "user", enabled: true, readFromFolder: entry ? path.resolve(state.marketplace, entry.source) : undefined };
+  })));
+} else if (verb === "marketplace" && target === "add") {
+  state.marketplace = path.resolve(args[3]);
+  listing();
+  save();
+} else if (verb === "install") {
+  if (!state.marketplace || !listing().plugins.some((plugin) => plugin.name + "@mexxi" === target)) {
+    console.error("Plugin not found in marketplace");
+    process.exit(1);
+  }
+  if (!state.plugins.includes(target)) state.plugins.push(target);
+  save();
+} else if (verb === "uninstall") {
+  state.plugins = state.plugins.filter((id) => id !== target);
+  save();
+} else process.exit(2);
+`;
+const claudeStub = await mkdtemp(path.join(os.tmpdir(), "mexxi-claude-stub-"));
+await writeFile(path.join(claudeStub, "claude"), claudeStubSource, { mode: 0o755 });
+process.env.PATH = `${claudeStub}${path.delimiter}${process.env.PATH}`;
+process.on("exit", () => rmSync(claudeStub, { recursive: true, force: true }));
 
 // The installer only runs from the clone config.json names, so each throwaway
 // home first gets a config.json pointing at the clone under test.
@@ -24,7 +68,7 @@ async function configure(home, config = {}, clone = checkout) {
 
 // A disposable copy of the clone whose sources a test may change.
 async function copyCheckout(base) {
-  for (const directory of ["agent", "claude", "codex", "commands", "opencode", "scripts", "skills"]) {
+  for (const directory of [".claude-plugin", "agent", "claude", "codex", "commands", "opencode", "scripts", "skills"]) {
     await cp(path.join(checkout, directory), path.join(base, directory), { recursive: true });
   }
   for (const file of ["AGENTS.md", "config.example.json", "config.schema.json", "package.json", "verifika.config.json"]) {
@@ -428,7 +472,7 @@ test("--migrate-from relinks an old checkout's links, then a hand-edited host fi
   await assert.rejects(lstat(path.join(home, ".claude/skills/retired")), /ENOENT/);
   assert.equal(await readlink(personal), path.join(home, "elsewhere"));
   assert.equal(await readFile(path.join(old, "tui.jsonc"), "utf8"), "{}\n");
-  assert.equal(await readlink(path.join(home, ".claude/CLAUDE.md")), path.join(checkout, "AGENTS.md"));
+  assert.equal(await readlink(path.join(home, ".claude/CLAUDE.md")), path.join(home, ".local/share/mexxi/generated/claude/CLAUDE.md"));
   assert.equal(await readlink(path.join(home, ".local/bin/implementation-workspace")), path.join(checkout, "scripts/implementation-workspace"));
   assert.match(await readFile(path.join(home, ".codex/agents/ui-designer.toml"), "utf8"), /^name = "ui-designer"$/m);
   await install({ ...options, check: true });
@@ -513,13 +557,17 @@ test("settings.json gets only the keys mexxi owns, and --check notices a hand-re
 
   await assert.rejects(install({ ...options, check: true }), /Bash\(firebase deploy:\*\) is missing[\s\S]*env\.BASH_MAX_TIMEOUT_MS is missing/);
   await install(options);
+  // The guard and loop breaker join the user's own hooks; theirs stay first.
+  const ours = claudeHooks({ paths: { checkout } });
   assert.deepEqual(await read(), {
     ...mine,
     permissions: { allow: mine.permissions.allow, deny: ["Bash(rm -rf:*)", "Bash(npm publish:*)", "Bash(firebase deploy:*)"] },
     env: { OTHER: "1", BASH_MAX_TIMEOUT_MS: "900000" },
+    hooks: { ...mine.hooks, ...ours },
   });
+  assert.match(ours.PreToolUse[0].hooks[0].command, /^node .*scripts\/hooks\/guard\.mjs$/);
   // The user's own copy of npm publish was there first, so it is not ours to remove.
-  assert.deepEqual(JSON.parse(await readFile(stateFile, "utf8")), { deny: ["Bash(firebase deploy:*)"], env: { BASH_MAX_TIMEOUT_MS: "900000" } });
+  assert.deepEqual(JSON.parse(await readFile(stateFile, "utf8")), { deny: ["Bash(firebase deploy:*)"], env: { BASH_MAX_TIMEOUT_MS: "900000" }, hooks: ours });
   const written = await readFile(settingsFile, "utf8");
   await install(options);
   await install({ ...options, check: true });
@@ -530,6 +578,12 @@ test("settings.json gets only the keys mexxi owns, and --check notices a hand-re
   await assert.rejects(install({ ...options, check: true }), /deny entry Bash\(firebase deploy:\*\) is missing/);
   await install(options);
   await install({ ...options, check: true });
+  const unhooked = await read();
+  delete unhooked.hooks.PreToolUse;
+  await writeFile(settingsFile, JSON.stringify(unhooked));
+  await assert.rejects(install({ ...options, check: true }), /PreToolUse hook Bash\|Monitor -> node .*guard\.mjs is missing/);
+  await install(options);
+  assert.deepEqual((await read()).hooks.PreToolUse, ours.PreToolUse);
 
   // Changing config removes only what mexxi added; the timeout follows config.
   await configure(home, { guard: { deny: ["gh pr merge"] }, claude: { bashMaxTimeoutMs: 600000 } });
@@ -540,7 +594,7 @@ test("settings.json gets only the keys mexxi owns, and --check notices a hand-re
   assert.deepEqual(settings.permissions.deny, ["Bash(rm -rf:*)", "Bash(npm publish:*)", "Bash(rm:*)", "Bash(gh pr merge:*)"]);
   assert.equal(settings.env.BASH_MAX_TIMEOUT_MS, "600000");
   assert.equal(settings.model, "opus");
-  assert.deepEqual(settings.hooks, mine.hooks);
+  assert.deepEqual(settings.hooks, { ...mine.hooks, ...ours });
 
   // A value the user set themselves is a conflict, not something to overwrite.
   await writeFile(settingsFile, JSON.stringify({ env: { BASH_MAX_TIMEOUT_MS: "120000" } }));
@@ -562,4 +616,102 @@ test("the default deny rules are the plan's starter list, and guard has what the
   ]);
   assert.deepEqual(config.guard.protectedBranches, []);
   assert.equal(desiredSettings(config).env.BASH_MAX_TIMEOUT_MS, "900000");
+});
+
+test("Claude Code gets AGENTS.md plus its overlay; the other hosts get AGENTS.md alone", async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-overlay-"));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  await configure(home);
+  await registerPlaywright(home);
+  await install({ home, checkout });
+  const shared = await readFile(path.join(checkout, "AGENTS.md"), "utf8");
+  const overlay = await readFile(path.join(checkout, "claude/overlay.md"), "utf8");
+  const claudeFile = path.join(home, ".claude/CLAUDE.md");
+  assert.equal(await readlink(claudeFile), path.join(home, ".local/share/mexxi/generated/claude/CLAUDE.md"));
+  assert.equal(await readFile(claudeFile, "utf8"), `${shared.trimEnd()}\n\n${overlay}`);
+  assert.equal(await readFile(path.join(home, ".codex/AGENTS.md"), "utf8"), shared);
+  assert.equal(await readFile(path.join(home, ".config/opencode/AGENTS.md"), "utf8"), shared);
+  // OpenCode loads the guard plugin from the clone, so its imports resolve.
+  const opencode = JSON.parse(await readFile(path.join(home, ".config/opencode/opencode.json"), "utf8"));
+  assert.deepEqual(opencode.plugin, [pathToFileURL(path.join(checkout, "opencode/plugins/mexxi-guard.js")).href]);
+});
+
+test("Codex's hooks.json gets the guard and loop breaker beside hooks it does not own", async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-codex-hooks-"));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  await configure(home);
+  await registerPlaywright(home);
+  const hooksFile = path.join(home, ".codex/hooks.json");
+  const herdr = { SessionStart: [{ hooks: [{ command: "bash ~/.codex/herdr-agent-state.sh session", timeout: 10, type: "command" }] }] };
+  await writeFile(hooksFile, JSON.stringify({ hooks: herdr }));
+  const options = { home, checkout };
+
+  await assert.rejects(install({ ...options, check: true }), /hooks\.json: PreToolUse hook Bash -> node .*guard\.mjs is missing/);
+  assert.equal((await install(options)).codexHooksChanged, true);
+  const { hooks } = JSON.parse(await readFile(hooksFile, "utf8"));
+  assert.deepEqual(hooks.SessionStart, herdr.SessionStart);
+  assert.deepEqual(hooks.PreToolUse, [{ matcher: "Bash", hooks: [{ type: "command", command: `node ${path.join(checkout, "scripts/hooks/guard.mjs")}` }] }]);
+  assert.match(hooks.PostToolUse[0].hooks[0].command, /loop-breaker\.mjs$/);
+  assert.equal((await install(options)).codexHooksChanged, false);
+  await install({ ...options, check: true });
+
+  await writeFile(hooksFile, JSON.stringify({ hooks: { ...hooks, PreToolUse: [] } }));
+  await assert.rejects(install({ ...options, check: true }), /PreToolUse hook Bash -> .* is missing/);
+  await install(options);
+  await install({ ...options, check: true });
+
+  // Turning Codex off leaves its files alone; turning it back on is idempotent.
+  await configure(home, { hosts: { codex: false } });
+  await install(options);
+  assert.deepEqual(JSON.parse(await readFile(hooksFile, "utf8")).hooks.SessionStart, herdr.SessionStart);
+});
+
+test("the mods are installed through the claude CLI from this clone, and --check confirms where they are read from", async (t) => {
+  const base = await mkdtemp(path.join(os.tmpdir(), "mexxi-mods-"));
+  t.after(() => rm(base, { recursive: true, force: true }));
+  const home = path.join(base, "home");
+  await mkdir(home);
+  await configure(home);
+  await registerPlaywright(home);
+  const log = path.join(home, ".claude-stub.log");
+  const calls = async () => (await readFile(log, "utf8").catch(() => "")).trim().split("\n").filter(Boolean);
+  const options = { home, checkout };
+
+  await assert.rejects(install({ ...options, check: true }), /mod run-pane@mexxi is not installed[\s\S]*mod command-fixer@mexxi is not installed/);
+  await install(options);
+  assert.deepEqual((await calls()).filter((call) => !call.startsWith("plugin list")), [
+    `plugin marketplace add ${path.resolve(checkout)} --json`, "plugin install run-pane@mexxi --json", "plugin install command-fixer@mexxi --json",
+  ]);
+  // Already installed and read from this clone: nothing more is run.
+  const before = (await calls()).length;
+  await install(options);
+  await install({ ...options, check: true });
+  assert.deepEqual((await calls()).slice(before), ["plugin list --json", "plugin list --json"]);
+
+  // Left pointing at an old clone (the pre-move ~/.config/opencode), --check
+  // says where they are read from; installing adds this clone again.
+  const old = path.join(base, "old");
+  await copyCheckout(old);
+  const stub = await execute("claude", ["plugin", "marketplace", "add", old, "--json"], home, { ...process.env, HOME: home });
+  assert.equal(stub.code, 0, stub.output);
+  await assert.rejects(install({ ...options, check: true }), new RegExp(`run-pane@mexxi is read from ${old}/claude/mods/run-pane, not ${path.resolve(checkout)}/claude/mods/run-pane`));
+  await install(options);
+  await install({ ...options, check: true });
+
+  // A mod dropped from config.json is uninstalled.
+  await configure(home, { mods: ["run-pane"] });
+  await assert.rejects(install({ ...options, check: true }), /command-fixer@mexxi is installed but not in config\.json's mods/);
+  await install(options);
+  assert.equal((await calls()).at(-1), "plugin uninstall command-fixer@mexxi --json");
+  await install({ ...options, check: true });
+});
+
+test("hosts without the claude CLI skip the mods", async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-no-claude-"));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  await configure(home);
+  await registerPlaywright(home);
+  const options = { home, checkout, env: { PATH: path.join(home, "no-such-bin") } };
+  assert.equal((await install(options)).mods, "skipped: no claude CLI");
+  assert.equal((await install({ ...options, check: true })).mods, "skipped: no claude CLI");
 });

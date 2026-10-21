@@ -59,10 +59,13 @@
       "git push --force",
       "git push -f"
     ],
-    "protectedBranches": []
+    "protectedBranches": [],
+    "blockUnquotedGlobs": false,
+    "repeatedFailureLimit": 3
   },
   "claude": {
-    "bashMaxTimeoutMs": 900000
+    "bashMaxTimeoutMs": 900000,
+    "contextNudgePercent": 70
   },
   "jev": {
     "enabled": false,

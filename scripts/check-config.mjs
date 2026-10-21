@@ -95,6 +95,34 @@ export async function check(base = root) {
       assert.doesNotMatch(text, /(?:openai|opencode-go)\/[a-z0-9.-]+/i);
     }
   }
+  // Rules for Claude Code's own tools live only in its overlay: the hosts that
+  // read the shared files have no Read tool, run_in_background or Monitor.
+  const overlay = await readFile(path.join(base, "claude/overlay.md"), "utf8");
+  const claudeOnly = [/\brun_in_background\b/, /\bMonitor\b/, /\bthe Read tool\b/];
+  for (const pattern of claudeOnly) assert.match(overlay, pattern, `claude/overlay.md no longer names ${pattern}; update this check with the overlay`);
+  const rules = overlay.split(/\n(?=- )/).filter((item) => item.startsWith("- ")).map((item) => item.slice(2).replace(/\s+/g, " ").trim());
+  assert.ok(rules.length >= 3, "claude/overlay.md must list its rules as bullets");
+  const sharedInstructions = ["AGENTS.md",
+    ...(await readdir(path.join(base, "agent"))).map((name) => `agent/${name}`),
+    ...(await readdir(path.join(base, "commands"))).map((name) => `commands/${name}`),
+    ...(await readdir(path.join(base, "skills"), { recursive: true })).map((name) => `skills/${name.split(path.sep).join("/")}`),
+  ].filter((name) => name.endsWith(".md"));
+  for (const name of sharedInstructions) {
+    const text = (await readFile(path.join(base, name), "utf8"));
+    for (const pattern of claudeOnly) assert.doesNotMatch(text, pattern, `${name} names a Claude Code-only tool; that rule belongs in claude/overlay.md`);
+    const flat = text.replace(/\s+/g, " ");
+    for (const rule of rules) assert.ok(!flat.includes(rule), `${name} repeats the Claude Code-only rule "${rule}"`);
+  }
+  // Every mod config.json can name is in the marketplace the installer adds,
+  // read from its own folder under claude/mods/.
+  const marketplace = JSON.parse(await readFile(path.join(base, ".claude-plugin/marketplace.json"), "utf8"));
+  assert.equal(marketplace.name, "mexxi", "the installer installs mods as <mod>@mexxi");
+  assert.deepEqual(marketplace.plugins.map((plugin) => plugin.name).sort(), [...schema.properties.mods.items.enum].sort(), "config.schema.json's mods must match .claude-plugin/marketplace.json");
+  for (const plugin of marketplace.plugins) {
+    assert.equal(plugin.source, `./claude/mods/${plugin.name}`, `mod ${plugin.name} must be read from claude/mods/${plugin.name}`);
+    const manifest = JSON.parse(await readFile(path.join(base, plugin.source, ".claude-plugin/plugin.json"), "utf8"));
+    assert.equal(manifest.name, plugin.name);
+  }
   const installation = await links({ checkout: base, generated });
   assert.equal(new Set(installation.map(([destination]) => destination)).size, installation.length, "installation destinations must be unique");
   for (const [destination, source] of installation) {

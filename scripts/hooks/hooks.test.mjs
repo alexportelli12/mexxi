@@ -1,0 +1,309 @@
+// The shared guard and loop breaker, fed each host's real hook input: Claude
+// Code's and Codex's PreToolUse/PostToolUse JSON on stdin of the scripts the
+// installer registers, and OpenCode's plugin called as OpenCode calls it.
+import assert from "node:assert/strict";
+import { execFileSync, spawnSync } from "node:child_process";
+import { readdirSync, rmSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
+
+const hooks = path.dirname(fileURLToPath(import.meta.url));
+const base = await mkdtemp(path.join(os.tmpdir(), "mexxi-hooks-"));
+process.on("exit", () => rmSync(base, { recursive: true, force: true }));
+// Every host process and the in-process OpenCode plugin read this config and
+// keep loop-breaker state under this home, never the real one.
+const home = path.join(base, "home");
+const configFile = path.join(base, "config.json");
+process.env.HOME = home;
+process.env.MEXXI_CONFIG = configFile;
+await writeFile(configFile, JSON.stringify({ guard: { protectedBranches: ["release"] } }));
+const { default: opencodePlugin } = await import("../../opencode/plugins/mexxi-guard.js");
+const { exitCode } = await import("./loop-breaker.mjs");
+const { resolveConfig } = await import("../lib/config.mjs");
+
+function git(cwd, ...args) {
+  return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+}
+
+// A bare remote whose default branch is main, a clone of it (not an ibni
+// workspace) on a feature branch, and a linked worktree carrying the ownership
+// metadata ibni prepare writes.
+const remote = path.join(base, "remote.git");
+const clone = path.join(base, "clone");
+const owned = path.join(base, "worktrees/clone/task");
+git(base, "init", "--quiet", "--bare", "--initial-branch=main", remote);
+git(base, "clone", "--quiet", remote, clone);
+git(clone, "config", "user.email", "test@example.com");
+git(clone, "config", "user.name", "Test");
+git(clone, "commit", "--quiet", "--allow-empty", "-m", "initial");
+git(clone, "push", "--quiet", "origin", "main");
+git(clone, "remote", "set-head", "origin", "main");
+git(clone, "switch", "--quiet", "-c", "feature");
+git(clone, "worktree", "add", "--quiet", "-b", "agent/task", owned, "main");
+await writeFile(path.join(git(owned, "rev-parse", "--absolute-git-dir"), "implementation-workspace.json"), JSON.stringify({
+  version: 1, sessionId: "abc123", worktreePath: owned, branch: "agent/task", defaultBranch: "main", state: "active",
+}));
+
+const claudeInput = (command, cwd) => ({
+  session_id: "claude-session", transcript_path: "/tmp/transcript.jsonl", cwd, permission_mode: "default",
+  hook_event_name: "PreToolUse", tool_name: "Bash",
+  tool_input: { command, description: "test", timeout: 120000, run_in_background: false }, tool_use_id: "toolu_01",
+});
+const codexInput = (command, cwd) => ({
+  session_id: "codex-session", transcript_path: null, cwd, hook_event_name: "PreToolUse", model: "gpt-5.6-luna",
+  permission_mode: "default", tool_name: "Bash", tool_input: { command }, tool_use_id: "call_1", turn_id: "turn_1",
+});
+
+function runHook(script, input) {
+  const result = spawnSync(process.execPath, [path.join(hooks, script)], { input: JSON.stringify(input), encoding: "utf8", env: process.env });
+  return { code: result.status, stderr: result.stderr };
+}
+
+// The guard's verdict on every host: null when allowed, else the reason each
+// host gave the agent. All three must agree.
+async function verdicts(command, cwd = clone) {
+  const claude = runHook("guard.mjs", claudeInput(command, cwd));
+  const codex = runHook("guard.mjs", codexInput(command, cwd));
+  const { "tool.execute.before": before } = await opencodePlugin.server({ directory: cwd });
+  let opencode = null;
+  await before({ tool: "bash", sessionID: "ses_1", callID: "call_1" }, { args: { command, description: "test" } })
+    .catch((error) => { opencode = error.message; });
+  return { claude, codex, opencode };
+}
+
+async function assertBlocked(command, reason, cwd) {
+  const { claude, codex, opencode } = await verdicts(command, cwd);
+  for (const [host, result] of [["Claude Code", claude], ["Codex", codex]]) {
+    assert.equal(result.code, 2, `${host} should block: ${command}`);
+    assert.match(result.stderr, reason, `${host}: ${command}`);
+    assert.match(result.stderr, /never retry it in pieces|Do not retry it in pieces/);
+  }
+  assert.match(opencode ?? "", reason, `OpenCode should block: ${command}`);
+}
+
+async function assertAllowed(command, cwd) {
+  const { claude, codex, opencode } = await verdicts(command, cwd);
+  assert.deepEqual([claude.code, codex.code, opencode], [0, 0, null], `allowed on every host: ${command}\n${claude.stderr}${opencode ?? ""}`);
+}
+
+test("force pushes are blocked on every host, however they are spelled", async () => {
+  for (const command of [
+    "git push --force origin feature",
+    "git push -f",
+    "git push -uf origin feature",
+    "git push --force-with-lease origin feature",
+    "git push origin +feature",
+    "git push --mirror",
+    "cd /tmp && git push --force",
+    "bash -c 'git push -f origin feature'",
+    "git -C . push --force",
+  ]) await assertBlocked(command, /force/);
+});
+
+test("pushes to the default branch or a protected branch are blocked", async () => {
+  for (const command of [
+    "git push origin main",
+    "git push origin HEAD:main",
+    "git push origin feature:refs/heads/main",
+    "git push --all origin",
+    "git push origin release",
+    "git push origin --delete main",
+  ]) await assertBlocked(command, /protected branch/);
+  git(clone, "switch", "--quiet", "main");
+  try {
+    await assertBlocked("git push", /to main changes a protected branch/);
+    await assertBlocked("git push origin HEAD", /to main/);
+  } finally {
+    git(clone, "switch", "--quiet", "feature");
+  }
+});
+
+test("merging pull requests is the human's: gh pr merge and its API call are blocked", async () => {
+  await assertBlocked("gh pr merge 12 --squash", /merge decisions stay with the human/);
+  await assertBlocked("cd /tmp && gh pr merge --auto", /merge decisions/);
+  await assertBlocked("gh api -X PUT repos/o/r/pulls/12/merge", /merge decisions/);
+});
+
+test("git stash, reset --hard and clean are blocked outside an owned ibni worktree and allowed inside one", async () => {
+  for (const command of ["git stash", "git stash push -m wip", "git stash pop", "git reset --hard HEAD~1", "git clean -fd", "git clean -xfd"]) {
+    await assertBlocked(command, /outside an owned ibni worktree/, clone);
+    await assertAllowed(command.replace(/^git /, "git -C . "), owned);
+    await assertAllowed(command, owned);
+  }
+  await assertAllowed(`git -C ${owned} stash`, clone);
+  await assertAllowed(`cd ${owned} && git reset --hard`, clone);
+  await assertBlocked(`cd ${clone} && git stash`, /outside an owned/, owned);
+  // Read-only and dry-run forms are not destructive.
+  for (const command of ["git stash list", "git stash show", "git clean -n", "git clean --dry-run -d", "git reset --soft HEAD~1"]) {
+    await assertAllowed(command, clone);
+  }
+  // The default branch's checkout is never an owned workspace.
+  await assertBlocked("git stash", /outside an owned/, base);
+});
+
+test("every starter deny prefix is blocked even when sidestepped with cd x && ...", async () => {
+  const { guard } = await resolveConfig({});
+  assert.equal(guard.deny.length, 11);
+  for (const prefix of guard.deny) {
+    for (const command of [`${prefix} --example`, `cd x && ${prefix}`, `cd x; FOO=1 ${prefix} --yes`, `bash -c "cd x && ${prefix}"`, `true && $(${prefix})`]) {
+      await assertBlocked(command, /force|guard\.deny|merge decisions/);
+    }
+  }
+  await assertBlocked("npx -y firebase deploy --only hosting", /firebase deploy is on the guard\.deny list/);
+  await assertBlocked("npm run deploy:prod", /npm run deploy is on the guard\.deny list/);
+});
+
+test("Shopify Admin API writes are blocked and reads allowed", async () => {
+  const api = "https://shop.myshopify.com/admin/api/2024-10";
+  for (const command of [
+    `curl -X POST ${api}/products.json -d '{"product":{}}'`,
+    `curl -s -H 'X-Shopify-Access-Token: x' -d @product.json ${api}/products.json`,
+    `curl --request PUT ${api}/products/1.json --data '{}'`,
+    `curl -XDELETE ${api}/products/1.json`,
+    `curl -X POST ${api}/graphql.json -d '{"query":"mutation { productDelete(input: {id: 1}) { userErrors { message } } }"}'`,
+    `curl -X POST ${api}/graphql.json -d @query.json`,
+    `cd x && wget --method=DELETE ${api}/products/1.json`,
+    `wget --post-data='{}' ${api}/products.json`,
+    `http PUT ${api}/products/1.json title=New`,
+    `xh ${api}/products.json title=New`,
+    `curl -X PATCH "https://$SHOP/admin/api/2024-10/products/1.json"`,
+  ]) await assertBlocked(command, /Shopify Admin API writes to a live store/);
+  for (const command of [
+    `curl -s ${api}/products.json`,
+    `curl -G ${api}/products.json -d limit=5`,
+    `curl -X POST ${api}/graphql.json -d '{"query":"{ shop { name } }"}'`,
+    `http GET ${api}/products.json limit==5`,
+    "curl -X POST https://example.com/admin/api/items -d '{}'",
+  ]) await assertAllowed(command);
+});
+
+test("look-alikes are allowed: feature pushes, quoted text and other commands", async () => {
+  for (const command of [
+    "git push origin feature",
+    "git push -u origin feature",
+    "git push",
+    "git push --dry-run origin feature",
+    // Quoted text is data unless a shell runs it: echo prints it, grep searches for it.
+    'echo "git push --force"',
+    "grep -rn 'gh pr merge' docs",
+    'git log --grep="force push"',
+    `git commit -m "$(cat <<'EOF'\nnever git push --force or firebase deploy\nEOF\n)"`,
+    "npm run deploy-docs",
+    "firebase deployments:list",
+    "gh pr view 12 --json mergeable",
+    "grep -rn x --include=*.ts .",
+  ]) await assertAllowed(command);
+});
+
+test("unquoted --include=* globs are blocked only when guard.blockUnquotedGlobs is on", async (t) => {
+  await writeFile(configFile, JSON.stringify({ guard: { blockUnquotedGlobs: true } }));
+  t.after(() => writeFile(configFile, JSON.stringify({ guard: { protectedBranches: ["release"] } })));
+  await assertBlocked("grep -rn x --include=*.ts .", /quote it: --include='\*\.ts'/);
+  await assertBlocked("rg x && grep -r y --exclude-dir=node_* .", /--exclude-dir='node_\*'/);
+  await assertAllowed("grep -rn x --include='*.ts' .");
+  await assertAllowed('grep -rn x "--include=*.ts" .');
+});
+
+test("the guard fails closed on input it cannot read, and ignores tools that run no shell", async () => {
+  const garbled = spawnSync(process.execPath, [path.join(hooks, "guard.mjs")], { input: "not json", encoding: "utf8" });
+  assert.equal(garbled.status, 2);
+  assert.match(garbled.stderr, /could not read the tool call/);
+  const read = runHook("guard.mjs", { ...claudeInput("", clone), tool_name: "Read", tool_input: { file_path: "/etc/passwd" } });
+  assert.equal(read.code, 0);
+  // Claude Code's Monitor runs a shell command too.
+  const monitor = runHook("guard.mjs", { ...claudeInput("", clone), tool_name: "Monitor", tool_input: { command: "gh pr merge 1", description: "x" } });
+  assert.equal(monitor.code, 2);
+});
+
+const failure = (session, command, error = "Exit code 1\nnpm ERR! test failed") => ({
+  session_id: session, transcript_path: "/tmp/t.jsonl", cwd: clone, permission_mode: "default",
+  hook_event_name: "PostToolUseFailure", tool_name: "Bash", tool_input: { command }, tool_use_id: "toolu_1", error, is_interrupt: false,
+});
+const success = (session, tool, input) => ({
+  session_id: session, cwd: clone, hook_event_name: "PostToolUse", tool_name: tool, tool_input: input, tool_use_id: "toolu_2",
+  tool_response: tool === "Bash" ? { stdout: "ok", stderr: "", interrupted: false, isImage: false } : { filePath: input.file_path, type: "update" },
+});
+
+test("the loop breaker stops the third identical failure in a Claude Code session", async () => {
+  const command = "npm test -- --run src/app.spec.ts";
+  assert.equal(runHook("loop-breaker.mjs", failure("s1", command)).code, 0);
+  assert.equal(runHook("loop-breaker.mjs", failure("s1", `${command}  `)).code, 0);
+  // Another session's failures are its own.
+  assert.equal(runHook("loop-breaker.mjs", failure("s2", command)).code, 0);
+  const third = runHook("loop-breaker.mjs", failure("s1", command));
+  assert.equal(third.code, 2);
+  assert.match(third.stderr, /failed 3 times in this session[\s\S]*Stop retrying it\. Re-diagnose/);
+  assert.equal(runHook("loop-breaker.mjs", failure("s1", command)).code, 2);
+  // An interrupted run or a shell that never started is not a failed attempt.
+  assert.equal(runHook("loop-breaker.mjs", { ...failure("s2", command), is_interrupt: true }).code, 0);
+  assert.equal(runHook("loop-breaker.mjs", failure("s2", command, "spawn /bin/zsh ENOENT")).code, 0);
+});
+
+test("an edit or a success between failures is progress, not a retry", async () => {
+  const command = "npm run verify";
+  runHook("loop-breaker.mjs", failure("s3", command));
+  runHook("loop-breaker.mjs", failure("s3", command));
+  assert.equal(runHook("loop-breaker.mjs", success("s3", "Edit", { file_path: "a.ts", old_string: "a", new_string: "b" })).code, 0);
+  assert.equal(runHook("loop-breaker.mjs", failure("s3", command)).code, 0);
+  assert.equal(runHook("loop-breaker.mjs", failure("s3", command)).code, 0);
+  assert.equal(runHook("loop-breaker.mjs", success("s3", "Bash", { command })).code, 0);
+  assert.equal(runHook("loop-breaker.mjs", failure("s3", command)).code, 0);
+  assert.equal(runHook("loop-breaker.mjs", failure("s3", command)).code, 0);
+  assert.equal(runHook("loop-breaker.mjs", failure("s3", command)).code, 2);
+});
+
+test("Codex's PostToolUse carries the exit status in tool_response", async () => {
+  const codex = (session, command, response) => ({
+    session_id: session, transcript_path: null, cwd: clone, hook_event_name: "PostToolUse", model: "gpt-5.6-luna",
+    permission_mode: "default", tool_name: "Bash", tool_input: { command }, tool_response: response, tool_use_id: "call_1", turn_id: "turn_1",
+  });
+  assert.equal(exitCode({ exit_code: 1 }), 1);
+  assert.equal(exitCode('{"chunk_id":"a","wall_time_seconds":0.1,"exit_code":2,"output":"x"}'), 2);
+  assert.equal(exitCode([{ type: "input_text", text: "Script completed\nOutput:\n" }, { type: "input_text", text: '{"exit_code":0}' }]), 0);
+  assert.equal(exitCode("Process exited with code 127\nOutput:\n"), 127);
+  assert.equal(exitCode("plain output"), null);
+  const command = "cargo build";
+  const failed = '{"exit_code":101,"output":"error[E0425]"}';
+  assert.equal(runHook("loop-breaker.mjs", codex("c1", command, failed)).code, 0);
+  // An unreadable result counts as nothing, not as a failure or a success.
+  assert.equal(runHook("loop-breaker.mjs", codex("c1", command, "unknown shape")).code, 0);
+  assert.equal(runHook("loop-breaker.mjs", codex("c1", command, { exit_code: 101 })).code, 0);
+  const third = runHook("loop-breaker.mjs", codex("c1", command, failed));
+  assert.equal(third.code, 2);
+  assert.match(third.stderr, /failed 3 times/);
+  assert.equal(runHook("loop-breaker.mjs", { ...codex("c1", "x", null), tool_name: "apply_patch", tool_input: { command: "*** Begin Patch" } }).code, 0);
+  assert.equal(runHook("loop-breaker.mjs", codex("c1", command, failed)).code, 0);
+});
+
+test("OpenCode's plugin runs the loop breaker on the bash tool's exit status", async () => {
+  const { "tool.execute.after": after } = await opencodePlugin.server({ directory: clone });
+  const run = async (exit, tool = "bash", args = { command: "pytest -x" }) => {
+    const output = { title: "pytest", output: "FAILED", metadata: { exit } };
+    await after({ tool, sessionID: "ses_loop", callID: "c", args }, output);
+    return output.output;
+  };
+  assert.equal(await run(1), "FAILED");
+  assert.equal(await run(1), "FAILED");
+  assert.match(await run(1), /^FAILED\n\nmexxi loop breaker: This exact command has now failed 3 times/);
+  await run(undefined, "edit", { filePath: "a.py" });
+  assert.equal(await run(1), "FAILED");
+});
+
+test("the limit comes from guard.repeatedFailureLimit, and state stays under the home's mexxi state", async (t) => {
+  await writeFile(configFile, JSON.stringify({ guard: { repeatedFailureLimit: 2 } }));
+  t.after(() => writeFile(configFile, JSON.stringify({ guard: { protectedBranches: ["release"] } })));
+  assert.equal(runHook("loop-breaker.mjs", failure("s4", "make")).code, 0);
+  assert.equal(runHook("loop-breaker.mjs", failure("s4", "make")).code, 2);
+  const directory = path.join(home, ".local/share/mexxi/state/loop-breaker");
+  const [state] = readdirSync(directory);
+  assert.match(await readFile(path.join(directory, state), "utf8"), /"counts"/);
+  // A corrupt state file never fails the tool call.
+  await mkdir(directory, { recursive: true });
+  for (const name of readdirSync(directory)) await writeFile(path.join(directory, name), "{");
+  const broken = runHook("loop-breaker.mjs", failure("s4", "make"));
+  assert.equal(broken.code, 0);
+  await rm(directory, { recursive: true });
+});

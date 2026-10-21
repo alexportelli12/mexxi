@@ -27,7 +27,9 @@ practice, security, maintainability, or documented project principles.
   must justify their maintenance cost.
 - Do not bypass, suppress, or weaken repository safeguards merely to make work
   pass. Fix root causes and respect the repository's own deterministic
-  validation contract.
+  validation contract. If a permission check, hook or classifier denies an
+  action, never retry it in pieces, rephrase it or route around it; report
+  what was blocked and why it was needed.
 
 ## Communication
 
@@ -50,8 +52,9 @@ agents never commit, push, or open pull requests.
 If the working tree held my uncommitted changes before you started, ask before
 committing rather than guessing what belongs to the task.
 
-Never merge; push to the default branch; force push; rewrite published or
-unrelated history; stash, discard, or overwrite changes you did not make; or
-include unrelated changes in a commit. Merge decisions and final product
-validation stay with me. `/wettaq` keeps its stricter isolated-worktree
+The mexxi guard hook refuses merges, force pushes, pushes to the default
+branch, and stashing, resetting or cleaning outside an owned worktree; beyond
+it, never rewrite published or unrelated history, discard or overwrite changes
+you did not make, or include unrelated changes in a commit. Merge decisions and
+final product validation stay with me. `/wettaq` keeps its stricter isolated-worktree
 lifecycle; this policy does not relax it.

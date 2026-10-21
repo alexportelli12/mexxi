@@ -4,6 +4,7 @@
 // so nothing generated is committed and nothing generated can go stale unseen.
 import { mkdir, readFile, readdir, rm, rmdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { opencodePlaywright } from "./browser.mjs";
 
 // Shared agents and the models.<host> role that sets each one's model.
@@ -32,7 +33,17 @@ function modelFor(models, name) {
   return agentRoles[name] ? models[agentRoles[name]] ?? null : null;
 }
 
+// Claude Code reads one instruction file, so it gets the shared AGENTS.md
+// followed by the rules only its tools need (claude/overlay.md). Rendering the
+// whole file avoids depending on how @imports resolve through a symlink.
+export async function claudeInstructions(checkout) {
+  const shared = await readFile(path.join(checkout, "AGENTS.md"), "utf8");
+  const overlay = await readFile(path.join(checkout, "claude/overlay.md"), "utf8");
+  return `${shared.trimEnd()}\n\n${overlay.trimEnd()}\n`;
+}
+
 async function renderClaude(checkout, config, files) {
+  files.set("claude/CLAUDE.md", await claudeInstructions(checkout));
   const metadata = JSON.parse(await readFile(path.join(checkout, "claude/agents.json"), "utf8"));
   for (const [name, fields] of Object.entries(metadata)) {
     const body = await sharedAgentBody(checkout, agentName(name));
@@ -112,7 +123,10 @@ async function renderOpencode(checkout, config, files) {
     ...template.permission,
     external_directory: Object.fromEntries([...new Set(worktreeRoots)].map((root) => [`${root}/**`, "allow"])),
   };
-  const rendered = { $schema: template.$schema, agent, permission, mcp: { playwright: opencodePlaywright(config.browser) } };
+  // The shared guard and loop breaker run in OpenCode through this plugin,
+  // loaded from the clone so its imports of scripts/hooks resolve.
+  const plugin = [...(template.plugin ?? []), pathToFileURL(path.join(checkout, "opencode/plugins/mexxi-guard.js")).href];
+  const rendered = { $schema: template.$schema, plugin, agent, permission, mcp: { playwright: opencodePlaywright(config.browser) } };
   files.set("opencode/opencode.json", `${JSON.stringify(rendered, null, 2)}\n`);
 }
 
