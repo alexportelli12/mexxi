@@ -205,15 +205,20 @@ export function confidenceTone(percent: number): Tone {
   return percent >= 80 ? 'success' : percent >= 60 ? 'claude' : 'warning'
 }
 
-// Why the band suggests a fresh session, or null. The key changes with the
-// reason, so dismissing one does not silence the next.
-export function nudge(run: RunPaneSnapshot | null, percent: number | null, threshold: number): { key: string; text: string } | null {
-  const adopt = run?.prUrl ? `ibni adopt --pr ${run.prUrl}` : 'ibni adopt --pr <url>'
+// The band's one-line hint, or null: a short badge for what happened and
+// what to do about it. Its key changes with the reason, so dismissing one
+// does not silence the next. A new session picks a pull request back up when
+// /wettaq is given its link (it adopts the workspace itself), so the hint
+// names that rather than an ibni command.
+export type Nudge = { key: string; badge: string; tone: Tone; text: string }
+
+export function nudge(run: RunPaneSnapshot | null, percent: number | null, threshold: number): Nudge | null {
   if (run && isDelivered(run)) {
-    return { key: `delivered:${run.sessionId}`, text: `PR delivered. Start a fresh session for follow-ups and take the workspace over with ${adopt}.` }
+    const pr = run.prUrl ? `PR #${run.prUrl.split('/').at(-1)}` : 'PR'
+    return { key: `delivered:${run.sessionId}`, badge: `✓ ${pr} delivered`, tone: 'success', text: 'Follow-ups go in a fresh session: give /wettaq the PR link.' }
   }
   if (percent !== null && percent >= threshold) {
-    return { key: `context:${threshold}`, text: `Context is ${percent}% full. Start a fresh session soon; a run in progress continues there with ${adopt}.` }
+    return { key: `context:${threshold}`, badge: `${percent}% context`, tone: 'warning', text: 'Finish this run here, then start the next task in a fresh session.' }
   }
   return null
 }
