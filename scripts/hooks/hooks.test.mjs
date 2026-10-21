@@ -281,6 +281,41 @@ test("a switch earlier in the line moves HEAD: a later HEAD-relative push is che
   await assertAllowed("git checkout main -- README.md && git push", owned);
 });
 
+// A refspec from an expansion ($(git branch --show-current), "$B") is the
+// branch the agent is on far more often than not, so it is refused while that
+// branch is protected or unknown, and allowed from a feature branch.
+test("a push whose branch comes from an expansion is refused while HEAD is protected or unknown", async () => {
+  const expanded = [
+    "git push origin $(git branch --show-current)",
+    "git push origin `git rev-parse --abbrev-ref HEAD`",
+    "git push -u origin \"$(git branch --show-current)\"",
+    "B=$(git branch --show-current); git push origin \"$B\"",
+    "B=$(git branch --show-current) && git push origin $B",
+    "git push origin ${B}",
+    "git push origin HEAD:$B",
+    "git push origin \"HEAD:refs/heads/$B\"",
+    "git push origin --delete \"$B\"",
+  ];
+  git(clone, "switch", "--quiet", "main");
+  try {
+    for (const command of expanded) await assertBlocked(command, /named by an expansion while on main/);
+    // An explicit literal destination is checked as written.
+    await assertBlocked("git push origin \"$B\":main", /to main changes a protected branch/);
+    await assertAllowed("git push origin \"$B\":feature");
+    await assertAllowed("git push origin feature");
+    // A switch earlier in the line is where HEAD is when the push runs.
+    await assertAllowed("git switch -c agent/new && git push -u origin \"$(git branch --show-current)\"");
+  } finally {
+    git(clone, "switch", "--quiet", "feature");
+  }
+  for (const command of expanded) await assertAllowed(command);
+  await assertBlocked("git switch main && git push origin \"$B\"", /named by an expansion while on main/);
+  await assertBlocked("git switch release && git push origin $(git branch --show-current)", /named by an expansion while on release/);
+  await assertBlocked("git checkout - && git push origin \"$B\"", /named by an expansion while the guard cannot name the current branch/);
+  await assertBlocked(`cd ${base} && git push origin "$B"`, /named by an expansion while the guard cannot name the current branch/);
+  await assertAllowed("git push origin \"$B\"", owned);
+});
+
 test("a worktree, clone or HEAD made earlier in the line is checked like a switch, and a push from where the branch cannot be read is refused", async () => {
   for (const command of [
     "git worktree add -q ../m main && cd ../m && git merge -q --ff-only feat && git push -q",

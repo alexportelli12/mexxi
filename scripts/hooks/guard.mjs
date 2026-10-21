@@ -10,7 +10,10 @@
 //   - force pushes, pushes to the default branch or a guard.protectedBranches
 //     entry (including a push of HEAD after a switch, worktree add, clone or
 //     symbolic-ref HEAD earlier in the line, and a push of HEAD where Git
-//     cannot read the branch), and merging pull requests;
+//     cannot read the branch), a push to a branch named by an expansion
+//     (git push origin "$(git branch --show-current)", "$B") while HEAD is on
+//     a protected branch or one the guard cannot name, and merging pull
+//     requests;
 //   - git stash, git reset --hard, git clean, git restore (of the working
 //     tree), git checkout of paths and a forced checkout or switch outside an
 //     owned ibni worktree, or pointed elsewhere from one (--git-dir,
@@ -53,6 +56,10 @@
 //     set it, so it is taken to be a value;
 //   - a variable expanded into a guarded command's arguments (s=push; git $s
 //     --force): only an expanded command name is read as every guarded one;
+//   - a push to a branch named by an expansion from a feature branch (B=main;
+//     git push origin "$B"): it is taken to name the feature branch. From a
+//     protected branch it is refused even when the line sets it to a feature
+//     branch; name the branch literally;
 //   - git checkout <path> without -- or ., which reads like a branch switch;
 //   - shopify theme push --theme <id of the live theme>, which the CLI
 //     confirms interactively;

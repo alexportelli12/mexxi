@@ -220,7 +220,17 @@ function noteNewHead(subcommand, args, cwd, heads) {
   heads.set(path.resolve(cwd, worktree), head);
 }
 
-function checkPush(args, cwd, config, head = null) {
+// Whether the part of a refspec that names the pushed branch is only known at
+// run time. A parameter is still in the value as written ($B), so only the
+// part holding it counts; a command substitution leaves no trace in the
+// value, so the whole word does.
+function expandedRef(part, expansion) {
+  return expansion === "substitution" || (expansion === "parameter" && part.includes("$"));
+}
+
+// expansions: for each of args, the shell reader's expansion kind (see
+// effectiveArgv), so a refspec built at run time can be told from a literal.
+function checkPush(args, cwd, config, head = null, expansions = []) {
   const positional = [];
   let mirror = false;
   let everyBranch = false;
@@ -228,7 +238,7 @@ function checkPush(args, cwd, config, head = null) {
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
     if (arg === "--") {
-      positional.push(...args.slice(index + 1));
+      positional.push(...args.slice(index + 1).map((value, at) => ({ value, expansion: expansions[index + 1 + at] ?? null })));
       break;
     }
     if (PUSH_VALUE_OPTIONS.has(arg)) {
@@ -242,10 +252,10 @@ function checkPush(args, cwd, config, head = null) {
     if (arg === "--mirror") mirror = true;
     else if (arg === "--all" || arg === "--branches") everyBranch = true;
     else if (arg === "--delete" || (/^-[A-Za-z]+$/.test(arg) && arg.includes("d"))) deleting = true;
-    else if (!arg.startsWith("-")) positional.push(arg);
+    else if (!arg.startsWith("-")) positional.push({ value: arg, expansion: expansions[index] ?? null });
   }
   if (mirror) return "git push --mirror overwrites every remote ref; mexxi never force-pushes";
-  const [remoteArgument, ...refspecs] = positional;
+  const [remoteArgument, ...refspecs] = positional.map(({ value }) => value);
   const remotes = (git(cwd, ["remote"]) ?? "").split("\n").filter(Boolean);
   const upstream = git(cwd, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
   const remote = remoteArgument && remotes.includes(remoteArgument) ? remoteArgument
@@ -255,10 +265,16 @@ function checkPush(args, cwd, config, head = null) {
   const name = (ref) => ref.replace(/^refs\/heads\//, "");
   const targets = [];
   let headRelative = false;
+  // A refspec built at run time ($(git branch --show-current), "$B") most
+  // often names the branch HEAD is on, so it is pushed only from a branch the
+  // guard knows is not protected.
+  let expandedTarget = false;
   if (everyBranch) targets.push(...branches);
-  for (const refspec of refspecs) {
+  for (const [at, refspec] of refspecs.entries()) {
     if (refspec.startsWith("+")) return `git push ${refspec} force-updates its target; mexxi never force-pushes`;
     const [source, destination] = refspec.includes(":") ? refspec.split(/:(.*)/s) : [refspec, undefined];
+    const expansion = positional[at + 1].expansion;
+    if (expandedRef(destination !== undefined && destination !== "" ? destination : source, expansion)) expandedTarget = true;
     if (destination !== undefined && destination !== "") targets.push(name(destination));
     else if (source === "HEAD" || source === "@") {
       headRelative = true;
@@ -276,6 +292,14 @@ function checkPush(args, cwd, config, head = null) {
   if (hit) {
     return `git push ${deleting ? "--delete " : ""}to ${hit} changes a protected branch (the default branch or guard.protectedBranches); deliver through a feature branch and a pull request`;
   }
+  if (expandedTarget) {
+    const onProtected = [...heads].map((current) => [...branches].find((branch) => targetsBranch(current, branch))).find(Boolean);
+    // A detached HEAD counts as unknown: no branch vouches for the expansion.
+    const where = onProtected ? `on ${onProtected}` : unknown || !heads.size ? "the guard cannot name the current branch" : null;
+    if (where) {
+      return `git push to a branch named by an expansion while ${where} could push to a protected branch; name the branch literally (git push origin <branch>)`;
+    }
+  }
   return null;
 }
 
@@ -285,7 +309,7 @@ const RELOCATING_ENV = /\bGIT_(?:DIR|WORK_TREE|COMMON_DIR|INDEX_FILE)\b/;
 
 // relocatedBy: what earlier in the line (GIT_DIR=..., export GIT_WORK_TREE)
 // may point git at another repository, or null.
-function checkGit(argv, cwd, config, heads = new Map(), relocatedBy = null) {
+function checkGit(argv, cwd, config, heads = new Map(), relocatedBy = null, expansions = []) {
   let index = 1;
   let directory = cwd;
   while (index < argv.length && argv[index].startsWith("-")) {
@@ -302,7 +326,7 @@ function checkGit(argv, cwd, config, heads = new Map(), relocatedBy = null) {
     } else index += 1;
   }
   const [subcommand, ...args] = argv.slice(index);
-  if (subcommand === "push") return checkPush(args, directory, config, heads.get(directory));
+  if (subcommand === "push") return checkPush(args, directory, config, heads.get(directory), expansions.slice(index + 1));
   if (["switch", "checkout", "branch"].includes(subcommand)) {
     if (!heads.has(directory)) heads.set(directory, currentHead(directory));
     noteSwitch(subcommand, args, directory, heads.get(directory));
@@ -546,7 +570,7 @@ export function checkCommand(command, { cwd, config, home = os.homedir() }) {
       continue;
     }
     const relocatedBy = command.match(RELOCATING_ENV)?.[0] ?? null;
-    const check = (words) => (words[0] === "git" ? checkGit(words, directory, config, heads, relocatedBy) : null)
+    const check = (words) => (words[0] === "git" ? checkGit(words, directory, config, heads, relocatedBy, simple.expansions) : null)
       ?? (words[0] === "gh" ? checkGh(words) : null)
       ?? checkDeny(words, config)
       ?? checkShopify(words)

@@ -387,7 +387,10 @@ const HEADERS = new Set(["for", "select", "case"]);
 // assignments and wrappers (sudo, env, timeout 5, npx -y, xargs) removed,
 // argv[0] reduced to its basename so /usr/bin/git is git. `words` are the
 // reader's words behind argv, one for one; `nameExpanded` is whether the
-// command's name comes from an expansion ($v push -f), so is not argv[0].
+// command's name comes from an expansion ($v push -f), so is not argv[0];
+// `expansions` says, for each word of argv, whether its value is only known
+// at run time: "substitution" ($(...) or backticks, whose text the value
+// drops), "parameter" ($B, kept as written in the value) or null.
 export function effectiveArgv(words) {
   let argv = words.map((word) => word.value);
   let globs = words.map((word) => word.globUnquoted);
@@ -440,7 +443,8 @@ export function effectiveArgv(words) {
   // $HOME/bin/tool is still tool; only an expansion in the basename, or a
   // substitution anywhere in the word, leaves the name unknown.
   const nameExpanded = Boolean(kept[0]?.expanded) && (kept[0].substituted || !argv[0] || argv[0].includes("$"));
-  return { argv, globs, words: kept, nameExpanded };
+  const expansions = kept.map((word) => (word.substituted ? "substitution" : word.expanded ? "parameter" : null));
+  return { argv, globs, words: kept, nameExpanded, expansions };
 }
 
 // Where a shell run with these arguments (and no -c) reads its script: the
@@ -512,7 +516,8 @@ function settledParameters(word, line) {
   });
 }
 
-// Every simple command the text would run, in order, each { argv, globs }.
+// Every simple command the text would run, in order, each { argv, globs,
+// expansions, nameExpanded }.
 // Scripts handed to a shell with -c, or to eval, or fed to a shell's standard
 // input, are read in their place. A script the reader cannot see (`curl ... |
 // sh`, `bash < <(curl ...)`, `source <(...)`, `bash -c "$(...)"`) comes back
