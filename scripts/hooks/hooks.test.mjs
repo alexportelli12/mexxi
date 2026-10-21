@@ -190,6 +190,27 @@ test("options after -c do not hide the script: the first non-option word is what
   await assertAllowed("bash -c -e 'git status' name arg");
 });
 
+test("a -c script may use a variable the line does not set as an argument, but not as a command or one set in the line", async () => {
+  for (const command of ['bash -c "cd $DIR && npm test"', 'bash -lc "cd ${DIR} && npm test"', 'sh -c "echo $HOME"', "bash -c 'cd '$DIR' && npm test'"]) {
+    await assertAllowed(command);
+  }
+  for (const command of [
+    'bash -c "$CMD"',
+    'bash -c "cd x && $GIT push -f"',
+    "DIR='x; git push -f'; bash -c \"cd $DIR\"",
+    'export DIR=x; bash -c "cd $DIR"',
+    'read -r DIR; bash -c "cd $DIR"',
+    'for DIR in a; do bash -c "cd $DIR"; done',
+    'source ./env.sh && bash -c "cd $DIR"',
+    '. ./env.sh; bash -c "cd $DIR"',
+    'bash -c "cd ${DIR:-x; git push -f}"',
+    'echo "git push -f"; bash -c "$_ "',
+    'bash -c "cd $1"',
+    "cd 'x;git push -f' && cd .. && bash -c \"cd $OLDPWD\"",
+    'bash -c "cd $DIR && echo $(date)"',
+  ]) await assertBlocked(command, /-c runs a script built by an expansion/);
+});
+
 test("an unquoted heredoc's body is expanded: its command substitutions run, a quoted one's do not", async () => {
   for (const command of ["cat <<EOF\n$(git stash)\nEOF", "cat <<EOF\n`git stash`\nEOF", "cat <<-EOF > notes.md\n\tbranch: $(git push --force origin x)\n\tEOF"]) {
     await assertBlocked(command, /outside an owned ibni worktree|force/, clone);
@@ -406,6 +427,18 @@ test("a deny prefix matches the command's words, not its spelling: options, alia
     "npx eslint deploy",
     "yarn test deploy",
   ]) await assertAllowed(command);
+});
+
+test("npm publish --dry-run is allowed, unless the dry run is switched back off; other commands get no dry-run pass", async () => {
+  for (const command of ["npm publish --dry-run", "npm publish --dry-run --tag next", "cd pkg && npm publish --dry-run=true", "npm --workspace a publish --dry-run"]) {
+    await assertAllowed(command);
+  }
+  for (const command of ["npm publish --dry-run=false", "npm publish --dry-run false", "npm publish --dry-run --no-dry-run", "npm publish --no-dry-run"]) {
+    await assertBlocked(command, /npm publish is on the guard\.deny list/);
+  }
+  // npm run does not honour --dry-run: the script still runs.
+  await assertBlocked("npm run deploy --dry-run", /npm run deploy is on the guard\.deny list/);
+  await assertBlocked("vercel --prod --dry-run", /vercel --prod is on the guard\.deny list/);
 });
 
 test("Shopify Admin API writes are blocked and reads allowed", async () => {

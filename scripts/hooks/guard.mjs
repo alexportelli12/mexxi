@@ -29,7 +29,10 @@
 //     is on (zsh aborts on them unless no_nomatch reaches the agent's shell);
 //   - a shell fed a script it cannot read: through a pipe (curl ... | sh), a
 //     process substitution (bash < <(curl ...), source <(...)), or an
-//     expansion (bash -c "$(...)", an unquoted heredoc that expands).
+//     expansion (bash -c "$(...)", bash -c "$CMD", a $VAR the line sets, an
+//     unquoted heredoc that expands). A variable the line leaves alone, used
+//     as an argument (bash -c "cd $DIR && npm test"), is allowed.
+// npm publish --dry-run is allowed: it publishes nothing.
 //
 // Known gaps, accepted rather than chased (the guard backs up AGENTS.md and the
 // host's permission rules; it is not a sandbox):
@@ -43,6 +46,9 @@
 //     setup such as eval "$(fnm env)";
 //   - output process substitution into a shell (tee >(bash));
 //   - zsh's repeat keyword (zsh -c 'repeat 2 git stash');
+//   - a variable from the host's environment whose value holds shell syntax,
+//     expanded into a bash -c script (bash -c "cd $DIR"): the line cannot
+//     set it, so it is taken to be a value;
 //   - a variable expanded into a guarded command's arguments (s=push; git $s
 //     --force): only an expanded command name is read as every guarded one;
 //   - git checkout <path> without -- or ., which reads like a branch switch;

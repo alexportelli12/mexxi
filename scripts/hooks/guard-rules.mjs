@@ -338,11 +338,31 @@ function matchesPrefix(argv, prefix) {
     || (/^-[A-Za-z]$/.test(option) && /^-[A-Za-z]+$/.test(arg) && arg.includes(option[1]))));
 }
 
+// Whether the command ends up a dry run: the last of --dry-run[=value] and
+// --no-dry-run decides, and --dry-run false (npm reads the next word as a
+// boolean's value) or --dry-run=false switches it off.
+function dryRun(argv) {
+  let dry = false;
+  for (let index = 1; index < argv.length; index += 1) {
+    const [option, value] = argv[index].split(/=(.*)/s);
+    if (option === "--no-dry-run") dry = false;
+    else if (option === "--dry-run") dry = (value ?? (argv[index + 1] === "false" ? "false" : "true")) !== "false";
+  }
+  return dry;
+}
+
+// npm publish --dry-run publishes nothing. Only commands known to honour
+// --dry-run are let through with it: npm run deploy --dry-run still runs the
+// script, and a CLI that ignored the option would deploy.
+function publishDryRun(argv) {
+  return matchesPrefix(argv, "npm publish") && dryRun(argv);
+}
+
 // The guard.deny prefixes, applied to every simple command rather than only
 // the start of the line.
 function checkDeny(argv, config) {
   for (const prefix of config.guard.deny) {
-    if (denyForms(argv).some((form) => matchesPrefix(form, prefix))) {
+    if (denyForms(argv).some((form) => matchesPrefix(form, prefix) && !publishDryRun(form))) {
       return `${prefix.trim().split(/\s+/).join(" ")} is on the guard.deny list (production deploys, publishing and merges need a human)`;
     }
   }

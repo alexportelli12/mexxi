@@ -30,10 +30,12 @@ const UNKNOWN_PRODUCER = [];
 
 // Reads words up to the end of `text`, or up to the `)` closing a
 // substitution when `nested`. Returns { commands, end } where commands are
-// arrays of words: { value, globUnquoted, expanded, processSubstitution }
-// (globUnquoted: an unquoted * ? or [ that the shell would expand; expanded:
-// the word holds a substitution or a parameter, so its value is not what
-// runs; processSubstitution: the word is a <(...) file). A command may carry
+// arrays of words: { value, globUnquoted, expanded, substituted, parameters,
+// processSubstitution } (globUnquoted: an unquoted * ? or [ that the shell
+// would expand; expanded: the word holds a substitution or a parameter, so its
+// value is not what runs; substituted: it holds a command substitution or
+// arithmetic; parameters: its parameter expansions as written;
+// processSubstitution: the word is a <(...) file). A command may carry
 // `stdin`, the text of a heredoc or herestring fed to it; `stdinExpanded`,
 // when the shell expands that text before feeding it; `stdinSubstituted`,
 // when its input is redirected from a process substitution; and `pipedFrom`,
@@ -75,7 +77,14 @@ function read(text, start, nested) {
     commands.push(finished);
     return finished;
   };
-  const current = () => (word ??= { value: "", globUnquoted: false, expanded: false });
+  const current = () => (word ??= { value: "", globUnquoted: false, expanded: false, substituted: false, parameters: [] });
+  // A command substitution (or arithmetic) in the word: its value is output.
+  const substituted = () => Object.assign(current(), { expanded: true, substituted: true });
+  // A parameter expansion at `at`, kept as written ($DIR, ${DIR:-x}, $1).
+  const parameter = (at) => {
+    current().expanded = true;
+    word.parameters.push(text.slice(at).match(/^\$(?:\{[^}]*\}?|[A-Za-z_][A-Za-z0-9_]*|[0-9@*#?$!_-])?/)[0]);
+  };
   const substitution = (from) => {
     const inner = read(text, from, true);
     commands.push(...inner.commands);
@@ -121,16 +130,16 @@ function read(text, start, nested) {
           if (text[index + 1] !== "\n") word.value += text[index + 1];
           index += 2;
         } else if (text[index] === "$" && text[index + 1] === "(" && text[index + 2] !== "(") {
-          word.expanded = true;
+          substituted();
           index = substitution(index + 2);
         } else if (text[index] === "`") {
-          word.expanded = true;
+          substituted();
           const close = text.indexOf("`", index + 1);
           const end = close === -1 ? text.length : close;
           commands.push(...read(text.slice(index + 1, end), 0, false).commands);
           index = end + 1;
         } else {
-          if (text[index] === "$") word.expanded = true;
+          if (text[index] === "$") parameter(index);
           word.value += text[index++];
         }
       }
@@ -138,13 +147,13 @@ function read(text, start, nested) {
       continue;
     }
     if (char === "$" && text[index + 1] === "(" && text[index + 2] !== "(") {
-      current().expanded = true;
+      substituted();
       index = substitution(index + 2);
       continue;
     }
     if (char === "$" && text.startsWith("((", index + 1)) {
       const end = arithmeticEnd(text, index + 3);
-      current().expanded = true;
+      substituted();
       word.value += text.slice(index, end);
       commands.push(...arithmeticCommands(text.slice(index + 3, end)));
       index = end;
@@ -161,7 +170,7 @@ function read(text, start, nested) {
     if (char === "`") {
       const close = text.indexOf("`", index + 1);
       const end = close === -1 ? text.length : close;
-      current().expanded = true;
+      substituted();
       commands.push(...read(text.slice(index + 1, end), 0, false).commands);
       index = end + 1;
       continue;
@@ -170,7 +179,7 @@ function read(text, start, nested) {
       // A process substitution: a file whose contents a command produces at
       // run time. The command is read; the word only marks where it went.
       finishWord();
-      Object.assign(current(), { expanded: true, processSubstitution: true });
+      Object.assign(substituted(), { processSubstitution: true });
       const end = substitution(index + 2);
       word.value = text.slice(index, end);
       index = end;
@@ -259,7 +268,7 @@ function read(text, start, nested) {
       continue;
     }
     if (char === "*" || char === "?" || char === "[") current().globUnquoted = true;
-    if (char === "$") current().expanded = true;
+    if (char === "$") parameter(index);
     current().value += char;
     index += 1;
   }
@@ -484,12 +493,32 @@ function literalOutput(producer) {
 
 const RUN_IT_DIRECTLY = "save the script to a file, read it, and run the commands it needs directly";
 
+const PLAIN_PARAMETER = /^\$(?:([A-Za-z_][A-Za-z0-9_]*)|\{([A-Za-z_][A-Za-z0-9_]*)\})$/;
+// Variables the shell sets from the line without naming them: $_ (the last
+// argument), cd's PWD and OLDPWD, read's REPLY and getopts' OPTARG.
+const SHELL_SET = new Set(["_", "PWD", "OLDPWD", "REPLY", "OPTARG"]);
+
+// Whether the expansions in a -c script word leave its commands as written
+// (bash -c "cd $DIR && npm test"): plain $NAME or ${NAME} parameters only, none
+// of which the line itself sets (NAME=, export, read, for) or could set
+// (source, ., eval), so each holds what the host's environment gave it. The
+// shell re-reads the expanded script, so a value set in the line could hold
+// any command. `line` is the whole command line.
+function settledParameters(word, line) {
+  if (word.substituted || /(?:^|[\s;&|(])(?:source|\.|eval)\s/.test(line)) return false;
+  return word.parameters.every((parameter) => {
+    const name = parameter.match(PLAIN_PARAMETER)?.slice(1).find(Boolean);
+    return name && !SHELL_SET.has(name) && !new RegExp(`(?:^|[^$\\w{])${name}(?!\\w)`).test(line);
+  });
+}
+
 // Every simple command the text would run, in order, each { argv, globs }.
 // Scripts handed to a shell with -c, or to eval, or fed to a shell's standard
 // input, are read in their place. A script the reader cannot see (`curl ... |
 // sh`, `bash < <(curl ...)`, `source <(...)`, `bash -c "$(...)"`) comes back
-// as { argv, globs, refused } with the reason.
-export function simpleCommands(text, depth = 0) {
+// as { argv, globs, refused } with the reason. `line` is the whole command
+// line the text came from.
+export function simpleCommands(text, depth = 0, line = text) {
   const found = [];
   for (const words of read(text, 0, false).commands) {
     const { words: commandWords, ...command } = effectiveArgv(words);
@@ -504,9 +533,11 @@ export function simpleCommands(text, depth = 0) {
       const script = commandScript(args);
       if (script !== null && script !== -1) {
         // args[script] is commandWords[script + 1]: commandWords starts at the name.
-        if (commandWords[script + 1].expanded) {
-          refuse(`-c runs a script built by an expansion ($(...), backticks or $VAR) the guard cannot inspect; write the commands out literally`);
-        } else found.push(...simpleCommands(args[script], depth + 1));
+        const scriptWord = commandWords[script + 1];
+        const commands = simpleCommands(args[script], depth + 1, line);
+        if (scriptWord.expanded && (!settledParameters(scriptWord, line) || commands.some((inner) => inner.nameExpanded))) {
+          refuse(`-c runs a script built by an expansion ($(...), backticks, or a $VAR set in the line or used as a command) the guard cannot inspect; write the commands out literally`);
+        } else found.push(...commands);
         continue;
       }
       const operand = script === -1 ? scriptOperand(args) : null;
@@ -521,7 +552,7 @@ export function simpleCommands(text, depth = 0) {
         }
         const script = words.stdin ?? (words.pipedFrom ? literalOutput(words.pipedFrom) : undefined);
         if (typeof script === "string") {
-          found.push(...simpleCommands(script, depth + 1));
+          found.push(...simpleCommands(script, depth + 1, line));
           continue;
         }
         if (words.pipedFrom) {
@@ -531,7 +562,7 @@ export function simpleCommands(text, depth = 0) {
       }
     }
     if (depth < 4 && name === "eval") {
-      found.push(...simpleCommands(args.join(" "), depth + 1));
+      found.push(...simpleCommands(args.join(" "), depth + 1, line));
       continue;
     }
     found.push(command);
