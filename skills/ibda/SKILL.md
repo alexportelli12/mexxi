@@ -120,6 +120,9 @@ First install, in order:
    mkdir ~/.config/opencode
    # copy back runtime-only files from ~/.config/opencode.pre-move:
    # tui.jsonc, herdr files, personal plugins; nothing mexxi installs
+   # carry over the old clone's gitignored skill state, where it exists:
+   cp -R ~/.config/opencode.pre-move/skills/synced skills/
+   cp ~/.config/opencode.pre-move/skills-lock.json .
    node scripts/install.mjs --config <scratch-file> --yes --migrate-from ~/.config/opencode
    ```
 

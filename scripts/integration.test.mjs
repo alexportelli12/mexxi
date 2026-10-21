@@ -678,6 +678,10 @@ async function preMoveHome(t) {
   await writeFile(path.join(old, "AGENTS.md"), "old\n");
   await writeFile(path.join(old, "opencode.json"), "{}\n");
   await writeFile(path.join(old, "tui.jsonc"), "{}\n");
+  // Gitignored state the old clone keeps: skills synced in from elsewhere.
+  await mkdir(path.join(old, "skills/synced/borrowed"), { recursive: true });
+  await writeFile(path.join(old, "skills/synced/borrowed/SKILL.md"), "borrowed\n");
+  await writeFile(path.join(old, "skills-lock.json"), "{\"version\":1}\n");
   await mkdir(path.join(home, ".claude"), { recursive: true });
   await symlink(path.join(old, "AGENTS.md"), path.join(home, ".claude/CLAUDE.md"));
   await symlink(path.join(old, "commands"), path.join(home, ".claude/commands"));
@@ -701,7 +705,7 @@ async function documentedMigration() {
 }
 
 test("the documented move from ~/.config/opencode stops before moving anything on a settings conflict, and the recovery line undoes a move", async (t) => {
-  const { home, old } = await preMoveHome(t);
+  const { home, clone, old } = await preMoveHome(t);
   const settingsFile = path.join(home, ".claude/settings.json");
   await writeFile(settingsFile, JSON.stringify({ env: { BASH_MAX_TIMEOUT_MS: "600000" } }));
   const { sequence, recovery } = await documentedMigration();
@@ -730,17 +734,29 @@ test("the documented move from ~/.config/opencode stops before moving anything o
   assert.equal(migrated.code, 0, migrated.output);
   assert.equal(await readlink(path.join(home, ".claude/CLAUDE.md")), path.join(home, ".local/share/mexxi/generated/claude/CLAUDE.md"));
   assert.equal(await readFile(path.join(`${old}.pre-move`, "AGENTS.md"), "utf8"), "old\n");
+  // The old clone's gitignored skill state comes along, still ignored, and
+  // OpenCode sees the synced skills through the new clone.
+  assert.equal(await readFile(path.join(clone, "skills/synced/borrowed/SKILL.md"), "utf8"), "borrowed\n");
+  assert.equal(await readFile(path.join(clone, "skills-lock.json"), "utf8"), "{\"version\":1}\n");
+  assert.equal(await readFile(path.join(home, ".config/opencode/skills/synced/borrowed/SKILL.md"), "utf8"), "borrowed\n");
+  const ignored = await execute("git", ["check-ignore", "skills/synced/borrowed/SKILL.md", "skills-lock.json"], clone);
+  assert.equal(ignored.code, 0, ignored.output);
 });
 
 // ibda's sequence adds --config, so it cannot run verbatim; it must keep the
 // safeguards of the one the test above runs.
-test("ibda's pre-move sequence dry-runs before the move and gives the recovery line", async () => {
+test("ibda's pre-move sequence dry-runs before the move, carries over gitignored skill state and gives the recovery line", async () => {
   const skill = await readFile(path.join(checkout, "skills/ibda/SKILL.md"), "utf8");
   const sequence = skill.slice(skill.indexOf("For the pre-move layout")).match(/```bash\n([\s\S]*?)```/)[1];
   const lines = sequence.split("\n").map((line) => line.trim());
   const dryRun = lines.findIndex((line) => /^node scripts\/install\.mjs --dry-run .*--migrate-from ~\/\.config\/opencode$/.test(line));
   const move = lines.indexOf("mv ~/.config/opencode ~/.config/opencode.pre-move");
   assert.ok(dryRun !== -1 && dryRun < move, "the dry run comes before the mv");
+  const install = lines.findIndex((line) => /^node scripts\/install\.mjs --config .*--yes --migrate-from/.test(line));
+  for (const carried of ["cp -R ~/.config/opencode.pre-move/skills/synced skills/", "cp ~/.config/opencode.pre-move/skills-lock.json ."]) {
+    const at = lines.indexOf(carried);
+    assert.ok(at > move && at < install, `${carried} runs between the mv and the install`);
+  }
   assert.ok(skill.includes("`rmdir ~/.config/opencode && mv ~/.config/opencode.pre-move ~/.config/opencode`"));
 });
 

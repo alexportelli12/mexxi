@@ -73,8 +73,12 @@ node scripts/install.mjs --dry-run --migrate-from ~/.config/opencode
 mv ~/.config/opencode ~/.config/opencode.pre-move
 mkdir ~/.config/opencode
 # copy back runtime-only files you keep there, such as tui.jsonc, herdr files and personal plugins
+cp -R ~/.config/opencode.pre-move/skills/synced skills/
+cp ~/.config/opencode.pre-move/skills-lock.json .
 node scripts/install.mjs --migrate-from ~/.config/opencode
 ```
+
+The two `cp` lines carry over the old clone's synced skills and their lock file, which Git ignores and so the new clone does not have. Skip either one if the old clone has no such file.
 
 `--migrate-from` names the old path, not the moved copy: it takes over the links that still point inside it. If the old clone is still in place, the installer stops and prints this sequence. If the install stops after the move, every host still links into `~/.config/opencode`, so put the old clone back before you do anything else: `rmdir ~/.config/opencode && mv ~/.config/opencode.pre-move ~/.config/opencode`. `rmdir` refuses while files you copied back are still there; delete those copies first.
 
