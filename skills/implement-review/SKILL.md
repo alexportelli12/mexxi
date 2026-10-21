@@ -1,0 +1,86 @@
+---
+name: implement-review
+description: The independent review gate, review remediation and the follow-up path of /wettaq. Load it when a wettaq run reaches a code-reviewer pass, or when a request continues an existing pull request. Do not load it for runs that skip review.
+---
+
+# Implementation Review And Follow-Up
+
+These stages of `/wettaq` run only when a review does, or when work continues an
+existing pull request, so they are loaded on demand rather than with the
+command. `/wettaq` owns everything before and after them.
+
+## Independent Review
+
+Invoke `code-reviewer` in `discovery` mode. Run rendered QA first when
+applicable.
+
+1. Write a background file in `evidenceDir`, within 8,000 characters: the
+   request's purpose, resolved requirements and acceptance criteria, relevant
+   repository and UX principles and constraints, and, for confirmation, the
+   accepted findings and fixes. Never include implementation transcripts,
+   reasoning, self-review, or advocacy.
+2. Invoke `code-reviewer` with the worktree, the review target (workspace
+   changes against HEAD before the first commit, the branch range once fully
+   committed, or only the new changes on follow-up), the background file path,
+   verification status, and rendered QA evidence. The reviewer owns the OCR
+   delegation mechanics.
+3. If the reviewer reports relevant tests or specs excluded from its
+   selection, add narrowly scoped `include` rules to the repository's
+   `.opencodereview/rule.json`, preserving existing rules, rerun
+   `npm run verify`, and invoke the reviewer again. A run halted for coverage
+   is not a review pass.
+
+If delegation or rule resolution fails, the review gate is not clear; report
+the failure.
+
+## Review Remediation
+
+Investigate every finding with repository evidence; resolve it with a bounded
+fix or by establishing that it does not apply. Do not blindly accept subjective
+or out-of-scope findings.
+
+`critical`, `high`, and `medium` findings block and must be resolved. `low`
+findings are reported, not churned, unless the user asks. Keep a concise
+finding ledger in session context only: each finding's severity and
+disposition, and the remediation for each blocker.
+
+If discovery has no applicable blockers, the gate is complete. Otherwise, batch
+all blocker fixes (delegate only when specialist expertise helps, never to the
+reviewer), rerun `npm run verify`, refresh rendered evidence when UI is
+affected, and invoke the same reviewer once in `confirmation` mode with the
+original requirements, the ledger, a concise remediation summary, the current
+diff, verification status, and rendered evidence.
+
+Confirmation checks that each blocker is resolved and that the fixes caused no
+material harm; it is not another discovery. A confirmation finding blocks only
+when it is an unresolved original blocker, a material regression caused or
+exposed by remediation, a correctness or safety issue, or a genuine failure of
+the task requirements. A qualifying blocker at confirmation stops the run:
+report it to the user with the finding ledger and verification evidence, and do
+not deliver. There are at most two reviewer passes: discovery and
+confirmation.
+
+## Review Refresh After Integration
+
+When `publish` reports stale evidence (`requiresRevalidation`), refresh review
+only where the upstream change could materially affect it. A review refresh is
+the `confirmation` pass; if that pass is already spent, stop and report
+instead.
+
+## Follow-Up On An Existing Pull Request
+
+When this session already owns a retained `worktreePath`, `sessionId`, and
+pull-request URL, reuse that workspace instead of running `prepare`. When it
+does not (a new session, or one that lost the earlier session's id), run
+`ibni adopt --pr "<pr-url>"` instead of `prepare`. Adopt proves the pull
+request is open and that its head branch and commit match the workspace's
+recorded branch, publication, remote branch and clean local HEAD, then issues a
+new `sessionId`; record its result as you would `prepare`'s. Ownership moves:
+the previous session's id stops working. If adopt refuses, report its
+diagnostic and stop; never infer ownership of a retained worktree any other
+way. Then run `ibni sync --session "<sessionId>"` before changing anything,
+refresh the contract for the new request, and establish a green baseline by
+running `npm run verify` (`prepare`'s baseline citation applies only to a fresh
+workspace). Then follow the normal gates of `/wettaq` through delivery;
+publication updates the existing branch and `mark-pr` records the same URL
+again.

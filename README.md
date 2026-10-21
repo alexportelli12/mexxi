@@ -54,6 +54,7 @@ Not every change needs every step. A one-line fix doesn't get an independent rev
 | Agent | [`code-reviewer`](agent/code-reviewer.md) | Independent review via OCR delegation, plus the merge-danger call |
 | Agent | [`ui-designer`](agent/ui-designer.md) | Designs and implements UI grounded in the repo |
 | Skill | [`rendered-qa`](skills/rendered-qa/SKILL.md) | How to exercise a running UI and capture evidence |
+| Skill | [`implement-review`](skills/implement-review/SKILL.md) | `/wettaq`'s review gate, remediation and follow-up path, loaded only when a review runs |
 | Skill | [`commit-pr-writing`](skills/commit-pr-writing/SKILL.md) | Commit messages and PR descriptions that prove their claims |
 | Skill | [`repo-context`](skills/repo-context/SKILL.md) | Evidence-based map of an unfamiliar repository |
 | Skill | [`ui-designer`](skills/ui-designer/SKILL.md) | Practical UI judgement: hierarchy, layout, forms, accessibility |
@@ -135,6 +136,16 @@ ibni cleanup --dry-run false  # remove merged, consumed ones
 ```
 
 You rarely need the last two: every `/wettaq` sweeps merged workspaces on the way in.
+
+### Skipping a baseline CI has already proven
+
+A repository opts in by committing a `.mexxi.json` that names the CI check running its full `npm run verify`:
+
+```json
+{ "ciCheck": "verify" }
+```
+
+When that check has succeeded on exactly the commit `ibni prepare` starts from, `prepare` records the run in its `baseline` output and `/wettaq` cites it instead of rerunning the baseline locally. No opt-in, a `gh` error, a pending or failed run, or a different commit all run the baseline as before. (Verifika's schema rejects extra keys, so the opt-in cannot live in `verifika.config.json`.)
 
 ## Principles
 

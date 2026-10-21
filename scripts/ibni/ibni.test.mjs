@@ -639,6 +639,11 @@ async function ghStub(t) {
   t.after(() => rm(stubDirectory, { recursive: true, force: true }));
   const stub = path.join(stubDirectory, "gh");
   await writeFile(stub, `#!/bin/sh
+if [ "$1" = "api" ]; then
+  if [ -f "\${GH_STUB_DIR}/check-runs.json" ]; then cat "\${GH_STUB_DIR}/check-runs.json"; exit 0; fi
+  echo "gh: check runs not configured" >&2
+  exit 1
+fi
 pr=""
 for arg in "$@"; do
   case "$arg" in */pull/*) pr="\${arg##*/pull/}";; esac
@@ -1338,4 +1343,71 @@ test("publish retries a push once after an HTTP 5xx and never after other failur
   const published = await lifecycle(fixture, flaky.json.worktreePath, "publish", { session: flaky.json.sessionId }, [0], env);
   assert.equal(published.json.published, true);
   assert.equal(await pushes(), 2);
+});
+
+async function optInToBaselineReuse(fixture, ciCheck = "verify") {
+  await git(fixture.seed, "pull", "--quiet", "origin", "trunk");
+  const sha = await commit(fixture.seed, ".mexxi.json", `${JSON.stringify({ ciCheck })}\n`, "name the CI check");
+  await git(fixture.seed, "push", "--quiet", "origin", "trunk");
+  return sha;
+}
+
+async function setCheckRuns(fixture, runs) {
+  await writeFile(path.join(fixture.gh, "check-runs.json"), JSON.stringify({ check_runs: runs }));
+}
+
+const checkRun = (sha, overrides = {}) => ({
+  id: 11,
+  name: "verify",
+  head_sha: sha,
+  status: "completed",
+  conclusion: "success",
+  html_url: "https://github.com/alexportelli12/example/actions/runs/11/job/1",
+  completed_at: "2026-10-21T10:00:00Z",
+  ...overrides,
+});
+
+test("prepare cites a green CI run of the exact base commit so the local baseline can be skipped", async (t) => {
+  const fixture = await createFixture(t);
+  const sha = await optInToBaselineReuse(fixture);
+  await setCheckRuns(fixture, [checkRun(sha)]);
+
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "proven" });
+  assert.equal(prepared.json.baseSha, sha);
+  const expected = {
+    reused: true,
+    check: "verify",
+    sha,
+    url: "https://github.com/alexportelli12/example/actions/runs/11/job/1",
+    runId: 11,
+    completedAt: "2026-10-21T10:00:00Z",
+  };
+  assert.deepEqual(prepared.json.baseline, expected);
+  assert.deepEqual(JSON.parse(await metadataFile(prepared.json.worktreePath)).baseline, expected);
+});
+
+test("prepare runs the baseline when the CI run cannot be proven for the exact base commit", async (t) => {
+  const fixture = await createFixture(t);
+  const plain = await lifecycle(fixture, fixture.control, "prepare", { slug: "no opt in" });
+  assert.equal(plain.json.baseline.reused, false);
+  assert.match(plain.json.baseline.reason, /not committed/);
+
+  const sha = await optInToBaselineReuse(fixture);
+  const cases = {
+    "gh failing": [null, /unavailable/],
+    "a different commit": [[checkRun("0".repeat(40))], /no verify run/],
+    "a pending run": [[checkRun(sha, { status: "in_progress", conclusion: null })], /in_progress/],
+    "a failed run": [[checkRun(sha, { conclusion: "failure" })], /failure/],
+    "a skipped run": [[checkRun(sha, { conclusion: "skipped" })], /skipped/],
+    "another check": [[checkRun(sha, { name: "lint" })], /no verify run/],
+    "a later failed rerun": [[checkRun(sha), checkRun(sha, { id: 12, conclusion: "failure" })], /failure/],
+  };
+  for (const [name, [runs, reason]] of Object.entries(cases)) {
+    await rm(path.join(fixture.gh, "check-runs.json"), { force: true });
+    if (runs) await setCheckRuns(fixture, runs);
+    const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: name });
+    assert.equal(prepared.json.baseline.reused, false, name);
+    assert.match(prepared.json.baseline.reason, reason, name);
+    assert.equal(prepared.json.baseline.url, undefined, name);
+  }
 });

@@ -105,6 +105,14 @@ not embed video files from a repository, so keep the original only as a link.
 If recording or `ffmpeg` is unavailable, fall back to a short sequence of
 screenshots and say so in the report.
 
+## Publishing Evidence For A Pull Request
+
+Publish the screenshots or GIFs a pull request should show with `ibni
+publish-media --session "<sessionId>" --files "<comma-separated names in
+evidenceDir>"`. First look at every file for secrets, tokens, personal or real
+user data, and internal hostnames, and leave out any that show them: the branch
+may be public, and later cleanup does not erase history.
+
 ## Before-Shots
 
 When asked to capture "before" evidence, take the same routes, states and

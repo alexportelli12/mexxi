@@ -121,7 +121,9 @@ These are examples, not a universal gauntlet.
 
 The global invariant is the interface: `npm run verify` is the repository's
 authoritative deterministic quality contract. `/wettaq` requires a green
-baseline before implementation and a green final result afterward. Do not
+baseline before implementation (proven by a CI run of the exact base commit
+when the repository names that check in `.mexxi.json`) and a green final result
+afterward. Do not
 duplicate repository-specific checks in global prose or add project tooling
 from this configuration.
 

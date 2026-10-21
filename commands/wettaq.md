@@ -6,7 +6,9 @@ description: Investigate and implement a request through verified pull request c
 
 Take the request in `$ARGUMENTS` from repository-grounded discovery through a
 pull request ready for human product validation. The active session is the task
-contract; do not create or persist a planning or requirements artifact.
+contract; do not create or persist a planning or requirements artifact. When the
+request continues an existing pull request, load `implement-review` and follow
+its follow-up path instead of running `prepare`.
 
 ## Prepare The Isolated Workspace
 
@@ -17,33 +19,31 @@ ibni prepare --slug "<short-request-slug>"
 ```
 
 Use `--prefix` only when an already-known repository instruction requires a
-different branch prefix. The tool checks that the launch checkout is the clean
-primary control worktree on the remote default branch, fast-forwards it when
-safe, sweeps retained workspaces whose pull requests are proven merged, and
-creates a collision-safe feature branch in a dedicated locked worktree. Record
+different branch prefix. `prepare` checks the launch checkout, sweeps merged
+workspaces and creates the feature branch in a dedicated locked worktree. Record
 its JSON result in session context, especially `worktreePath`, `sessionId`,
-`branch`, `defaultBranch`, `baseSha`, `evidenceDir`, `port`, and `cleanup`.
+`branch`, `defaultBranch`, `baseSha`, `evidenceDir`, `port`, `baseline` and
+`cleanup`.
 
 From this point on, run every repository inspection, command, delegated task,
 edit, verification, render, review, remediation, and delivery operation against
 `worktreePath`, never the control checkout. Pass the exact `sessionId` to later
-lifecycle operations; they resolve the owned worktree from session metadata
-from any directory, including `evidenceDir`. Write transient evidence to
-`evidenceDir`. Whenever this run starts the app, serve it on `port` through the
-repository's own port setting (such as `PORT` or the dev server's port flag),
-so parallel worktrees never collide. `ibni <command> --help` documents every
-lifecycle command and flag. If preparation fails, report its diagnostic and stop; do not
-stash, switch branches, improvise another worktree, or attempt more aggressive
-Git recovery.
+lifecycle operations (`ibni <command> --help` documents each). Write transient
+evidence to `evidenceDir`. Whenever this run starts the app, serve it on `port`
+through the repository's own port setting (such as `PORT` or the dev server's
+port flag), so parallel worktrees never collide. If preparation fails, report
+its diagnostic and stop; do not switch branches, improvise another worktree or
+attempt more aggressive Git recovery.
 
 `prepare` copies gitignored local env files (`.env*`) from the control checkout
 and reports them as `provisionedEnv`. Never invent, edit, or commit them.
 
-Apply branch naming requirements already present in launch-time instructions;
-if discovery later reveals an incompatible hard requirement, stop rather than
-renaming the owned branch outside the lifecycle tool. Prepare dependencies
-inside the worktree with the repository's documented setup; do not share or
-link mutable dependency directories between worktrees.
+If discovery reveals a hard branch-naming requirement incompatible with the
+branch `prepare` made, stop rather than renaming it outside the lifecycle tool.
+Prepare dependencies inside the worktree with the repository's documented
+setup, and where it documents none for an npm project use
+`npm ci --prefer-offline --no-audit --no-fund`. Do not share or link mutable
+dependency directories between worktrees.
 
 ## Establish The Task Contract
 
@@ -66,19 +66,31 @@ Before changing code:
 Repository evidence and established product principles are the first source of
 answers. Ask the user only about genuine unresolved product behaviour, UX
 intent, business rules, architectural choices with product consequences, or
-important edge cases that cannot be inferred, and ask the fewest focused
-questions necessary. Do not stop for approval of the contract when the request
-and evidence are sufficient, and do not ask the user to choose ordinary
-implementation details. Keep the contract lean: no generic repository context,
-framework tutorials, file lists, implementation steps, or speculative
-abstractions.
+important edge cases that cannot be inferred, with the fewest focused questions
+necessary. Do not stop for approval of the contract when the request and
+evidence are sufficient, or ask the user to choose ordinary implementation
+details. Keep the contract lean: no generic repository context, framework
+tutorials, file lists, implementation steps, or speculative abstractions.
+
+**Unattended runs.** When nobody can answer (a scheduled or non-interactive
+run, or a question left unanswered for the session), do not stall. Take the
+most reasonable reading from repository evidence and product principles, note
+it as an assumption, and carry on. Still stop and report for a one-way door: a
+destructive or irreversible data change, a security or privacy decision, a
+public API or schema break, or anything the pull request cannot undo. List
+every assumption under **Assumptions** in the pull request, worded so the
+reviewer can reverse it cheaply; a question that would have changed the design
+becomes a review item there instead of a stall.
 
 ## Preflight: Green Before Work
 
-Run `npm run verify` in the worktree. If it fails, stop and report the failure;
-do not begin implementation or classify failures as pre-existing. The worktree
-is retained for diagnosis, and cleanup protects it because no pull request was
-recorded.
+When `prepare` returned `baseline.reused: true`, the repository's CI already
+passed its full verify on exactly `baseSha`: skip the local run and cite
+`baseline` (check, commit, `url`) as the baseline evidence, including in the
+pull request's Evidence. For any other `baseline`, run `npm run verify` in the
+worktree. If it fails, stop and report the failure; do not begin implementation
+or classify failures as pre-existing. The worktree is retained for diagnosis,
+and cleanup protects it because no pull request was recorded.
 
 When the change will alter existing UI, capture before-shots now, while the
 worktree is still at `baseSha`: load `rendered-qa` and follow its before-shots
@@ -87,9 +99,8 @@ section for the affected routes. Skip this for new UI.
 ## Implementation
 
 The contract defines intent and scope. Resolve ordinary choices from
-repository evidence, keep changes bounded, and avoid unrelated refactors. The
-orchestrator owns investigation, delegation, remediation, final verification,
-and delivery.
+repository evidence and keep changes bounded. The orchestrator owns
+investigation, delegation, remediation, final verification, and delivery.
 
 When an acceptance criterion is important, reasonably testable, and supported
 by existing test infrastructure, add or update proof at the cheapest level that
@@ -100,24 +111,20 @@ cheaper checks cannot prove. If a criterion genuinely requires E2E and the
 repository has no suitable infrastructure, stop and report the gap rather than
 introducing a framework as incidental work.
 
-Delegated agents may run targeted checks useful to their work, such as a focused
-test, typecheck, rendered check, or the repository's selective verification.
-They do not own final verification and must not run the full repository
-gauntlet. A selective pass is feedback, never a substitute for the final gate.
-Where the repository uses Verifika, delegated agents run `vfk --changed` or
-`vfk --check <name>`; the `verifika` skill's full run before delivery is the
-orchestrator's final `npm run verify`.
+Delegated agents may run targeted checks (a focused test, typecheck, rendered
+check, or the repository's selective verification) but never the full
+repository gauntlet; a selective pass is feedback, not the final gate. Where the
+repository uses Verifika, they run `vfk --changed` or `vfk --check <name>`; the
+`verifika` skill's full run is the orchestrator's final `npm run verify`.
 
 ## Final Verification
 
 When implementation is settled, use the repository's intentional auto-fix
-mechanism if one exists, then run `npm run verify`. This is the authoritative
-final deterministic gate. A failure means the implementation is incomplete:
-diagnose it from the failing checks' output and logs (the `verifika` skill
-covers this where the repository uses Verifika), remediate
-implementation-caused failures, and rerun it. Never weaken repository
-safeguards to pass. Any later code remediation requires another full
-`npm run verify`. Record each full run with `ibni record --session
+mechanism if one exists, then run `npm run verify`, the authoritative final
+gate. A failure means the implementation is incomplete: diagnose it from the
+failing checks' output and logs (the `verifika` skill covers this), remediate,
+and rerun it. Never weaken repository safeguards to pass. Any later code
+remediation requires another full `npm run verify`. Record each full run with `ibni record --session
 "<sessionId>" --verify pass` (or `fail`), and each rendered QA or reviewer pass
 with `--qa <finding-count>` or `--review <finding-count>`; `ibni stats` reports
 them beside the lifecycle step timings.
@@ -136,116 +143,48 @@ produces the evidence the reviewer and the pull request use. Resolve its
 commit screenshots or pixel baselines, and do not present subjective
 judgement as deterministic verification.
 
-## Independent Review
+## Review
 
-Invoke `code-reviewer` in `discovery` mode when independent judgement
-materially improves confidence: substantial behavioural, architectural,
-integration, security, maintainability, or meaningful user-facing changes.
-Small mechanical changes need no review merely because the agent exists. Run
-rendered QA first when applicable.
-
-1. Write a background file in `evidenceDir`, within 8,000 characters: the
-   request's purpose, resolved requirements and acceptance criteria, relevant
-   repository and UX principles and constraints, and, for confirmation, the
-   accepted findings and fixes. Never include implementation transcripts,
-   reasoning, self-review, or advocacy.
-2. Invoke `code-reviewer` with the worktree, the review target (workspace
-   changes against HEAD before the first commit, the branch range once fully
-   committed, or only the new changes on follow-up), the background file path,
-   verification status, and rendered QA evidence. The reviewer owns the OCR
-   delegation mechanics.
-3. If the reviewer reports relevant tests or specs excluded from its
-   selection, add narrowly scoped `include` rules to the repository's
-   `.opencodereview/rule.json`, preserving existing rules, rerun
-   `npm run verify`, and invoke the reviewer again. A run halted for coverage
-   is not a review pass.
-
-If delegation or rule resolution fails, the review gate is not clear; report
-the failure.
-
-## Review Remediation
-
-Investigate every finding with repository evidence; resolve it with a bounded
-fix or by establishing that it does not apply. Do not blindly accept subjective
-or out-of-scope findings.
-
-`critical`, `high`, and `medium` findings block and must be resolved. `low`
-findings are reported, not churned, unless the user asks. Keep a concise
-finding ledger in session context only: each finding's severity and
-disposition, and the remediation for each blocker.
-
-If discovery has no applicable blockers, the gate is complete. Otherwise, batch
-all blocker fixes (delegate only when specialist expertise helps, never to the
-reviewer), rerun `npm run verify`, refresh rendered evidence when UI is
-affected, and invoke the same reviewer once in `confirmation` mode with the
-original requirements, the ledger, a concise remediation summary, the current
-diff, verification status, and rendered evidence.
-
-Confirmation checks that each blocker is resolved and that the fixes caused no
-material harm; it is not another discovery. A confirmation finding blocks only
-when it is an unresolved original blocker, a material regression caused or
-exposed by remediation, a correctness or safety issue, or a genuine failure of
-the task requirements. A qualifying blocker at confirmation stops the run:
-report it to the user with the finding ledger and verification evidence, and do
-not deliver. There are at most two reviewer passes: discovery and
-confirmation.
+Invoke `code-reviewer` when independent judgement materially improves
+confidence: substantial behavioural, architectural, integration, security,
+maintainability, or meaningful user-facing changes. Small mechanical changes
+need no review merely because the agent exists. When a review runs, load
+`implement-review` first: it owns the protocol, remediation and the review gate.
+Delivery enters only when final `npm run verify`, applicable rendered QA, and
+that gate leave no unresolved blockers.
 
 ## Delivery
-
-Enter only after final `npm run verify`, applicable rendered QA, and
-the review gate leave no unresolved blockers.
 
 1. Inspect worktree status and the full diff. Stage only intended changes;
    never commit an unrelated or empty change.
 2. Load `commit-pr-writing` and commit with the message it derives. Repository
    conventions take precedence.
-3. Run `ibni record-evidence --session "<sessionId>"` to
-   record that the committed tree passed the gates.
-4. Run `ibni publish --session "<sessionId>"`. It fetches
-   the default branch, integrates it safely, and pushes only the owned feature
-   branch without force.
+3. Run `ibni record-evidence --session "<sessionId>"` to record that the
+   committed tree passed the gates.
+4. Run `ibni publish --session "<sessionId>"`. It fetches the default branch,
+   integrates it safely, and pushes only the owned feature branch without force.
 5. If `publish` returns `requiresEvidence: true`, follow its `nextAction`. When
    `requiresRevalidation` is also true, prior evidence is stale: rerun
    `npm run verify`, inspect the integration diff, and refresh rendered
-   evidence or review only where the upstream change could materially affect
-   it. A review refresh is the `confirmation` pass; if that pass is already
-   spent, stop and report instead. Commit any remediation, record evidence, and
-   publish again.
+   evidence only where the upstream change could materially affect it (a
+   review refresh follows `implement-review`). Commit any remediation, record
+   evidence, and publish again.
 6. When rendered QA produced screenshots or GIFs, publish the ones the pull
-   request should show with `ibni publish-media --session
-   "<sessionId>" --files "<comma-separated names in evidenceDir>"` and use the
-   returned URLs. First look at every file for secrets, tokens, personal or real
-   user data, and internal hostnames, and leave out any that show them: the
-   branch may be public, and later cleanup does not erase history. Republish on
-   follow-up delivery so the media stays current.
-   If media cannot be published, deliver anyway and say why in Evidence.
+   request should show as `rendered-qa`'s publishing section describes, and use
+   the returned URLs. Republish on follow-up delivery so the media stays
+   current. If media cannot be published, deliver anyway and say why in
+   Evidence.
 7. Use `commit-pr-writing` for the pull-request title and description. For
    initial delivery, create the pull request with `gh` against `defaultBranch`.
    For follow-up delivery, update the existing pull request instead of
-   creating another. Never merge it.
-8. Run `ibni mark-pr --session "<sessionId>" --url
-   "<pr-url>"`.
+   creating another.
+8. Run `ibni mark-pr --session "<sessionId>" --url "<pr-url>"`.
 
 If any delivery stage fails, preserve the worktree and any commit, and report
-the failed stage with the tool's diagnostic. Do not bypass permissions, guess
-through ambiguous ownership or conflicts, rewrite shared history, force push,
-stash, discard work, include unrelated changes, or improvise destructive
-recovery.
-
-## Follow-Up On An Existing Pull Request
-
-When this session already owns a retained `worktreePath`, `sessionId`, and
-pull-request URL, reuse that workspace instead of running `prepare`. When it
-does not (a new session, or one that lost the earlier session's id), run
-`ibni adopt --pr "<pr-url>"` instead of `prepare`. Adopt proves the pull
-request is open and that its head branch and commit match the workspace's
-recorded branch, publication, remote branch and clean local HEAD, then issues a
-new `sessionId`; record its result as you would `prepare`'s. Ownership moves:
-the previous session's id stops working. If adopt refuses, report its
-diagnostic and stop; never infer ownership of a retained worktree any other
-way. Then run `ibni sync --session "<sessionId>"` before changing anything,
-refresh the contract for the new request, and establish a green baseline. Then follow the normal gates through delivery; publication updates
-the existing branch and `mark-pr` records the same URL again.
+the failed stage with the tool's diagnostic. The guard hook refuses the
+destructive recoveries; do not attempt them by other means, and do not bypass
+permissions, guess through ambiguous ownership or conflicts, or include
+unrelated changes.
 
 ## Completion
 

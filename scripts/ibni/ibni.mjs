@@ -46,7 +46,10 @@ export const COMMANDS = {
       "Run from the repository's clean primary checkout on its default branch. Fast-forwards it,",
       "sweeps retained workspaces whose pull requests are proven merged, then creates a locked",
       "worktree, its evidenceDir and a free PORT (from workflow.ports in config.json).",
-      "Prints sessionId, worktreePath, branch, evidenceDir, port, provisionedEnv and cleanup.",
+      "If the repository's .mexxi.json names a ciCheck (the CI run of its full verify) and that",
+      "check succeeded on exactly the base commit, baseline.reused is true and baseline cites the",
+      "run, so the local baseline verify can be skipped; otherwise baseline says why it runs.",
+      "Prints sessionId, worktreePath, branch, evidenceDir, port, baseline, provisionedEnv and cleanup.",
     ],
     options: {
       slug: "Short task name for the branch and worktree folder.",

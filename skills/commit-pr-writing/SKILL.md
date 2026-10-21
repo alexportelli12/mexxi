@@ -80,6 +80,8 @@ when present. Keep it above long media.>
 **Check:** <Entry point · action · expected result, when useful for human review.>
 
 **Risk / rollback:** <What could break and how to undo it; see below.>
+
+**Assumptions:** <Unattended runs only; see below.>
 ```
 
 Choose the two or three outcomes that define the PR, rather than compressing
@@ -141,6 +143,15 @@ explains what to notice. Include a GIF only when motion or an interaction is
 part of the outcome, not for every animated element. Link original videos
 rather than embedding them. If relevant media cannot be published, say why
 briefly in Evidence without treating an unavailable capture as proof.
+
+### Assumptions
+
+When the run was unattended, or a question went unanswered, the author took the
+most reasonable reading instead of asking. Add an **Assumptions** section after
+the lead and any **Important** note, above media, with one line per assumption:
+the open question, the reading taken, and the cheapest way to reverse it. A
+question that would have changed the design is a review item, so say what the
+reviewer should decide. Omit the section when nothing was assumed.
 
 ### Evidence And Material Risks
 
