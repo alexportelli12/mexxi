@@ -6,9 +6,19 @@ test('quotes unquoted --include and --exclude globs, and only those', () => {
   expect(fixCommand('grep -rn foo --include=*.ts --exclude-dir=node_modules .', false).command)
     .toBe("grep -rn foo --include='*.ts' --exclude-dir=node_modules .")
   expect(fixCommand('rg x --exclude=*.min.js && grep -r y --include=*.{ts,tsx} src', false).command)
-    .toBe("rg x --exclude='*.min.js' && grep -r y --include='*.{ts,tsx}' src")
+    .toBe("rg x --exclude='*.min.js' && grep -r y --include='*.ts' --include='*.tsx' src")
   expect(fixCommand("grep -rn foo --include='*.ts' .", false).changes).toEqual([])
   expect(fixCommand('echo "--include=*.ts"', false).changes).toEqual([])
+})
+
+test('expands a simple brace list into one option per entry, grep has no braces', () => {
+  expect(fixCommand('grep -r y --include=*.{ts,tsx} --exclude-dir={dist,.git} src', false).command)
+    .toBe("grep -r y --include='*.ts' --include='*.tsx' --exclude-dir={dist,.git} src")
+  expect(fixCommand('grep -r y --include=src/*.{ts,tsx,} .', false).command)
+    .toBe("grep -r y --include='src/*.ts' --include='src/*.tsx' --include='src/*.' .")
+  expect(fixCommand('grep -r y --include=*.{ts,{js,mjs}} .', false).changes).toEqual([])
+  expect(fixCommand('grep -r y --include=*{1..3}.log .', false).changes).toEqual([])
+  expect(fixCommand('grep -r y --include=*.{ts}.bak .', false).changes).toEqual([])
 })
 
 test('adds pipefail to a verify pipe, not to other pipes', () => {

@@ -36,8 +36,22 @@ function scan(command: string): Scan[] {
 
 const GLOB_OPTION = /^--(include|exclude)(-dir)?=([^\s'"\\$`;&|<>()]+)(?=[\s;&|<>()]|$)/
 
+const BRACE_LIST = /^([^{}]*)\{([^{}]*,[^{}]*)\}([^{}]*)$/
+
+// The globs a value stands for once the shell has expanded its braces, or null
+// when the braces are anything but one simple comma list (nested, a {1..3}
+// range): those are left for the shell rather than guessed at.
+function braceExpand(value: string): string[] | null {
+  if (!/[{}]/.test(value)) return [value]
+  const match = BRACE_LIST.exec(value)
+  if (!match) return null
+  return (match[2] ?? '').split(',').map((entry) => `${match[1]}${entry}${match[3]}`)
+}
+
 // zsh expands an unquoted --include=*.ts itself, and aborts the whole line with
-// "no matches found" when nothing in the directory matches.
+// "no matches found" when nothing in the directory matches. grep has no brace
+// syntax, so quoting --include=*.{ts,tsx} as it stands would match nothing;
+// it becomes one quoted option per entry, as bash's own expansion would.
 export function quoteGlobOptions(command: string): string {
   const positions = scan(command)
   let result = ''
@@ -46,7 +60,10 @@ export function quoteGlobOptions(command: string): string {
     if (index < cursor || quoted || !wordStart) continue
     const match = GLOB_OPTION.exec(command.slice(index))
     if (!match || !/[*?[]/.test(match[3] ?? '')) continue
-    result += `${command.slice(cursor, index)}--${match[1]}${match[2] ?? ''}='${match[3]}'`
+    const globs = braceExpand(match[3] ?? '')
+    if (!globs) continue
+    const option = `--${match[1]}${match[2] ?? ''}`
+    result += `${command.slice(cursor, index)}${globs.map((glob) => `${option}='${glob}'`).join(' ')}`
     cursor = index + match[0].length
   }
   return result + command.slice(cursor)
