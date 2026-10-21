@@ -10,15 +10,21 @@
 //   - force pushes, pushes to the default branch or a guard.protectedBranches
 //     entry (including a push of HEAD after a switch earlier in the line),
 //     and merging pull requests;
-//   - git stash, git reset --hard and git clean outside an owned ibni worktree,
-//     or pointed elsewhere from one (--git-dir, --work-tree, GIT_DIR), where
-//     they would destroy work the agent did not make;
+//   - git stash, git reset --hard, git clean, git restore (of the working
+//     tree), git checkout of paths and a forced checkout or switch outside an
+//     owned ibni worktree, or pointed elsewhere from one (--git-dir,
+//     --work-tree, GIT_DIR), where they would destroy work the agent did not
+//     make;
 //   - every guard.deny prefix (production deploys, publishing), wherever it
 //     sits in the command line, matched on the command's words so options
 //     (firebase --project p deploy), npm's run aliases, a package name
 //     (npx firebase-tools) and package runners (npm exec, pnpm dlx, yarn
 //     <bin>) do not hide it;
-//   - writes to the Shopify Admin API;
+//   - writes to the Shopify Admin API, and Shopify CLI commands that change a
+//     live store (app deploy and release, theme publish and delete, theme
+//     push --live);
+//   - any of these behind a wrapper (sudo, doas, env, npx, ...) or a command
+//     name held in a variable ($v push -f);
 //   - unquoted --include=* / --exclude=* globs, when guard.blockUnquotedGlobs
 //     is on (zsh aborts on them unless no_nomatch reaches the agent's shell);
 //   - a shell fed a script it cannot read: through a pipe (curl ... | sh), a
@@ -37,6 +43,11 @@
 //     setup such as eval "$(fnm env)";
 //   - output process substitution into a shell (tee >(bash));
 //   - zsh's repeat keyword (zsh -c 'repeat 2 git stash');
+//   - a variable expanded into a guarded command's arguments (s=push; git $s
+//     --force): only an expanded command name is read as every guarded one;
+//   - git checkout <path> without -- or ., which reads like a branch switch;
+//   - shopify theme push --theme <id of the live theme>, which the CLI
+//     confirms interactively;
 //   - a branch creation that fails before a push of HEAD (git switch -c x;
 //     git push): creating is taken to succeed, so HEAD is read as x.
 // `npm run deploy:staging` is refused on purpose: it matches the

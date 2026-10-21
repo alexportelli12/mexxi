@@ -350,6 +350,7 @@ const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 // options that take a value of their own.
 const WRAPPERS = {
   sudo: new Set(["-u", "-g", "-h", "-p", "-C", "-D", "-r", "-t", "-U"]),
+  doas: new Set(["-u", "-C"]),
   env: new Set(["-u", "-C", "-S"]),
   command: new Set(),
   builtin: new Set(),
@@ -376,7 +377,8 @@ const HEADERS = new Set(["for", "select", "case"]);
 // The command a simple command finally runs: leading reserved words,
 // assignments and wrappers (sudo, env, timeout 5, npx -y, xargs) removed,
 // argv[0] reduced to its basename so /usr/bin/git is git. `words` are the
-// reader's words behind argv, one for one.
+// reader's words behind argv, one for one; `nameExpanded` is whether the
+// command's name comes from an expansion ($v push -f), so is not argv[0].
 export function effectiveArgv(words) {
   let argv = words.map((word) => word.value);
   let globs = words.map((word) => word.globUnquoted);
@@ -424,8 +426,12 @@ export function effectiveArgv(words) {
     }
     drop(next);
   }
-  if (argv.length) argv[0] = argv[0].split("/").pop();
-  return { argv, globs, words: kept };
+  // A scoped package a runner names (npx @shopify/cli) keeps its scope.
+  if (argv.length && !argv[0].startsWith("@")) argv[0] = argv[0].split("/").pop();
+  // $HOME/bin/tool is still tool; only an expansion in the basename, or a
+  // substitution anywhere in the word, leaves the name unknown.
+  const nameExpanded = Boolean(kept[0]?.expanded) && (kept[0].substituted || !argv[0] || argv[0].includes("$"));
+  return { argv, globs, words: kept, nameExpanded };
 }
 
 // Where a shell run with these arguments (and no -c) reads its script: the

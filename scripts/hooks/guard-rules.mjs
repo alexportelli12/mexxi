@@ -240,6 +240,13 @@ function checkGit(argv, cwd, config, heads = new Map(), relocatedBy = null) {
   if (subcommand === "stash" && !["list", "show"].includes(args[0])) destructive = `git stash${args[0] ? ` ${args[0]}` : ""}`;
   if (subcommand === "reset" && args.includes("--hard")) destructive = "git reset --hard";
   if (subcommand === "clean" && !args.some((arg) => arg === "--dry-run" || (/^-[A-Za-z]+$/.test(arg) && arg.includes("n")))) destructive = "git clean";
+  // Overwriting working-tree files from the index or a commit discards their
+  // changes as surely as reset --hard: restore (unless --staged alone),
+  // checkout of paths, and a forced checkout or switch.
+  const short = (letter) => args.some((arg) => /^-[A-Za-z]+$/.test(arg) && arg.includes(letter));
+  if (subcommand === "restore" && (!(args.includes("--staged") || short("S")) || args.includes("--worktree") || short("W"))) destructive = "git restore";
+  if (subcommand === "checkout" && args.some((arg) => arg === "--" || arg === "." || arg.startsWith("--pathspec-from-file"))) destructive = "git checkout of paths";
+  if (["checkout", "switch"].includes(subcommand) && args.some((arg) => ["-f", "--force", "--discard-changes"].includes(arg))) destructive = `git ${subcommand} --force`;
   if (destructive && relocatedBy) {
     // ownedWorktree vouches for the directory, not for the repository these
     // point git at.
@@ -271,7 +278,7 @@ function checkGh(argv) {
 
 // Spellings that run the same thing: a package's name for its command
 // (npx firebase-tools@13 is firebase) and npm's aliases for run.
-const COMMAND_ALIASES = { "firebase-tools": "firebase" };
+const COMMAND_ALIASES = { "firebase-tools": "firebase", "@shopify/cli": "shopify" };
 const WORD_ALIASES = { "run-script": "run", rum: "run", urn: "run" };
 const PACKAGE_MANAGERS = new Set(["npm", "pnpm", "yarn", "bun"]);
 const PACKAGE_RUNNERS = new Set(["exec", "x", "dlx"]);
@@ -357,7 +364,18 @@ function graphqlWrite(url, bodies) {
   return !bodies.length || bodies.some((body) => body.startsWith("@") || body === "-" || /\bmutation\b/.test(body));
 }
 
+// Shopify CLI commands that change a live store: releasing an app version,
+// publishing or deleting a theme, and pushing to the live theme.
+function checkShopifyCli(args) {
+  const [topic, command] = args[0]?.includes(":") ? args[0].split(":") : args;
+  const live = (topic === "app" && ["deploy", "release"].includes(command))
+    || (topic === "theme" && ["publish", "delete"].includes(command))
+    || (topic === "theme" && command === "push" && args.some((arg) => ["--live", "-l", "--allow-live", "-a"].includes(arg)));
+  return live ? `shopify ${topic} ${command} writes to a live store; production writes need a human` : null;
+}
+
 function checkShopify(argv) {
+  if (commandName(argv[0]) === "shopify") return checkShopifyCli(argv.slice(1));
   const [name, ...args] = argv;
   const url = args.find((arg) => SHOPIFY_ADMIN.test(arg));
   if (!url) return null;
@@ -436,14 +454,27 @@ export function checkCommand(command, { cwd, config, home = os.homedir() }) {
       continue;
     }
     const relocatedBy = command.match(RELOCATING_ENV)?.[0] ?? null;
-    const reason = (argv[0] === "git" ? checkGit(argv, directory, config, heads, relocatedBy) : null)
-      ?? (argv[0] === "gh" ? checkGh(argv) : null)
-      ?? checkDeny(argv, config)
-      ?? checkShopify(argv)
-      ?? checkGlobs(simple, config);
+    const check = (words) => (words[0] === "git" ? checkGit(words, directory, config, heads, relocatedBy) : null)
+      ?? (words[0] === "gh" ? checkGh(words) : null)
+      ?? checkDeny(words, config)
+      ?? checkShopify(words)
+      ?? checkGlobs({ ...simple, argv: words }, config);
+    const reason = check(argv);
     if (reason) return reason;
+    if (simple.nameExpanded) {
+      // $v push -f: the name is only known at run time, so the command is
+      // read as each command a rule guards.
+      for (const name of guardedNames(config)) {
+        const guarded = check([name, ...argv.slice(1)]);
+        if (guarded) return `a command name built by an expansion could be ${name}, and then: ${guarded}; write the command name out`;
+      }
+    }
   }
   return null;
+}
+
+function guardedNames(config) {
+  return new Set(["git", "gh", "curl", "wget", "shopify", ...config.guard.deny.map((prefix) => prefix.trim().split(/\s+/)[0])]);
 }
 
 // An invalid config.json must not switch the guard off: it falls back to the

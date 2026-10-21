@@ -306,6 +306,61 @@ test("inside an owned worktree, destructive git aimed at another repository thro
   await assertAllowed(`git --git-dir=${clone}/.git log --oneline`, owned);
 });
 
+test("doas and a command name held in a variable do not hide a guarded command", async () => {
+  await assertBlocked("doas git push -f origin feature", /force/);
+  await assertBlocked("doas -u root gh pr merge 1", /merge decisions/);
+  for (const command of ["v=git; $v push -f origin feature", "${GIT:-git} push --force", '"$G" push origin +feature']) {
+    await assertBlocked(command, /force/);
+  }
+  await assertBlocked("$GH pr merge 1", /merge decisions/);
+  await assertBlocked("$TOOL deploy --only hosting", /firebase deploy is on the guard\.deny list/);
+  for (const command of ["$EDITOR notes.md", '"$PYTHON" -m pytest', "$(which node) --version", "$HOME/bin/release-notes deploy"]) await assertAllowed(command);
+  // A literal basename names the command whatever directory it is in.
+  await assertBlocked("$HOME/bin/git push -f origin feature", /force/);
+  await assertBlocked('"$(dirname x)/fire$X" deploy', /could be firebase/);
+});
+
+test("discarding working-tree changes through restore, checkout and switch is blocked outside an owned worktree", async () => {
+  for (const command of [
+    "git restore .",
+    "git restore src/app.ts",
+    "git restore --staged --worktree .",
+    "git restore -SW .",
+    "git restore --source=HEAD~1 src",
+    "git checkout -- .",
+    "git checkout HEAD -- src/app.ts",
+    "git checkout .",
+    "git checkout -f feature",
+    "git checkout --force main",
+    "git checkout --pathspec-from-file=paths.txt",
+    "git switch -f main",
+    "git switch --discard-changes main",
+  ]) {
+    await assertBlocked(command, /outside an owned ibni worktree/, clone);
+    await assertAllowed(command, owned);
+  }
+  for (const command of ["git restore --staged .", "git restore -S src/app.ts", "git checkout feature", "git checkout -b agent/y", "git switch feature"]) {
+    await assertAllowed(command, clone);
+  }
+});
+
+test("Shopify CLI commands that change a live store are blocked", async () => {
+  for (const command of [
+    "shopify app deploy",
+    "shopify app deploy --force",
+    "shopify app release --version v2",
+    "shopify theme push --live",
+    "shopify theme push -l --store shop",
+    "shopify theme push --allow-live --theme 1",
+    "shopify theme publish --theme 1",
+    "shopify theme delete --theme 2 --force",
+    "npx @shopify/cli@3 app deploy",
+  ]) await assertBlocked(command, /writes to a live store/);
+  for (const command of ["shopify theme push --unpublished", "shopify theme push --theme 9 --development", "shopify theme dev", "shopify app dev", "shopify theme pull --live"]) {
+    await assertAllowed(command);
+  }
+});
+
 test("every starter deny prefix is blocked even when sidestepped with cd x && ...", async () => {
   const { guard } = await resolveConfig({});
   assert.equal(guard.deny.length, 11);
