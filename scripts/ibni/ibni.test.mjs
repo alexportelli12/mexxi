@@ -276,6 +276,26 @@ test("refuses synchronization from the wrong session and preserves both worktree
   assert.equal((await git(second.json.worktreePath, "rev-parse", "HEAD")).stdout.trim(), secondHead);
 });
 
+test("refuses a session from another repository inside a different session's worktree", async (t) => {
+  const fixture = await createFixture(t);
+  const other = await createFixture(t);
+  // Both repositories share one worktree root, so the other session is
+  // discoverable from anywhere; only the worktree cwd stands in may act.
+  const mine = await lifecycle(fixture, fixture.control, "prepare", { slug: "mine" });
+  const theirs = await lifecycle(fixture, other.control, "prepare", { slug: "theirs" });
+
+  const result = await lifecycle(
+    fixture,
+    mine.json.worktreePath,
+    "record-evidence",
+    { session: theirs.json.sessionId },
+    [2],
+  );
+  assert.match(result.stderr, /session token does not own/);
+  const fromOutside = await lifecycle(fixture, other.control, "record-evidence", { session: theirs.json.sessionId });
+  assert.equal(fromOutside.json.operation, "record-evidence");
+});
+
 test("refuses to rewrite a branch published outside the owning lifecycle", async (t) => {
   const fixture = await createFixture(t);
   const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "external publish" });

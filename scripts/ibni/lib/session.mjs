@@ -113,23 +113,28 @@ export async function sessionWorkspace(cwd, sessionId) {
   return { repository: located.repository, inspected: located.inspected, entry: located.matched[0] };
 }
 
-export async function ownedSession(cwd, sessionId) {
-  const { repository, inspected, entry: owned } = await sessionWorkspace(cwd, sessionId);
-
-  const cwdIsLinkedImplementationWorktree = repository.gitDirectory !== repository.commonDirectory
-    && inspected.some((entry) => entry.worktreeExists && entry.gitDirectory === repository.gitDirectory);
-
-  if (cwdIsLinkedImplementationWorktree) {
-    const here = inspected.find((entry) =>
-      entry.worktreeExists && entry.gitDirectory === repository.gitDirectory
-    );
-    if (!here?.metadata) {
-      throw new WorkspaceError("this worktree has no implementation ownership metadata");
-    }
-    if (here.metadata.sessionId !== sessionId) {
-      throw new WorkspaceError("the session token does not own this implementation worktree");
-    }
+// When cwd stands in a linked implementation worktree, only its own session
+// may act from there. cwd's repository is checked separately because the
+// session's workspace may be found in another repository altogether.
+async function assertCwdWorktreeOwnedBy(cwd, sessionId) {
+  const here = await repositoryOrNull(cwd);
+  if (!here || here.gitDirectory === here.commonDirectory) return;
+  const inspected = await inspectImplementationWorktrees(here.commonDirectory);
+  const entry = inspected.find((candidate) =>
+    candidate.worktreeExists && candidate.gitDirectory === here.gitDirectory
+  );
+  if (!entry) return;
+  if (!entry.metadata) {
+    throw new WorkspaceError("this worktree has no implementation ownership metadata");
   }
+  if (entry.metadata.sessionId !== sessionId) {
+    throw new WorkspaceError("the session token does not own this implementation worktree");
+  }
+}
+
+export async function ownedSession(cwd, sessionId) {
+  const { repository, entry: owned } = await sessionWorkspace(cwd, sessionId);
+  await assertCwdWorktreeOwnedBy(cwd, sessionId);
 
   const { worktreePath, gitDirectory, metadata } = owned;
   if (!metadata.worktreePath || metadata.worktreePath !== worktreePath) {
