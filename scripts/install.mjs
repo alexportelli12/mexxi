@@ -216,7 +216,7 @@ async function installationConfig({ home, checkout, configFile, configSource }) 
 // `--yes` exists for one thing: `--config` writes ~/.config/mexxi/config.json,
 // which the installer otherwise only does with its own minimal first-run file,
 // so the write must be confirmed. The installer never prompts, so nothing else
-// changes with it.
+// changes with it. `--dry-run` writes nothing, so it needs no `--yes`.
 export function parseArguments(argv) {
   const flagValue = (flag) => {
     const index = argv.indexOf(flag);
@@ -225,10 +225,11 @@ export function parseArguments(argv) {
     return argv[index + 1];
   };
   const options = {
-    check: argv.includes("--check"), migrateFrom: flagValue("--migrate-from"),
+    check: argv.includes("--check"), dryRun: argv.includes("--dry-run"), migrateFrom: flagValue("--migrate-from"),
     configSource: flagValue("--config") && path.resolve(flagValue("--config")),
   };
-  if (options.configSource && !argv.includes("--yes")) {
+  if (options.check && options.dryRun) throw new Error("--dry-run asks whether an install would go ahead, --check whether it is complete; run one at a time");
+  if (options.configSource && !options.dryRun && !argv.includes("--yes")) {
     throw new Error("--config copies the file to ~/.config/mexxi/config.json (it never replaces a different one); add --yes to confirm");
   }
   if (argv.includes("--yes") && !options.configSource) throw new Error("--yes only confirms --config; the installer never prompts");
@@ -324,16 +325,22 @@ export async function install(options = {}) {
   // only one it can touch.
   const claudeCli = { cli: options.claudeCli ?? "claude", env: { ...(options.env ?? process.env), HOME: home } };
   const modsPlan = config.hosts.claude ? planMods({ checkout, mods: config.mods, ...claudeCli }) : null;
-  if (conflicts.length) {
+  // A dry run before the move asks whether the install that follows it would
+  // stop. The old clone's own files are expected there, since moving it aside
+  // is what clears them, so only the other conflicts count.
+  const oldCloneInPlace = unmoved.length > 0 && await fileExists(path.join(migrateFrom, ".git"));
+  const blocking = options.dryRun && oldCloneInPlace ? conflicts.filter((conflict) => !unmoved.includes(conflict)) : conflicts;
+  if (blocking.length) {
     let advice = "";
-    if (unmoved.length && await fileExists(path.join(migrateFrom, ".git"))) {
+    if (!options.dryRun && oldCloneInPlace) {
       const old = abbreviateHome(migrateFrom, home);
       advice = `\n${old} is still the old clone, so its own files sit where the new links go. Move it aside and give OpenCode an empty directory first:\n`
         + `  mv ${old} ${old}.pre-move && mkdir ${old}\n`
         + `then copy back the runtime-only files you keep there (tui.jsonc, herdr files, personal plugins) and rerun with --migrate-from ${old}.`;
     }
-    throw new Error(`existing configuration differs; no changes made:\n${conflicts.join("\n")}${advice}`);
+    throw new Error(`existing configuration differs; no changes made:\n${blocking.join("\n")}${advice}`);
   }
+  if (options.dryRun) return { dryRun: true, conflicts: 0, checked: entries.length };
   const drift = await renderDrift(generated, rendered);
   if (options.check) {
     const incomplete = [
@@ -422,6 +429,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     });
     const { registration = {}, codexHooksChanged, ...summary } = result;
     process.stdout.write(`${JSON.stringify(summary)}\n`);
+    if (result.dryRun) process.stdout.write("Nothing would stop an install, and nothing was changed.\n");
     if (codexHooksChanged) {
       process.stdout.write("Codex hooks changed: start codex and trust the mexxi guard and loop breaker once in /hooks (Codex skips untrusted hooks).\n");
     }

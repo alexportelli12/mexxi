@@ -514,7 +514,10 @@ test("a clean home reaches a green --check from a supplied config file, which is
 });
 
 test("--yes confirms --config and nothing else", () => {
-  assert.deepEqual(parseArguments(["--config", "c.json", "--yes"]), { check: false, migrateFrom: undefined, configSource: path.resolve("c.json") });
+  assert.deepEqual(parseArguments(["--config", "c.json", "--yes"]), { check: false, dryRun: false, migrateFrom: undefined, configSource: path.resolve("c.json") });
+  // A dry run writes nothing, so it needs no confirmation.
+  assert.equal(parseArguments(["--dry-run", "--config", "c.json"]).dryRun, true);
+  assert.throws(() => parseArguments(["--dry-run", "--check"]), /run one at a time/);
   assert.throws(() => parseArguments(["--config", "c.json"]), /add --yes/);
   assert.throws(() => parseArguments(["--yes"]), /only confirms --config/);
   assert.throws(() => parseArguments(["--config", "c.json", "--yes", "--check"]), /run --check on its own/);
@@ -655,6 +658,90 @@ test("--migrate-from on a clone still in place stops and names the move-aside se
   await install(options);
   assert.equal(await readlink(path.join(home, ".claude/CLAUDE.md")), path.join(home, ".local/share/mexxi/generated/claude/CLAUDE.md"));
   await install({ home, checkout, check: true });
+});
+
+// The move from ~/.config/opencode as getting-started.md documents it, run
+// verbatim by bash in a throwaway home: the pre-move layout (the old clone in
+// place, hosts linked into it) and a new clone, on main, at the default path.
+async function preMoveHome(t) {
+  const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-documented-move-"));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const clone = path.join(home, "workspace/mexxi");
+  await copyCheckout(clone);
+  await cp(path.join(checkout, ".gitignore"), path.join(clone, ".gitignore"));
+  await symlink(path.join(checkout, "node_modules"), path.join(clone, "node_modules"));
+  const init = await execute("git", ["init", "--quiet", "--initial-branch=main"], clone);
+  assert.equal(init.code, 0, init.output);
+  const old = path.join(home, ".config/opencode");
+  await mkdir(path.join(old, ".git"), { recursive: true });
+  await mkdir(path.join(old, "commands"), { recursive: true });
+  await writeFile(path.join(old, "AGENTS.md"), "old\n");
+  await writeFile(path.join(old, "opencode.json"), "{}\n");
+  await writeFile(path.join(old, "tui.jsonc"), "{}\n");
+  await mkdir(path.join(home, ".claude"), { recursive: true });
+  await symlink(path.join(old, "AGENTS.md"), path.join(home, ".claude/CLAUDE.md"));
+  await symlink(path.join(old, "commands"), path.join(home, ".claude/commands"));
+  return { home, clone, old };
+}
+
+function documentedShell(home, script) {
+  const env = { ...process.env, HOME: home, PATH: `${path.join(home, ".local/bin")}${path.delimiter}${process.env.PATH}` };
+  delete env.MEXXI_CONFIG;
+  delete env.CODEX_HOME;
+  return execute("bash", ["-e", "-c", script], home, env);
+}
+
+async function documentedMigration() {
+  const page = await readFile(path.join(checkout, "docs/getting-started.md"), "utf8");
+  const section = page.slice(page.indexOf("If you are moving from the old clone"));
+  return {
+    sequence: section.match(/```bash\n([\s\S]*?)```/)[1],
+    recovery: section.match(/`(rmdir ~\/\.config\/opencode && mv [^`]*)`/)?.[1],
+  };
+}
+
+test("the documented move from ~/.config/opencode stops before moving anything on a settings conflict, and the recovery line undoes a move", async (t) => {
+  const { home, old } = await preMoveHome(t);
+  const settingsFile = path.join(home, ".claude/settings.json");
+  await writeFile(settingsFile, JSON.stringify({ env: { BASH_MAX_TIMEOUT_MS: "600000" } }));
+  const { sequence, recovery } = await documentedMigration();
+
+  const stopped = await documentedShell(home, sequence);
+  assert.notEqual(stopped.code, 0);
+  assert.match(stopped.output, /env\.BASH_MAX_TIMEOUT_MS is 600000, not set by mexxi/);
+  assert.doesNotMatch(stopped.output, /\.config\/opencode\/AGENTS\.md\n/);
+  // Nothing moved: the hosts still read the old clone.
+  assert.equal(await readFile(path.join(home, ".claude/CLAUDE.md"), "utf8"), "old\n");
+  await assert.rejects(lstat(`${old}.pre-move`), /ENOENT/);
+  assert.equal(await readFile(settingsFile, "utf8"), JSON.stringify({ env: { BASH_MAX_TIMEOUT_MS: "600000" } }));
+
+  // Had it stopped after the move, the recovery line puts the old clone back.
+  assert.ok(recovery, "getting-started.md gives the recovery line");
+  const moved = await documentedShell(home, "mv ~/.config/opencode ~/.config/opencode.pre-move && mkdir ~/.config/opencode");
+  assert.equal(moved.code, 0, moved.output);
+  await assert.rejects(readFile(path.join(home, ".claude/CLAUDE.md")), /ENOENT/);
+  const recovered = await documentedShell(home, recovery);
+  assert.equal(recovered.code, 0, recovered.output);
+  assert.equal(await readFile(path.join(home, ".claude/CLAUDE.md"), "utf8"), "old\n");
+
+  // With the conflict resolved, the same sequence completes.
+  await writeFile(settingsFile, "{}\n");
+  const migrated = await documentedShell(home, sequence);
+  assert.equal(migrated.code, 0, migrated.output);
+  assert.equal(await readlink(path.join(home, ".claude/CLAUDE.md")), path.join(home, ".local/share/mexxi/generated/claude/CLAUDE.md"));
+  assert.equal(await readFile(path.join(`${old}.pre-move`, "AGENTS.md"), "utf8"), "old\n");
+});
+
+// ibda's sequence adds --config, so it cannot run verbatim; it must keep the
+// safeguards of the one the test above runs.
+test("ibda's pre-move sequence dry-runs before the move and gives the recovery line", async () => {
+  const skill = await readFile(path.join(checkout, "skills/ibda/SKILL.md"), "utf8");
+  const sequence = skill.slice(skill.indexOf("For the pre-move layout")).match(/```bash\n([\s\S]*?)```/)[1];
+  const lines = sequence.split("\n").map((line) => line.trim());
+  const dryRun = lines.findIndex((line) => /^node scripts\/install\.mjs --dry-run .*--migrate-from ~\/\.config\/opencode$/.test(line));
+  const move = lines.indexOf("mv ~/.config/opencode ~/.config/opencode.pre-move");
+  assert.ok(dryRun !== -1 && dryRun < move, "the dry run comes before the mv");
+  assert.ok(skill.includes("`rmdir ~/.config/opencode && mv ~/.config/opencode.pre-move ~/.config/opencode`"));
 });
 
 test("settings.json gets only the keys mexxi owns, and --check notices a hand-removed one", async (t) => {
