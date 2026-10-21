@@ -8,8 +8,9 @@
 // It refuses what AGENTS.md says an agent never does and a permission prefix
 // rule cannot hold on its own, because `cd x && <command>` sidesteps a prefix:
 //   - force pushes, pushes to the default branch or a guard.protectedBranches
-//     entry (including a push of HEAD after a switch earlier in the line),
-//     and merging pull requests;
+//     entry (including a push of HEAD after a switch, worktree add, clone or
+//     symbolic-ref HEAD earlier in the line, and a push of HEAD where Git
+//     cannot read the branch), and merging pull requests;
 //   - git stash, git reset --hard, git clean, git restore (of the working
 //     tree), git checkout of paths and a forced checkout or switch outside an
 //     owned ibni worktree, or pointed elsewhere from one (--git-dir,

@@ -269,16 +269,42 @@ test("a switch earlier in the line moves HEAD: a later HEAD-relative push is che
     "cd sub && git -C .. switch main && cd .. && git push",
   ]) await assertBlocked(command, /to main changes a protected branch/);
   for (const command of ["git checkout - && git push", "git switch @{-1} && git push origin HEAD", "git switch --detach main && git push"]) {
-    await assertBlocked(command, /after a switch to a branch the guard cannot name/);
+    await assertBlocked(command, /the guard cannot name its branch/);
   }
   for (const command of [
     "git switch -c agent/new && git push -u origin HEAD",
     "git switch main && git pull && git switch feature && git push origin feature",
     "git switch main && git push origin feature",
-    "git switch main && cd /tmp && git push",
+    `git switch main && cd ${owned} && git push`,
   ]) await assertAllowed(command);
   // Checking out a path switches nothing.
   await assertAllowed("git checkout main -- README.md && git push", owned);
+});
+
+test("a worktree, clone or HEAD made earlier in the line is checked like a switch, and a push from where the branch cannot be read is refused", async () => {
+  for (const command of [
+    "git worktree add -q ../m main && cd ../m && git merge -q --ff-only feat && git push -q",
+    "git worktree add ../m2 main && git -C ../m2 push origin HEAD",
+    "git worktree add --track -b main ../m3 origin/main && cd ../m3 && git push",
+    "git worktree add ../main && cd ../main && git push origin HEAD",
+    `git clone --quiet --branch main ${remote} x && cd x && git push origin HEAD`,
+    "git symbolic-ref HEAD refs/heads/main && git push",
+  ]) await assertBlocked(command, /to main changes a protected branch/);
+  for (const command of [
+    `git clone ${remote} x && cd x && git commit --allow-empty -m x && git push`,
+    "git worktree add --detach ../d main && cd ../d && git push origin HEAD",
+    `cd ${base} && git push`,
+    "git -C ../nowhere push origin HEAD",
+  ]) await assertBlocked(command, /the guard cannot name its branch/);
+  for (const command of [
+    "git push",
+    "git switch -c x && git push -u origin HEAD",
+    "git checkout main && git pull && git checkout -b fix && git push -u origin fix",
+    "git worktree add -b agent/y ../y main && cd ../y && git push -u origin HEAD",
+    "git worktree add ../agent-z && git -C ../agent-z push -u origin HEAD",
+    `git clone ${remote} x && cd x && git switch -c agent/y && git push -u origin HEAD`,
+    `git clone ${remote} x && cd x && git push origin agent/y`,
+  ]) await assertAllowed(command);
 });
 
 test("merging pull requests is the human's: gh pr merge and its API call are blocked", async () => {

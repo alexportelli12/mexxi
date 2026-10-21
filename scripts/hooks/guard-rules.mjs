@@ -85,7 +85,8 @@ function targetsBranch(target, branch) {
 // Where HEAD may be after git switch, checkout or branch -m earlier in the same
 // line, so a later push of HEAD is checked against the branch it would really
 // push. A switch that may fail leaves the old branch possible too; a
-// destination the guard cannot name (git checkout -, --detach) is unknown.
+// destination the guard cannot name (git checkout -, --detach) is unknown,
+// until a branch is created.
 // `head` is { branches, upstreams, unknown }, filled from Git on first use.
 function noteSwitch(subcommand, args, cwd, head) {
   const creates = { switch: ["-c", "-C", "--create", "--force-create", "--orphan"], checkout: ["-b", "-B", "--orphan"], branch: [] }[subcommand];
@@ -126,6 +127,7 @@ function noteSwitch(subcommand, args, cwd, head) {
     head.branches = new Set([created]);
     const tracked = positional[0] && remoteBranch(positional[0]);
     head.upstreams = new Set(tracked ? [tracked] : []);
+    head.unknown = false;
     return;
   }
   const target = positional[0];
@@ -139,14 +141,83 @@ function noteSwitch(subcommand, args, cwd, head) {
   }
 }
 
+const unknownHead = () => ({ branches: new Set(), upstreams: new Set(), unknown: true });
+
+// A directory Git cannot read a branch in (not a repository yet, or not there
+// yet) has an unknown HEAD; a detached one has none to push.
 function currentHead(cwd) {
   const current = git(cwd, ["branch", "--show-current"]);
+  if (current === null) return unknownHead();
   const upstream = git(cwd, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}"]);
   return {
     branches: new Set(current ? [current] : []),
     upstreams: new Set(upstream?.includes("/") ? [upstream.slice(upstream.indexOf("/") + 1)] : []),
     unknown: false,
   };
+}
+
+// Options of git worktree add and git clone that take a value.
+const WORKTREE_VALUE_OPTIONS = new Set(["--reason"]);
+const CLONE_VALUE_OPTIONS = new Set([
+  "-o", "--origin", "-u", "--upload-pack", "--reference", "--reference-if-able", "--separate-git-dir", "--depth",
+  "--shallow-since", "--shallow-exclude", "-c", "--config", "--template", "-j", "--jobs", "--filter", "--bundle-uri",
+  "--server-option", "--ref-format",
+]);
+
+// Splits args into positionals and the values of the options named in
+// `valued`; an option in `valued` may also be written --option=value.
+function parseOptions(args, valued) {
+  const positional = [];
+  const values = new Map();
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--") {
+      positional.push(...args.slice(index + 1));
+      break;
+    }
+    const [option, inline] = arg.split(/=(.*)/s);
+    if (valued.has(option)) values.set(option, inline ?? args[++index]);
+    else if (!arg.startsWith("-")) positional.push(arg);
+    else values.set(arg, true);
+  }
+  return { positional, values };
+}
+
+// The directories git worktree add, git clone and git symbolic-ref HEAD give
+// a HEAD earlier in the line, so a push from there is checked like one after
+// a switch. A clone's branch is the remote's default unless --branch names it.
+function noteNewHead(subcommand, args, cwd, heads) {
+  if (subcommand === "symbolic-ref") {
+    const { positional } = parseOptions(args, new Set(["-m"]));
+    if (positional[0] !== "HEAD" || positional.length < 2) return;
+    const ref = positional[1];
+    heads.set(cwd, ref.startsWith("refs/heads/") && !ref.includes("$")
+      ? { branches: new Set([ref.slice("refs/heads/".length)]), upstreams: new Set(), unknown: false }
+      : unknownHead());
+    return;
+  }
+  if (subcommand === "clone") {
+    const { positional, values } = parseOptions(args, new Set([...CLONE_VALUE_OPTIONS, "-b", "--branch"]));
+    const [repository, directory] = positional;
+    if (!repository) return;
+    const target = directory ?? path.basename(repository.replace(/[/\\]+$/, "").replace(/(?:\/\.git|\.git)$/, "").replace(/^.*:/, ""));
+    const branch = values.get("-b") ?? values.get("--branch");
+    heads.set(path.resolve(cwd, target), typeof branch === "string" && !branch.includes("$")
+      ? { branches: new Set([branch]), upstreams: new Set([branch]), unknown: false }
+      : unknownHead());
+    return;
+  }
+  if (subcommand !== "worktree" || args[0] !== "add") return;
+  const { positional, values } = parseOptions(args.slice(1), new Set([...WORKTREE_VALUE_OPTIONS, "-b", "-B"]));
+  const [worktree, commitish] = positional;
+  if (!worktree) return;
+  const head = { branches: new Set(), upstreams: new Set(), unknown: false };
+  const created = values.get("-b") ?? values.get("-B");
+  if (values.has("--detach") || values.has("-d")) head.unknown = true;
+  // Without a commit-ish or -b, the worktree gets a branch named after its
+  // directory, as if -b <basename> were given.
+  else noteSwitch("checkout", created ? ["-b", created, ...(commitish ? [commitish] : [])] : [commitish ?? path.basename(worktree)], cwd, head);
+  heads.set(path.resolve(cwd, worktree), head);
 }
 
 function checkPush(args, cwd, config, head = null) {
@@ -199,7 +270,7 @@ function checkPush(args, cwd, config, head = null) {
     targets.push(...heads, ...upstreams);
   }
   if (headRelative && unknown) {
-    return "git push of HEAD after a switch to a branch the guard cannot name (git checkout -, @{-1}, --detach) could land on a protected branch; push an explicit branch (git push origin <branch>)";
+    return "git push of HEAD where the guard cannot name its branch (after git checkout -, @{-1} or --detach, a clone without --branch, or where Git cannot read one) could land on a protected branch; push an explicit branch (git push origin <branch>)";
   }
   const hit = targets.map((target) => [...branches].find((branch) => targetsBranch(target, branch))).find(Boolean);
   if (hit) {
@@ -236,6 +307,7 @@ function checkGit(argv, cwd, config, heads = new Map(), relocatedBy = null) {
     if (!heads.has(directory)) heads.set(directory, currentHead(directory));
     noteSwitch(subcommand, args, directory, heads.get(directory));
   }
+  noteNewHead(subcommand, args, directory, heads);
   let destructive = null;
   if (subcommand === "stash" && !["list", "show"].includes(args[0])) destructive = `git stash${args[0] ? ` ${args[0]}` : ""}`;
   if (subcommand === "reset" && args.includes("--hard")) destructive = "git reset --hard";
