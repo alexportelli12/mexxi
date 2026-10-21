@@ -22,9 +22,10 @@ export type RunPaneSnapshot = {
   worktreePath?: string
   port?: number | null
   prUrl?: string | null
+  createdAt?: string
   steps: RunPaneStep[]
   verify?: { attempts: number; passed: number; failed: number; history: { outcome: string }[] }
-  review?: RunPaneGate
+  review?: RunPaneGate & { crossRounds?: number }
   qa?: RunPaneGate
   triage?: Record<string, unknown> | null
   error?: string
