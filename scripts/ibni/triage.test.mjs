@@ -61,10 +61,12 @@ test("the request asks the plan's five questions in the Decisions API's shape", 
 
 test("every shared secret pattern compiles and redacts a planted token", async () => {
   const samples = {
+    "PEM private key": "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEAx4\nq9Zr+/w==\n-----END RSA PRIVATE KEY-----",
     "openai-style key": "sk-abcdefghijklmnopqrstuv",
     "GitHub token": "ghp_abcdefghijklmnopqrstuvwxyz012345",
     "GitHub fine-grained token": "github_pat_11ABCDEFGHIJKLMNOPQRSTUV",
     "AWS access key": "AKIAABCDEFGHIJKLMNOP",
+    "Google API key": "AIzaSyA1bCdEfGhIjKlMnOpQrStUvWxYz012345",
     "Slack token": "xoxb-1234567890-abcdef",
     "Shopify token": "shpat_0123456789abcdef0123",
     JWT: "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghij",
@@ -79,6 +81,8 @@ test("every shared secret pattern compiles and redacts a planted token", async (
     assert.ok(count >= 1 && !text.includes(samples[name]), `${name} is redacted`);
   }
   assert.deepEqual(redact("rename the settings page"), { text: "rename the settings page", count: 0 });
+  // A key block spanning lines goes as one, with nothing of its body left.
+  assert.deepEqual(redact(`cat id_rsa\n${samples["PEM private key"]}\ndone`), { text: `cat id_rsa\n${REDACTION}\ndone`, count: 1 });
 });
 
 test("a planted token in the request is replaced before sending and the call counts as redacted", () => {

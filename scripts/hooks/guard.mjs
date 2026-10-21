@@ -15,7 +15,17 @@
 //     sits in the command line;
 //   - writes to the Shopify Admin API;
 //   - unquoted --include=* / --exclude=* globs, when guard.blockUnquotedGlobs
-//     is on (zsh aborts on them unless no_nomatch reaches the agent's shell).
+//     is on (zsh aborts on them unless no_nomatch reaches the agent's shell);
+//   - a shell fed a script through a pipe it cannot read (curl ... | sh).
+//
+// Known gaps, accepted rather than chased (the guard backs up AGENTS.md and the
+// host's permission rules; it is not a sandbox):
+//   - git aliases defined on the command line (git -c alias.p=push p --force);
+//   - abbreviated long options git accepts (git push --forc);
+//   - deny prefixes reached through another runner (npm exec, pnpm dlx).
+// `npm run deploy:staging` is refused on purpose: it matches the
+// `npm run deploy` prefix's `deploy:*` scripts, and which of them reach
+// production is the repository's business, not the guard's.
 import { execFileSync } from "node:child_process";
 import { readFileSync, realpathSync } from "node:fs";
 import os from "node:os";
@@ -88,6 +98,16 @@ function protectedBranches(cwd, remote, config) {
 
 const PUSH_VALUE_OPTIONS = new Set(["-o", "--push-option", "--repo", "--receive-pack", "--exec"]);
 
+// Whether a push target names the branch. A wildcard refspec
+// (refs/heads/*:refs/heads/*, refs/*) pushes every branch it matches,
+// protected ones included.
+function targetsBranch(target, branch) {
+  if (!target.includes("*")) return target === branch;
+  const pattern = target.split("*").map((part) => part.replace(/[.+?^$()|[\]{}\\]/g, "\\$&")).join(".*");
+  const regex = new RegExp(`^${pattern}$`);
+  return regex.test(branch) || regex.test(`refs/heads/${branch}`);
+}
+
 function checkPush(args, cwd, config) {
   const positional = [];
   let mirror = false;
@@ -133,7 +153,7 @@ function checkPush(args, cwd, config) {
   if (!refspecs.length && !everyBranch) {
     targets.push(...[current, upstream?.slice(upstream.indexOf("/") + 1)].filter(Boolean));
   }
-  const hit = targets.find((target) => branches.has(target));
+  const hit = targets.map((target) => [...branches].find((branch) => targetsBranch(target, branch))).find(Boolean);
   if (hit) {
     return `git push ${deleting ? "--delete " : ""}to ${hit} changes a protected branch (the default branch or guard.protectedBranches); deliver through a feature branch and a pull request`;
   }
@@ -167,6 +187,9 @@ function checkGit(argv, cwd, config) {
 function checkGh(argv) {
   if (argv[1] === "pr" && argv[2] === "merge") return "gh pr merge: merge decisions stay with the human";
   if (argv[1] === "api" && argv.some((arg) => /\/pulls\/[^/\s]+\/merge\b/.test(arg))) return "gh api .../merge: merge decisions stay with the human";
+  if (argv[1] === "api" && argv.includes("graphql") && argv.some((arg) => /\b(?:mergePullRequest|enablePullRequestAutoMerge)\b/.test(arg))) {
+    return "gh api graphql mergePullRequest: merge decisions stay with the human";
+  }
   return null;
 }
 
@@ -249,6 +272,7 @@ export function checkCommand(command, { cwd, config, home = os.homedir() }) {
   let directory = cwd;
   for (const simple of simpleCommands(command)) {
     const { argv } = simple;
+    if (simple.refused) return simple.refused;
     if (argv[0] === "cd" || argv[0] === "pushd") {
       const target = argv.slice(1).find((arg) => !arg.startsWith("-") || arg === "-");
       if (target === undefined) directory = home;
@@ -300,7 +324,15 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     process.stderr.write(`mexxi guard: could not read the tool call (${error.message}); refusing it\n`);
     process.exit(2);
   }
-  const reason = await guardToolCall(input);
+  let reason;
+  try {
+    reason = await guardToolCall(input);
+  } catch (error) {
+    // Nor does one that breaks while checking (an unreadable config.json, a
+    // bug): an error must never wave the call through.
+    process.stderr.write(`mexxi guard error; refusing: ${error.message}\n`);
+    process.exit(2);
+  }
   if (reason) {
     process.stderr.write(`mexxi guard blocked this command: ${reason}. Do not retry it in pieces, rephrase it or route around it; report what was blocked and why it was needed.\n`);
     process.exit(2);

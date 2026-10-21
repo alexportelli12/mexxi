@@ -3,7 +3,9 @@
 // ([a, b]) or as "- item" lines. Anything fancier is not supported on purpose.
 const unquote = (value) => value.trim().replace(/^(["'])(.*)\1$/, "$2");
 
-export function parseFrontmatter(text) {
+export function parseFrontmatter(source) {
+  // A checkout with core.autocrlf (common on Windows) has CRLF line endings.
+  const text = source.replace(/\r\n/g, "\n");
   const match = text.match(/^---\n([\s\S]*?)\n---\n?/);
   if (!match) return { data: {}, body: text };
   const lines = match[1].split("\n");

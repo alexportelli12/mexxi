@@ -251,6 +251,9 @@ export async function install(options = {}) {
   const pending = [];
   const relinks = [];
   const conflicts = [];
+  // Real files where links go inside the --migrate-from directory: the old
+  // clone has not been moved aside yet.
+  const unmoved = [];
   const hook = options.hookDirectory ? path.join(options.hookDirectory, "post-merge") : null;
   for (const [destination, source] of entries) {
     // Rendered sources are written below, after every conflict is known.
@@ -273,6 +276,7 @@ export async function install(options = {}) {
         else conflicts.push(destination);
       } else if (!info.isSymbolicLink()) {
         conflicts.push(destination);
+        if (migrateFrom && within(destination, migrateFrom)) unmoved.push(destination);
       } else {
         const target = path.resolve(path.dirname(destination), await readlink(destination));
         if (target === source) continue;
@@ -294,14 +298,17 @@ export async function install(options = {}) {
       else throw error;
     }
   }
-  // Only the keys mexxi owns in Claude Code's settings.json are merged.
+  // Only the keys mexxi owns in Claude Code's settings.json are merged. A host
+  // switched off in config.json still has what an earlier install added there
+  // removed (and --check reports it until then): its merge is planned with
+  // nothing desired while an ownership state remains.
   const settingsFiles = {
     settingsFile: path.join(options.claude ?? path.join(home, ".claude"), "settings.json"),
     stateFile: path.join(home, ".local/share/mexxi/state/claude-settings.json"),
   };
-  const settingsPlan = config.hosts.claude
-    ? await planSettingsMerge({ ...settingsFiles, desired: desiredSettings(config) })
-    : null;
+  const settingsDesired = config.hosts.claude ? desiredSettings(config)
+    : await fileExists(settingsFiles.stateFile) ? { deny: [], env: {}, keys: {}, hooks: {} } : null;
+  const settingsPlan = settingsDesired ? await planSettingsMerge({ ...settingsFiles, desired: settingsDesired }) : null;
   conflicts.push(...(settingsPlan?.conflicts ?? []));
   // Codex's hooks.json is shared with the user and other tools (herdr), so
   // only the guard and loop-breaker groups are merged in, by ownership.
@@ -309,15 +316,24 @@ export async function install(options = {}) {
     hooksFile: path.join(options.codex ?? path.join(home, ".codex"), "hooks.json"),
     stateFile: path.join(home, ".local/share/mexxi/state/codex-hooks.json"),
   };
-  const codexHooksPlan = config.hosts.codex
-    ? await planCodexHooks({ ...codexHooksFiles, desired: codexHooks(config) })
-    : null;
+  const codexHooksDesired = config.hosts.codex ? codexHooks(config)
+    : await fileExists(codexHooksFiles.stateFile) ? {} : null;
+  const codexHooksPlan = codexHooksDesired ? await planCodexHooks({ ...codexHooksFiles, desired: codexHooksDesired }) : null;
   conflicts.push(...(codexHooksPlan?.conflicts ?? []));
   // The claude CLI runs with this home, so a test's throwaway home is the
   // only one it can touch.
   const claudeCli = { cli: options.claudeCli ?? "claude", env: { ...(options.env ?? process.env), HOME: home } };
   const modsPlan = config.hosts.claude ? planMods({ checkout, mods: config.mods, ...claudeCli }) : null;
-  if (conflicts.length) throw new Error(`existing configuration differs; no changes made:\n${conflicts.join("\n")}`);
+  if (conflicts.length) {
+    let advice = "";
+    if (unmoved.length && await fileExists(path.join(migrateFrom, ".git"))) {
+      const old = abbreviateHome(migrateFrom, home);
+      advice = `\n${old} is still the old clone, so its own files sit where the new links go. Move it aside and give OpenCode an empty directory first:\n`
+        + `  mv ${old} ${old}.pre-move && mkdir ${old}\n`
+        + `then copy back the runtime-only files you keep there (tui.jsonc, herdr files, personal plugins) and rerun with --migrate-from ${old}.`;
+    }
+    throw new Error(`existing configuration differs; no changes made:\n${conflicts.join("\n")}${advice}`);
+  }
   const drift = await renderDrift(generated, rendered);
   if (options.check) {
     const incomplete = [
@@ -366,6 +382,16 @@ export async function install(options = {}) {
     // Codex skips a new or changed hook until it is trusted in /hooks.
     codexHooksChanged: Boolean(codexHooksPlan?.file),
   };
+}
+
+async function fileExists(file) {
+  try {
+    await access(file);
+    return true;
+  } catch (error) {
+    if (error.code === "ENOENT") return false;
+    throw error;
+  }
 }
 
 function modsSummary(plan) {

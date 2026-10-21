@@ -129,6 +129,15 @@ test("the build fails on a planted broken internal link", async () => {
   await assert.rejects(buildDocs({ root: directory, out, site }), /dead link/i);
 });
 
+test("the build fails on a link to a source file git does not track", async () => {
+  const directory = await copyRepo({ edit: { "skills/angular/SKILL.md": (text) => `${text}\nSee [the helper](scripts/no-such-file.mjs).\n` } });
+  const { out, site } = outputs(directory);
+  await assert.rejects(
+    buildDocs({ root: directory, out, site }),
+    /skills\/angular\/SKILL\.md: link to scripts\/no-such-file\.mjs .*does not track/,
+  );
+});
+
 test("the build fails on a skill without a description", async () => {
   const directory = await copyRepo({ edit: { "skills/angular/SKILL.md": (text) => text.replace(/^description:[\s\S]*?(?=\n---)/m, "") } });
   const { out, site } = outputs(directory);

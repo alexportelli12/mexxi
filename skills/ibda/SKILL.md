@@ -50,9 +50,11 @@ Look for `~/.config/mexxi/config.json` (or the file `MEXXI_CONFIG` names).
   "Upgrade and repair".
 - **It does not exist, but `~/.config/opencode` is a Git clone of
   `coding-agent-config`** (`git -C ~/.config/opencode remote -v`): this is the
-  pre-move layout. The new clone goes elsewhere and the installer takes over
-  the old links with `--migrate-from`. Explain that, and that the old clone
-  stays untouched until the user deletes it.
+  pre-move layout. The new clone goes elsewhere, and the old clone has to be
+  moved aside first, because OpenCode's links go where its files are now. The
+  installer then takes over the old links with `--migrate-from`. Explain the
+  sequence in step 4 and get a yes before moving anything; the moved clone
+  stays at `~/.config/opencode.pre-move` until the user deletes it.
 - **Otherwise:** a first install.
 
 ## 3. Ask only what cannot be detected
@@ -103,10 +105,25 @@ First install, in order:
    node scripts/install.mjs --config <scratch-file> --yes
    ```
 
-   `--yes` confirms that write. Add `--migrate-from ~/.config/opencode` for the
-   pre-move layout. If `~/.config/mexxi/config.json` already exists and
-   differs, the installer stops and changes nothing; show the user both files
-   and let them decide.
+   `--yes` confirms that write. If `~/.config/mexxi/config.json` already
+   exists and differs, the installer stops and changes nothing; show the user
+   both files and let them decide.
+
+   For the pre-move layout, with the user's yes, run this sequence instead of
+   the command above. Only it works: `--migrate-from` takes over links that
+   point inside the path it names, so it must name `~/.config/opencode`
+   itself, and that directory must no longer hold the old clone.
+
+   ```bash
+   mv ~/.config/opencode ~/.config/opencode.pre-move
+   mkdir ~/.config/opencode
+   # copy back runtime-only files from ~/.config/opencode.pre-move:
+   # tui.jsonc, herdr files, personal plugins; nothing mexxi installs
+   node scripts/install.mjs --config <scratch-file> --yes --migrate-from ~/.config/opencode
+   ```
+
+   Run the installer from the new clone. If it stops saying
+   `~/.config/opencode` is still the old clone, the move did not happen.
 5. Delete the scratch file once it is installed.
 
 ## 5. Add Playwright, then prove it

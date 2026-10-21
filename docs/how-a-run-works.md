@@ -37,8 +37,8 @@ Not every change needs every step. A one-line fix skips the independent review; 
 4. **Before-shots.** When the change alters existing UI, the agent captures it first, so reviewers see before and after.
 5. **Implementation.** The agent changes the code and adds proof at the cheapest level that proves the behaviour.
 6. **Final verification.** `npm run verify` runs again. It is the one authoritative gate, and a failure means the work is unfinished.
-7. **Rendered QA.** For user-facing work, the agent drives the running UI at three viewports and checks motion, keyboard use, touch targets and console errors. See [rendered-qa](skills/rendered-qa.md).
-8. **Independent review.** The [code-reviewer](agents/code-reviewer.md) judges the change in a read-only sandbox. See [implement-review](skills/implement-review.md).
+7. **Rendered QA.** For user-facing work, the agent drives the running UI at three viewports and checks motion, keyboard use, touch targets and console errors. See [rendered-qa](../skills/rendered-qa/SKILL.md).
+8. **Independent review.** The [code-reviewer](../agent/code-reviewer.md) judges the change in a read-only sandbox. See [implement-review](../skills/implement-review/SKILL.md).
 9. **Delivery.** `ibni record-evidence` and `ibni publish` push the branch without force. The agent opens the pull request, with screenshots and a call on how risky the merge is.
 
 You review the pull request and decide whether to merge. Mexxi never merges for you.
@@ -49,4 +49,4 @@ The gates are code, not instructions. The guard hook refuses force pushes, merge
 
 ## After the pull request
 
-The worktree stays for follow-up changes, in the same session or a later one through `ibni adopt`. [`/irrifletti`](commands/irrifletti.md) measures how recent sessions went, privately, so you can see whether a change to the workflow helped.
+The worktree stays for follow-up changes, in the same session or a later one through `ibni adopt`. [`/irrifletti`](../commands/irrifletti.md) measures how recent sessions went, privately, so you can see whether a change to the workflow helped.

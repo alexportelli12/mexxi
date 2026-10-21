@@ -34,24 +34,44 @@ export function stateDirectory(home = os.homedir()) {
   return path.join(home, ".local/share/mexxi/state/loop-breaker");
 }
 
-// The exit status a host reported, or null when it cannot be told.
+// The exit status a host reported, or null when it cannot be told. Only the
+// host's own structure counts: an exit_code field, a JSON result, or the
+// header the host writes above the command's output ("Exit code N" on the
+// first line, or "Process exited with code N" before "Output:"). The command's
+// own output never does, so a test log that prints "Exit code 1" is not a
+// failure.
 export function exitCode(response) {
   if (response === null || response === undefined) return null;
   if (typeof response === "number") return response;
-  if (Array.isArray(response)) return exitCode(response.map((part) => part?.text ?? (typeof part === "string" ? part : "")).join("\n"));
+  if (Array.isArray(response)) {
+    for (const part of response) {
+      const found = exitCode(part?.text ?? (typeof part === "string" ? part : null));
+      if (found !== null) return found;
+    }
+    return null;
+  }
   if (typeof response === "object") {
     for (const value of [response.exit_code, response.exitCode, response.metadata?.exit_code, response.metadata?.exitCode]) {
       if (Number.isInteger(value)) return value;
     }
-    for (const value of [response.output, response.content, response.text, response.stdout]) {
+    // Host wrappers around the output; stdout is the command's own.
+    for (const value of [response.output, response.content, response.text]) {
       const found = exitCode(value);
       if (found !== null) return found;
     }
     return null;
   }
   if (typeof response !== "string") return null;
-  const match = response.match(/"exit_code"\s*:\s*(-?\d+)/)
-    ?? response.match(/^(?:Exit code|Process exited with code)[:\s]+(-?\d+)/im);
+  if (response.trimStart().startsWith("{")) {
+    try {
+      return exitCode(JSON.parse(response));
+    } catch {
+      return null;
+    }
+  }
+  const outputStart = response.search(/^Output:/m);
+  const header = outputStart === -1 ? response.split("\n", 1)[0] : response.slice(0, outputStart);
+  const match = header.match(/^(?:Exit code|Process exited with code)[:\s]+(-?\d+)/im);
   return match ? Number(match[1]) : null;
 }
 

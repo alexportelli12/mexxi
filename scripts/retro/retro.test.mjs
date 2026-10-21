@@ -80,6 +80,24 @@ test("the extractor counts each signal once, redacts snippets with the shared pa
   assert.equal(excluded.zsh_pitfalls.total, 1);
 });
 
+test("the extractor's redaction reads every shared pattern, a PEM block across lines and a Google API key included", async () => {
+  // The module is loaded by path, so nothing beside it is imported by name.
+  const program = [
+    "import importlib.util, json, sys",
+    "spec = importlib.util.spec_from_file_location('session_retro', sys.argv[1])",
+    "module = importlib.util.module_from_spec(spec)",
+    "spec.loader.exec_module(module)",
+    "print(json.dumps([len(module.SECRET_PATTERNS), module.redact(sys.argv[2])]))",
+  ].join("\n");
+  const pem = "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0B\nAQEFAASC+/w==\n-----END PRIVATE KEY-----";
+  const google = "AIzaSyA1bCdEfGhIjKlMnOpQrStUvWxYz012345";
+  const { stdout } = await run("python3", ["-I", "-c", program, EXTRACTOR, `cat key.pem\n${pem}\nuse ${google} here`]);
+  const [count, text] = JSON.parse(stdout);
+  const source = JSON.parse(await readFile(new URL("../lib/secret-patterns.json", import.meta.url), "utf8"));
+  assert.equal(count, source.patterns.length);
+  assert.equal(text, "cat key.pem\n[REDACTED]\nuse [REDACTED] here");
+});
+
 test("--since and --until select sessions by start, a bare --until date includes that day, and undated sessions fall outside", async (t) => {
   const dir = await projects(t);
   const window = async (...args) => (await extract(dir, ...args)).inventory;

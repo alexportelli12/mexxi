@@ -40,7 +40,8 @@ export function pageLink(from, to) {
 }
 
 // Source files link to each other by repository path. Published pages link to
-// pages; anything else tracked links to GitHub; anything untracked is plain text.
+// pages; anything else tracked links to GitHub; a link to an untracked path
+// fails the build.
 function rewriteLinks(markdown, { file, route, tracked, aliasTargets }) {
   const trackedSet = new Set(tracked);
   let fenced = false;
@@ -61,7 +62,12 @@ function rewriteLinks(markdown, { file, route, tracked, aliasTargets }) {
         if (bang) return text;
         if (trackedSet.has(resolved)) return `[${text}](${REPO_URL}/blob/main/${resolved}${anchor ? `#${anchor}` : ""})`;
         if (tracked.some((name) => name.startsWith(`${resolved}/`))) return `[${text}](${REPO_URL}/tree/main/${resolved})`;
-        return text;
+        // Hand-written pages sit at the site root, so a link that stays inside
+        // docs/ is a site link (often to a generated page); VitePress's
+        // dead-link check validates it.
+        if (file.startsWith("docs/") && resolved.startsWith("docs/")) return whole;
+        // A typo or a deleted file would otherwise vanish into plain text.
+        throw new DocsError(`${file}: link to ${target} points at ${resolved}, which git does not track`);
       });
     })
     .join("\n");

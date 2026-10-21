@@ -1595,6 +1595,7 @@ const args = process.argv.slice(2);
 const value = (flag) => args[args.indexOf(flag) + 1];
 const save = () => fs.writeFileSync(${JSON.stringify(state)}, JSON.stringify(state));
 const [group, action] = args;
+if (value("--repo") !== "acme/widgets") { console.error("gh stub: no --repo acme/widgets in " + args.join(" ")); process.exit(4); }
 if (group === "label" && action === "list") console.log(JSON.stringify(state.labels.map((name) => ({ name }))));
 else if (group === "label" && action === "create") { state.labels.push(args[2]); save(); }
 else if (group === "issue" && action === "list") {
@@ -1612,6 +1613,8 @@ else if (group === "issue" && action === "list") {
 
 test("file-qa-checks files each suggestion as a qa-check issue, creating the label and skipping duplicates", async (t) => {
   const fixture = await createFixture(t);
+  // The stub refuses any call without --repo acme/widgets, the remote's repository.
+  await useGithubRemote(fixture);
   const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "qa checks" });
   const { sessionId, evidenceDir } = prepared.json;
   const from = path.join(evidenceDir, "qa-checks.txt");
@@ -1639,6 +1642,17 @@ test("file-qa-checks files each suggestion as a qa-check issue, creating the lab
   assert.match(tooLong.stderr, /longer than 200 characters/);
   const missing = await lifecycle(fixture, evidenceDir, "file-qa-checks", { session: sessionId }, [2], gh.env);
   assert.match(missing.stderr, /requires --from/);
+});
+
+test("file-qa-checks refuses a remote that is not a GitHub repository rather than letting gh guess", async (t) => {
+  const fixture = await createFixture(t);
+  const { sessionId, evidenceDir } = (await lifecycle(fixture, fixture.control, "prepare", { slug: "qa local" })).json;
+  const from = path.join(evidenceDir, "qa-checks.txt");
+  await writeFile(from, "Fail on console errors\n");
+  const gh = await issueGhStub(t);
+  const result = await lifecycle(fixture, evidenceDir, "file-qa-checks", { session: sessionId, from }, [2], gh.env);
+  assert.match(result.stderr, /needs remote origin to be a GitHub repository/);
+  assert.deepEqual((await gh.read()).labels, []);
 });
 
 // A codex stand-in: records its arguments and stdin, answers --version, and

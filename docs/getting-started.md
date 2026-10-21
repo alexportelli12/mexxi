@@ -23,7 +23,7 @@ Paste this into Claude Code, Codex or OpenCode. The agent installs mexxi and ask
 Set up mexxi for me. Read https://raw.githubusercontent.com/alexportelli12/mexxi/main/skills/ibda/SKILL.md and follow it.
 ```
 
-When mexxi is installed, open a repository and paste this. [`/lesti`](commands/lesti.md) opens one pull request that adds what the repository lacks and fixes the checks that already fail.
+When mexxi is installed, open a repository and paste this. [`/lesti`](../commands/lesti.md) opens one pull request that adds what the repository lacks and fixes the checks that already fail.
 
 **Prepare a repository**
 
@@ -63,7 +63,19 @@ It renders the host files from `config.json` into `~/.local/share/mexxi/generate
 - adds a `post-merge` hook, so a later `git pull` on `main` reinstalls automatically; and
 - preserves your personal Codex `config.toml`.
 
-`install --check` renders again and fails on any difference, so a hand-edited host file or a stale render shows up as a failure. If you are moving from the old clone in `~/.config/opencode`, pass `--migrate-from ~/.config/opencode` and the installer relinks it to the new clone.
+`install --check` renders again and fails on any difference, so a hand-edited host file or a stale render shows up as a failure.
+
+If you are moving from the old clone in `~/.config/opencode`, move it aside first, because OpenCode's links go where its files are now. Then give OpenCode an empty directory and let the installer relink everything to the new clone:
+
+```bash
+mv ~/.config/opencode ~/.config/opencode.pre-move
+mkdir ~/.config/opencode
+# copy back runtime-only files you keep there, such as tui.jsonc, herdr files and personal plugins
+cd ~/workspace/mexxi
+node scripts/install.mjs --migrate-from ~/.config/opencode
+```
+
+`--migrate-from` names the old path, not the moved copy: it takes over the links that still point inside it. If the old clone is still in place, the installer stops and prints this sequence.
 
 ### Host details
 
@@ -82,7 +94,7 @@ codex mcp add playwright -- npx -y @playwright/mcp@0.0.83 --headless --isolated 
 
 `install --check` reads those files back and fails when a server is missing or has another version, another output directory, or `--allow-unrestricted-file-access`. To change the pin, edit `config.json`, rerun the installer, remove the old server and register it again with the new lines.
 
-**The guard.** Claude Code and Codex run `scripts/hooks/guard.mjs` before every shell command, and OpenCode runs the same code through a plugin. It refuses force pushes, pushes to the default branch, merges, and destructive Git outside an owned worktree. It reads every command in a line, including `bash -c` scripts, but treats quoted text as data. A refusal reaches the agent as the tool's error, with the reason.
+**The guard.** Claude Code and Codex run `scripts/hooks/guard.mjs` before every shell command, and OpenCode runs the same code through a plugin. It refuses force pushes, pushes to the default branch, merges, and destructive Git outside an owned worktree. It reads every command in a line, including those inside `if`, loops and `{ ...; }` groups, and treats quoted text as data. It also reads the script a shell is given, whether by `bash -c` or on standard input. A shell piped a script it cannot see, such as `curl ... | sh`, is refused. A refusal reaches the agent as the tool's error, with the reason.
 
 ## Prepare your repository
 

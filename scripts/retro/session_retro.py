@@ -42,7 +42,14 @@ def load_secret_patterns(path: str):
     """The patterns ibni's Jev triage also redacts with; one file for both."""
     with open(path, encoding="utf-8") as fh:
         source = json.load(fh)
-    patterns = [re.compile(p["pattern"], re.I if "i" in p["flags"] else 0) for p in source["patterns"]]
+    # The same flag letters JavaScript reads: i, m and s.
+    known = {"i": re.I, "m": re.M, "s": re.S}
+    patterns = []
+    for p in source["patterns"]:
+        flags = 0
+        for letter in p["flags"]:
+            flags |= known[letter]
+        patterns.append(re.compile(p["pattern"], flags))
     return patterns, source["replacement"]
 
 

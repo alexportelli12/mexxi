@@ -627,6 +627,36 @@ test("Playwright MCP comes from config.json: rendered for OpenCode, printed for 
   await install({ ...options, check: true });
 });
 
+test("--migrate-from on a clone still in place stops and names the move-aside sequence", async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-unmoved-"));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  await configure(home);
+  await registerPlaywright(home);
+  // The pre-move layout before anything was moved: ~/.config/opencode is the
+  // old clone itself, with its own AGENTS.md and commands where links go.
+  const old = path.join(home, ".config/opencode");
+  await mkdir(path.join(old, ".git"), { recursive: true });
+  await mkdir(path.join(old, "commands"), { recursive: true });
+  await writeFile(path.join(old, "AGENTS.md"), "old\n");
+  await mkdir(path.join(home, ".claude"), { recursive: true });
+  await symlink(path.join(old, "AGENTS.md"), path.join(home, ".claude/CLAUDE.md"));
+  const options = { home, checkout, migrateFrom: old };
+  await assert.rejects(install(options), (error) => {
+    assert.match(error.message, /\.config\/opencode\/AGENTS\.md\n/);
+    assert.match(error.message, /~\/\.config\/opencode is still the old clone[\s\S]*mv ~\/\.config\/opencode ~\/\.config\/opencode\.pre-move && mkdir ~\/\.config\/opencode\n[\s\S]*tui\.jsonc[\s\S]*rerun with --migrate-from ~\/\.config\/opencode/);
+    return true;
+  });
+  assert.equal(await readFile(path.join(old, "AGENTS.md"), "utf8"), "old\n");
+
+  // The sequence it names works: move aside, empty directory, rerun.
+  await cp(old, `${old}.pre-move`, { recursive: true });
+  await rm(old, { recursive: true });
+  await mkdir(old);
+  await install(options);
+  assert.equal(await readlink(path.join(home, ".claude/CLAUDE.md")), path.join(home, ".local/share/mexxi/generated/claude/CLAUDE.md"));
+  await install({ home, checkout, check: true });
+});
+
 test("settings.json gets only the keys mexxi owns, and --check notices a hand-removed one", async (t) => {
   const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-settings-"));
   t.after(() => rm(home, { recursive: true, force: true }));
@@ -761,10 +791,39 @@ test("Codex's hooks.json gets the guard and loop breaker beside hooks it does no
   await install(options);
   await install({ ...options, check: true });
 
-  // Turning Codex off leaves its files alone; turning it back on is idempotent.
+  // Turning Codex off takes back only the hooks mexxi added (--check reports
+  // them until then); the user's own stay. Turning it back on restores them.
   await configure(home, { hosts: { codex: false } });
+  await assert.rejects(install({ ...options, check: true }), /PreToolUse hook Bash -> node .*guard\.mjs was added by mexxi and is no longer wanted/);
   await install(options);
-  assert.deepEqual(JSON.parse(await readFile(hooksFile, "utf8")).hooks.SessionStart, herdr.SessionStart);
+  assert.deepEqual(JSON.parse(await readFile(hooksFile, "utf8")), { hooks: herdr });
+  await install({ ...options, check: true });
+  await configure(home);
+  await install(options);
+  assert.deepEqual(JSON.parse(await readFile(hooksFile, "utf8")).hooks, hooks);
+});
+
+test("turning Claude Code off takes back what mexxi added to settings.json and keeps the user's own", async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-claude-off-"));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  await configure(home);
+  await registerPlaywright(home);
+  const settingsFile = path.join(home, ".claude/settings.json");
+  const mine = { model: "opus", permissions: { deny: ["Bash(rm -rf:*)"] }, env: { OTHER: "1" } };
+  await mkdir(path.dirname(settingsFile), { recursive: true });
+  await writeFile(settingsFile, JSON.stringify(mine));
+  const options = { home, checkout };
+  await install(options);
+  assert.notDeepEqual(JSON.parse(await readFile(settingsFile, "utf8")), mine);
+
+  await configure(home, { hosts: { claude: false } });
+  await assert.rejects(install({ ...options, check: true }), /deny entry Bash\(firebase deploy:\*\) was added by mexxi[\s\S]*env\.BASH_MAX_TIMEOUT_MS was added by mexxi[\s\S]*PreToolUse hook .*guard\.mjs was added by mexxi/);
+  await install(options);
+  assert.deepEqual(JSON.parse(await readFile(settingsFile, "utf8")), mine);
+  await install({ ...options, check: true });
+  // A home that never had mexxi's settings needs nothing for a host that is off.
+  await rm(path.join(home, ".local/share/mexxi/state/claude-settings.json"));
+  await install({ ...options, check: true });
 });
 
 test("the mods are installed through the claude CLI from this clone, and --check confirms where they are read from", async (t) => {
