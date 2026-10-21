@@ -20,7 +20,9 @@ import {
   repositoryAt,
 } from "../lib/git.mjs";
 import { withRepositoryLock } from "../lib/lock.mjs";
-import { evidenceDirectoryFor, writeMetadata } from "../lib/metadata.mjs";
+import { evidenceDirectoryFor, inspectImplementationWorktrees, writeMetadata } from "../lib/metadata.mjs";
+import { allocatePort } from "../lib/ports.mjs";
+import { workspaceCandidates } from "../lib/session.mjs";
 import { sweepConsumedWorkspaces } from "./cleanup.mjs";
 
 const ENV_FILE_PREFIX = ".env";
@@ -179,6 +181,12 @@ export async function prepareWorkspace({ cwd = process.cwd(), slug, prefix }) {
       prefix ?? config.workflow.branchPrefix.replace(/\/$/, ""),
       config,
     );
+    // Retained workspaces of every repository share this machine's ports.
+    const recordedPorts = [
+      ...(await inspectImplementationWorktrees(repository.commonDirectory)).map((entry) => entry.metadata?.port),
+      ...(await workspaceCandidates(repository.root)).map((candidate) => candidate.metadata.port),
+    ].filter(Number.isInteger);
+    const port = await allocatePort(config.workflow.ports, recordedPorts);
     try {
       await git(repository.root, [
         "worktree",
@@ -213,6 +221,7 @@ export async function prepareWorkspace({ cwd = process.cwd(), slug, prefix }) {
         baseSha,
         publishedSha: null,
         prUrl: null,
+        port,
         evidenceTreeSha: null,
         evidenceRecordedAt: null,
         pendingOperation: null,
@@ -229,6 +238,7 @@ export async function prepareWorkspace({ cwd = process.cwd(), slug, prefix }) {
         defaultBranch: metadata.defaultBranch,
         baseSha: metadata.baseSha,
         evidenceDir,
+        port,
         provisionedEnv,
         cleanup,
       };

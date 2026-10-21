@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 export const schemaFile = fileURLToPath(new URL("../../config.schema.json", import.meta.url));
 export const supportedKeywords = new Set([
   "$schema", "title", "description", "type", "properties", "additionalProperties",
-  "items", "enum", "pattern", "minimum", "minLength", "default",
+  "items", "enum", "pattern", "minimum", "maximum", "minLength", "default",
 ]);
 
 export class ConfigError extends Error {
@@ -53,6 +53,9 @@ export function validate(value, schema, at = "config") {
   }
   if (typeof value === "number" && schema.minimum !== undefined && value < schema.minimum) {
     errors.push(`${at}: below ${schema.minimum}`);
+  }
+  if (typeof value === "number" && schema.maximum !== undefined && value > schema.maximum) {
+    errors.push(`${at}: above ${schema.maximum}`);
   }
   if (actual === "array" && schema.items) {
     value.forEach((item, index) => errors.push(...validate(item, schema.items, `${at}[${index}]`)));

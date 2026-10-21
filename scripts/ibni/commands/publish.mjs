@@ -1,5 +1,5 @@
 import { WorkspaceError } from "../lib/errors.mjs";
-import { assertClean, cleanOutput, git, remoteBranchSha } from "../lib/git.mjs";
+import { assertClean, cleanOutput, git, push, remoteBranchSha } from "../lib/git.mjs";
 import { withRepositoryLock } from "../lib/lock.mjs";
 import { updateMetadata } from "../lib/metadata.mjs";
 import { ownedSession } from "../lib/session.mjs";
@@ -51,8 +51,7 @@ export async function publishWorkspace({ cwd = process.cwd(), sessionId }) {
     });
     let publicationConfirmed = false;
     try {
-      await git(repository.root, [
-        "push",
+      await push(repository.root, [
         "--porcelain",
         metadata.pushUrl,
         `${headSha}:refs/heads/${metadata.branch}`,

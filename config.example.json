@@ -34,7 +34,11 @@
       1440,
       768,
       390
-    ]
+    ],
+    "ports": {
+      "first": 4300,
+      "last": 4999
+    }
   },
   "browser": {
     "playwrightMcpVersion": "0.0.83",

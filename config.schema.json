@@ -101,6 +101,16 @@
           "type": "array",
           "items": { "type": "integer", "minimum": 200 },
           "default": [1440, 768, 390]
+        },
+        "ports": {
+          "description": "Range ibni assigns each new workspace's PORT from, so parallel worktrees' dev servers do not collide. Ports already recorded by a retained workspace or bound on this machine are skipped.",
+          "type": "object",
+          "additionalProperties": false,
+          "default": {},
+          "properties": {
+            "first": { "description": "Lowest port ibni assigns.", "type": "integer", "minimum": 1024, "maximum": 65535, "default": 4300 },
+            "last": { "description": "Highest port ibni assigns; at least first.", "type": "integer", "minimum": 1024, "maximum": 65535, "default": 4999 }
+          }
         }
       }
     },

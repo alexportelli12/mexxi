@@ -77,8 +77,10 @@ export async function inspectImplementationWorktrees(root) {
 // Transient evidence (screenshots, recordings, reports) lives beside the
 // worktree rather than inside it: untracked files in the worktree would block
 // record-evidence, publish, and cleanup, which all require a clean tree.
+export const EVIDENCE_SUFFIX = ".evidence";
+
 export function evidenceDirectoryFor(worktreePath) {
-  return `${worktreePath}.evidence`;
+  return `${worktreePath}${EVIDENCE_SUFFIX}`;
 }
 
 export async function updateMetadata(session, changes) {
@@ -101,6 +103,7 @@ export function workspaceSummary(entry) {
     branch: metadata.branch,
     state: metadata.state,
     prUrl: metadata.prUrl,
+    port: metadata.port ?? null,
     defaultBranch: metadata.defaultBranch,
     baseSha: metadata.baseSha,
     publishedSha: metadata.publishedSha,

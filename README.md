@@ -64,7 +64,7 @@ Not every change needs every step. A one-line fix doesn't get an independent rev
 | Skill | [`skill-creator`](skills/skill-creator/SKILL.md) | Creating and evaluating skills |
 | Skill | [`workflow-for-alex`](skills/workflow-for-alex/SKILL.md) | Governance for changing this workflow |
 | Skill | [`verifika`](https://github.com/alexportelli12/verifika/blob/main/skills/verifika/SKILL.md) | Running and diagnosing Verifika checks; linked from the pinned npm package |
-| Script | [`ibni`](scripts/ibni/ibni.mjs) | Worktree lifecycle: prepare, publish, PR media, cleanup |
+| Script | [`ibni`](scripts/ibni/ibni.mjs) | Worktree lifecycle: prepare, publish, PR media, adopt, timings, cleanup |
 | Script | [`install.mjs`](scripts/install.mjs) | Links shared configuration into all three hosts |
 
 The previous names (`/implement`, `/qa`, `/update-my-workflow`, `/ux.principles`, Codex's `$workflow-…` wrappers and `implementation-workspace`) still work for one release, as thin aliases of the new ones.
@@ -116,8 +116,11 @@ Start a new Codex session after installation. A non-empty `AGENTS.override.md` i
 For occasional manual use:
 
 ```bash
+ibni --help                   # every command; ibni <command> --help for its flags
 ibni list                     # retained workspaces
-ibni info --session <id>      # paths, branch and PR for one
+ibni info --session <id>      # paths, branch, port and PR for one
+ibni stats --session <id>     # step timings, verify attempts, finding counts
+ibni adopt --pr <url>         # take over an open PR's workspace in a new session
 ibni cleanup                  # what would be removed (dry run)
 ibni cleanup --dry-run false  # remove merged, consumed ones
 ```

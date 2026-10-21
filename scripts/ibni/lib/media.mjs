@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { WorkspaceError } from "./errors.mjs";
-import { cleanOutput, fetchBranch, git, redactEndpoint, remoteBranchSha } from "./git.mjs";
+import { cleanOutput, fetchBranch, git, push as pushRef, redactEndpoint, remoteBranchSha } from "./git.mjs";
 
 export const MEDIA_BRANCH = "pr-media";
 export const MEDIA_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".mp4", ".webm"]);
@@ -32,7 +32,7 @@ export async function updateMediaBranch(root, pushUrl, message, mutateIndex) {
         "-m",
         message,
       ]));
-      const push = await git(root, ["push", "--porcelain", pushUrl, `${commit}:refs/heads/${MEDIA_BRANCH}`], {
+      const push = await pushRef(root, ["--porcelain", pushUrl, `${commit}:refs/heads/${MEDIA_BRANCH}`], {
         allowedExitCodes: [0, 1],
       });
       if (push.code === 0) return { commit, changed: true };

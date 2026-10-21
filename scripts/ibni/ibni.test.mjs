@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { access, chmod, mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { COMMANDS } from "./ibni.mjs";
+import { MEDIA_EXTENSIONS } from "./lib/media.mjs";
 
 const cli = fileURLToPath(new URL("./ibni.mjs", import.meta.url));
 
@@ -648,6 +651,11 @@ if [ ! -f "\${GH_STUB_DIR}/\${pr}" ]; then
   exit 1
 fi
 state="\$(cat "\${GH_STUB_DIR}/\${pr}")"
+if [ -f "\${GH_STUB_DIR}/\${pr}.head" ]; then
+  read -r headRef headOid < "\${GH_STUB_DIR}/\${pr}.head"
+  printf '{"state":"%s","headRefName":"%s","headRefOid":"%s"}\\n' "$state" "$headRef" "$headOid"
+  exit 0
+fi
 if [ "$state" = "MERGED" ] && [ -f "\${GH_STUB_DIR}/\${pr}.merge" ]; then
   mergeOid="\$(cat "\${GH_STUB_DIR}/\${pr}.merge")"
   printf '{"state":"MERGED","mergeCommit":{"oid":"%s"}}\\n' "$mergeOid"
@@ -665,6 +673,10 @@ function ghEnv(stubDirectory) {
 
 async function setGhState(stubDirectory, prNumber, state) {
   await writeFile(path.join(stubDirectory, String(prNumber)), state);
+}
+
+async function setGhHead(stubDirectory, prNumber, branch, sha) {
+  await writeFile(path.join(stubDirectory, `${prNumber}.head`), `${branch} ${sha}\n`);
 }
 
 async function setGhMergeCommit(stubDirectory, prNumber, sha) {
@@ -1088,4 +1100,225 @@ test("cleanup removes a removed workspace's media folder in one additive commit"
   assert.deepEqual(next.json.cleanup.media, [{ branches: [merged.json.branch], removed: true }]);
   assert.deepEqual(await mediaTree(fixture), [`${open.json.branch}/after.png`]);
   assert.equal(await mediaParents(fixture), before);
+});
+
+test("the tool and every subcommand answer --help and -h with exit 0", async (t) => {
+  const fixture = await createFixture(t);
+  for (const args of [["--help"], ["-h"], ["help"]]) {
+    const result = await run(process.execPath, [cli, ...args], { cwd: fixture.root });
+    assert.match(result.stdout, /^Usage: ibni <command>/);
+    for (const name of Object.keys(COMMANDS)) assert.match(result.stdout, new RegExp(`^  ${name} `, "m"));
+  }
+  // Enumerated from the registry, so a subcommand without help fails here.
+  for (const name of Object.keys(COMMANDS)) {
+    for (const args of [[name, "--help"], [name, "-h"], ["help", name], [name, "--session", "x", "--help"]]) {
+      const result = await run(process.execPath, [cli, ...args], { cwd: fixture.root });
+      assert.equal(result.code, 0);
+      assert.equal(result.stderr, "");
+      assert.match(result.stdout, new RegExp(`^Usage: ibni ${name}\\b`), `${args.join(" ")}`);
+    }
+  }
+  const media = await run(process.execPath, [cli, "publish-media", "--help"], { cwd: fixture.root });
+  for (const extension of MEDIA_EXTENSIONS) assert.ok(media.stdout.includes(extension), `publish-media help lists ${extension}`);
+  const unknown = await run(process.execPath, [cli, "unknown", "--help"], { cwd: fixture.root, allowedExitCodes: [2] });
+  assert.match(unknown.stderr, /expected prepare, sync, /);
+});
+
+test("session commands find their workspace from evidenceDir and from outside any repository", async (t) => {
+  const fixture = await createFixture(t);
+  await useGithubRemote(fixture);
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "anywhere" });
+  const { evidenceDir, sessionId, worktreePath } = prepared.json;
+  await mkdir(path.join(evidenceDir, "shots"));
+  await writeFile(path.join(evidenceDir, "shots", "after.png"), "png");
+  await commit(worktreePath, "feature.txt", "feature\n", "feature");
+
+  const media = await lifecycle(fixture, path.join(evidenceDir, "shots"), "publish-media", { session: sessionId });
+  assert.deepEqual(media.json.files.map((file) => file.file), ["shots/after.png"]);
+  const info = await lifecycle(fixture, evidenceDir, "info", { session: sessionId });
+  assert.equal(info.json.worktreePath, worktreePath);
+  const outside = await mkdtemp(path.join(os.tmpdir(), "ibni-outside-"));
+  t.after(() => rm(outside, { recursive: true, force: true }));
+  const recorded = await lifecycle(fixture, outside, "record-evidence", { session: sessionId });
+  assert.equal(recorded.json.operation, "record-evidence");
+  const unknown = await lifecycle(fixture, outside, "info", { session: "does-not-exist" }, [2]);
+  assert.match(unknown.stderr, /no implementation worktree for this session/);
+});
+
+async function listen(port, host = "127.0.0.1") {
+  const server = net.createServer();
+  await new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen({ port, host }, resolve);
+  });
+  return server;
+}
+
+test("prepare assigns each workspace a free port, skipping recorded and bound ones", async (t) => {
+  const fixture = await createFixture(t);
+  const bound = await listen(0);
+  t.after(() => bound.close());
+  const busy = bound.address().port;
+  await writeFile(fixture.config, JSON.stringify({ paths: { worktreeRoot: fixture.worktrees }, workflow: { ports: { first: busy, last: busy + 20 } } }));
+
+  const first = await lifecycle(fixture, fixture.control, "prepare", { slug: "port one" });
+  const second = await lifecycle(fixture, fixture.control, "prepare", { slug: "port two" });
+  for (const prepared of [first, second]) {
+    assert.ok(prepared.json.port > busy && prepared.json.port <= busy + 20, `${prepared.json.port} is in range and not the bound port`);
+  }
+  assert.notEqual(first.json.port, second.json.port);
+  const info = await lifecycle(fixture, fixture.control, "info", { session: second.json.sessionId });
+  assert.equal(info.json.port, second.json.port);
+  const list = await lifecycle(fixture, fixture.control, "list");
+  assert.deepEqual(list.json.workspaces.map((workspace) => workspace.port).sort(), [first.json.port, second.json.port].sort());
+
+  await writeFile(fixture.config, JSON.stringify({ paths: { worktreeRoot: fixture.worktrees }, workflow: { ports: { first: busy, last: busy } } }));
+  const exhausted = await lifecycle(fixture, fixture.control, "prepare", { slug: "port none" }, [2]);
+  assert.match(exhausted.stderr, /no free port between/);
+  assert.equal((await git(fixture.control, "worktree", "list", "--porcelain")).stdout.match(/^worktree /gm).length, 3);
+});
+
+test("lifecycle steps, verify attempts and finding counts are recorded and reported by stats", async (t) => {
+  const fixture = await createFixture(t);
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "timed" });
+  const { sessionId, worktreePath } = prepared.json;
+  await commit(worktreePath, "feature.txt", "feature\n", "feature");
+  for (const options of [{ verify: "fail" }, { verify: "pass" }, { review: "3" }, { qa: "0" }, { review: "1" }]) {
+    const recorded = await lifecycle(fixture, fixture.control, "record", { session: sessionId, ...options });
+    assert.equal(recorded.json.operation, "record");
+  }
+  for (const options of [{}, { verify: "maybe" }, { review: "-1" }, { verify: "pass", qa: "1" }]) {
+    await lifecycle(fixture, fixture.control, "record", { session: sessionId, ...options }, [2]);
+  }
+  await lifecycle(fixture, worktreePath, "publish", { session: sessionId });
+  await writeFile(path.join(worktreePath, "dirty.txt"), "dirty\n");
+  await lifecycle(fixture, worktreePath, "sync", { session: sessionId }, [2]);
+  await rm(path.join(worktreePath, "dirty.txt"));
+  await recordEvidence(fixture, prepared);
+  await lifecycle(fixture, worktreePath, "publish", { session: sessionId });
+
+  const stats = await lifecycle(fixture, fixture.root, "stats", { session: sessionId });
+  assert.equal(stats.json.operation, "stats");
+  assert.deepEqual(
+    stats.json.steps.map(({ step, outcome }) => [step, outcome]),
+    [["prepare", "succeeded"], ["publish", "requires-evidence"], ["sync", "failed"], ["record-evidence", "succeeded"], ["publish", "succeeded"]],
+  );
+  for (const step of stats.json.steps) {
+    assert.equal(step.sessionId, sessionId);
+    assert.ok(step.durationMs >= 0 && Date.parse(step.endedAt) >= Date.parse(step.startedAt));
+  }
+  assert.match(stats.json.steps[2].error, /uncommitted or untracked work/);
+  assert.deepEqual({ ...stats.json.verify, history: undefined }, { attempts: 2, passed: 1, failed: 1, history: undefined });
+  assert.deepEqual(stats.json.verify.history.map((entry) => entry.outcome), ["fail", "pass"]);
+  assert.deepEqual([stats.json.review.rounds, stats.json.review.findings], [2, 4]);
+  assert.deepEqual([stats.json.qa.rounds, stats.json.qa.findings], [1, 0]);
+});
+
+async function metadataFile(worktreePath) {
+  const gitDirectory = (await git(worktreePath, "rev-parse", "--absolute-git-dir")).stdout.trim();
+  return readFile(path.join(gitDirectory, "implementation-workspace.json"), "utf8");
+}
+
+test("a fresh session adopts an open pull request's workspace and delivers a follow-up", async (t) => {
+  const fixture = await createFixture(t);
+  const sessionA = await lifecycle(fixture, fixture.control, "prepare", { slug: "adoptable" });
+  const { worktreePath, branch } = sessionA.json;
+  await publishAndMark(fixture, sessionA, "first\n", 7);
+  const prUrl = "https://example.test/pull/7";
+  const publishedSha = (await git(worktreePath, "rev-parse", "HEAD")).stdout.trim();
+
+  // Every failed proof leaves the metadata byte for byte and session A in charge.
+  const refused = async (pattern) => {
+    const before = await metadataFile(worktreePath);
+    const result = await lifecycle(fixture, fixture.control, "adopt", { pr: prUrl }, [2]);
+    assert.match(result.stderr, pattern);
+    assert.equal(await metadataFile(worktreePath), before);
+    await lifecycle(fixture, fixture.control, "info", { session: sessionA.json.sessionId });
+  };
+  const unknownPr = await lifecycle(fixture, fixture.control, "adopt", { pr: "https://example.test/pull/99" }, [2]);
+  assert.match(unknownPr.stderr, /no retained workspace records this pull request/);
+  await refused(/could not read the pull request/);
+  await setGhState(fixture.gh, 7, "CLOSED");
+  await setGhHead(fixture.gh, 7, branch, publishedSha);
+  await refused(/pull request is closed, not open/);
+  await setGhState(fixture.gh, 7, "OPEN");
+  await setGhHead(fixture.gh, 7, "agent/someone-else", publishedSha);
+  await refused(/head branch does not match/);
+  await setGhHead(fixture.gh, 7, branch, "0".repeat(40));
+  await refused(/do not all match/);
+  await setGhHead(fixture.gh, 7, branch, publishedSha);
+  await commit(worktreePath, "unpublished.txt", "a's work\n", "unpublished work by session A");
+  await refused(/do not all match[\s\S]*local: (?!${publishedSha})/);
+  await git(worktreePath, "reset", "--quiet", "--hard", publishedSha);
+  await writeFile(path.join(worktreePath, "scratch.txt"), "a's edit\n");
+  await refused(/uncommitted or untracked work/);
+  await rm(path.join(worktreePath, "scratch.txt"));
+
+  // Session B knows only the PR URL.
+  const adopted = await lifecycle(fixture, fixture.control, "adopt", { pr: prUrl });
+  const sessionB = adopted.json.sessionId;
+  assert.notEqual(sessionB, sessionA.json.sessionId);
+  assert.deepEqual(
+    [adopted.json.worktreePath, adopted.json.branch, adopted.json.prUrl, adopted.json.headSha, adopted.json.port],
+    [worktreePath, branch, prUrl, publishedSha, sessionA.json.port],
+  );
+  const stale = await lifecycle(fixture, fixture.control, "sync", { session: sessionA.json.sessionId }, [2]);
+  assert.match(stale.stderr, /no implementation worktree for this session/);
+
+  await commit(worktreePath, "follow-up.txt", "follow-up\n", "follow-up");
+  await lifecycle(fixture, worktreePath, "record-evidence", { session: sessionB });
+  const published = await lifecycle(fixture, worktreePath, "publish", { session: sessionB });
+  assert.equal(published.json.published, true);
+  const followUpSha = (await git(worktreePath, "rev-parse", "HEAD")).stdout.trim();
+  assert.equal((await run("git", ["--git-dir", fixture.remote, "rev-parse", `refs/heads/${branch}`])).stdout.trim(), followUpSha);
+  await lifecycle(fixture, worktreePath, "mark-pr", { session: sessionB, url: prUrl });
+
+  const stats = await lifecycle(fixture, fixture.control, "stats", { session: sessionB });
+  assert.deepEqual(stats.json.adoptions.map(({ previousSessionId, sessionId }) => [previousSessionId, sessionId]), [[sessionA.json.sessionId, sessionB]]);
+  assert.deepEqual(stats.json.steps.filter((step) => step.step === "adopt").map((step) => step.sessionId), [sessionB]);
+});
+
+async function gitStub(t) {
+  const stubDirectory = await mkdtemp(path.join(os.tmpdir(), "ibni-git-stub-"));
+  t.after(() => rm(stubDirectory, { recursive: true, force: true }));
+  const realGit = (await run("sh", ["-c", "command -v git"])).stdout.trim();
+  await writeFile(path.join(stubDirectory, "git"), `#!/bin/sh
+if [ "$1" = "push" ]; then
+  echo attempt >> "${stubDirectory}/pushes"
+  if [ -f "${stubDirectory}/fail" ]; then
+    status="$(cat "${stubDirectory}/fail")"
+    rm -f "${stubDirectory}/fail"
+    echo "error: RPC failed; HTTP $status curl 22 The requested URL returned error: $status" >&2
+    echo "fatal: the remote end hung up unexpectedly" >&2
+    exit 128
+  fi
+fi
+exec "${realGit}" "$@"
+`, "utf8");
+  await chmod(path.join(stubDirectory, "git"), 493);
+  return stubDirectory;
+}
+
+test("publish retries a push once after an HTTP 5xx and never after other failures", async (t) => {
+  const fixture = await createFixture(t);
+  const stub = await gitStub(t);
+  const env = { PATH: `${stub}:${ghEnv(fixture.gh).PATH}` };
+  const pushes = async () => (await readFile(path.join(stub, "pushes"), "utf8").catch(() => "")).split("\n").filter(Boolean).length;
+
+  const forbidden = await lifecycle(fixture, fixture.control, "prepare", { slug: "push forbidden" });
+  await commit(forbidden.json.worktreePath, "feature.txt", "feature\n", "feature");
+  await recordEvidence(fixture, forbidden);
+  await writeFile(path.join(stub, "fail"), "403");
+  const refused = await lifecycle(fixture, forbidden.json.worktreePath, "publish", { session: forbidden.json.sessionId }, [2], env);
+  assert.match(refused.stderr, /HTTP 403/);
+  assert.equal(await pushes(), 1);
+
+  await rm(path.join(stub, "pushes"));
+  const flaky = await lifecycle(fixture, fixture.control, "prepare", { slug: "push flaky" });
+  await commit(flaky.json.worktreePath, "feature.txt", "feature\n", "feature");
+  await recordEvidence(fixture, flaky);
+  await writeFile(path.join(stub, "fail"), "502");
+  const published = await lifecycle(fixture, flaky.json.worktreePath, "publish", { session: flaky.json.sessionId }, [0], env);
+  assert.equal(published.json.published, true);
+  assert.equal(await pushes(), 2);
 });

@@ -22,14 +22,17 @@ primary control worktree on the remote default branch, fast-forwards it when
 safe, sweeps retained workspaces whose pull requests are proven merged, and
 creates a collision-safe feature branch in a dedicated locked worktree. Record
 its JSON result in session context, especially `worktreePath`, `sessionId`,
-`branch`, `defaultBranch`, `baseSha`, `evidenceDir`, and `cleanup`.
+`branch`, `defaultBranch`, `baseSha`, `evidenceDir`, `port`, and `cleanup`.
 
 From this point on, run every repository inspection, command, delegated task,
 edit, verification, render, review, remediation, and delivery operation against
 `worktreePath`, never the control checkout. Pass the exact `sessionId` to later
 lifecycle operations; they resolve the owned worktree from session metadata
-from any location inside the repository. Write transient evidence to
-`evidenceDir`. If preparation fails, report its diagnostic and stop; do not
+from any directory, including `evidenceDir`. Write transient evidence to
+`evidenceDir`. Whenever this run starts the app, serve it on `port` through the
+repository's own port setting (such as `PORT` or the dev server's port flag),
+so parallel worktrees never collide. `ibni <command> --help` documents every
+lifecycle command and flag. If preparation fails, report its diagnostic and stop; do not
 stash, switch branches, improvise another worktree, or attempt more aggressive
 Git recovery.
 
@@ -114,7 +117,10 @@ diagnose it from the failing checks' output and logs (the `verifika` skill
 covers this where the repository uses Verifika), remediate
 implementation-caused failures, and rerun it. Never weaken repository
 safeguards to pass. Any later code remediation requires another full
-`npm run verify`.
+`npm run verify`. Record each full run with `ibni record --session
+"<sessionId>" --verify pass` (or `fail`), and each rendered QA or reviewer pass
+with `--qa <finding-count>` or `--review <finding-count>`; `ibni stats` reports
+them beside the lifecycle step timings.
 
 Then re-read the original request and active contract, and inspect the final
 diff to confirm the acceptance criteria and scope are covered. This is the
@@ -229,11 +235,16 @@ recovery.
 ## Follow-Up On An Existing Pull Request
 
 When this session already owns a retained `worktreePath`, `sessionId`, and
-pull-request URL, reuse that workspace instead of running `prepare`; never
-infer ownership of another retained worktree. Run
-`ibni sync --session "<sessionId>"` before changing
-anything, refresh the contract for the new request, and establish a green
-baseline. Then follow the normal gates through delivery; publication updates
+pull-request URL, reuse that workspace instead of running `prepare`. When it
+does not (a new session, or one that lost the earlier session's id), run
+`ibni adopt --pr "<pr-url>"` instead of `prepare`. Adopt proves the pull
+request is open and that its head branch and commit match the workspace's
+recorded branch, publication, remote branch and clean local HEAD, then issues a
+new `sessionId`; record its result as you would `prepare`'s. Ownership moves:
+the previous session's id stops working. If adopt refuses, report its
+diagnostic and stop; never infer ownership of a retained worktree any other
+way. Then run `ibni sync --session "<sessionId>"` before changing anything,
+refresh the contract for the new request, and establish a green baseline. Then follow the normal gates through delivery; publication updates
 the existing branch and `mark-pr` records the same URL again.
 
 ## Completion
@@ -246,4 +257,5 @@ and a merge decision. Report briefly:
 - unresolved low findings worth knowing during product review;
 - the `prepare` cleanup summary: removed workspaces, and kept ones with reasons.
 
-Do not merge. Keep the worktree for follow-up changes in this session.
+Do not merge. Keep the worktree for follow-up changes, in this session or in a
+later one through `adopt`.

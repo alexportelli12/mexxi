@@ -1,3 +1,6 @@
+import { readdir, readFile } from "node:fs/promises";
+import path from "node:path";
+import { workspaceConfig } from "./config.mjs";
 import { WorkspaceError } from "./errors.mjs";
 import { pathExists } from "./fs.mjs";
 import {
@@ -12,12 +15,106 @@ import {
   remoteDefault,
   repositoryAt,
 } from "./git.mjs";
-import { inspectImplementationWorktrees } from "./metadata.mjs";
+import { EVIDENCE_SUFFIX, inspectImplementationWorktrees, readMetadata } from "./metadata.mjs";
+
+async function repositoryOrNull(cwd) {
+  try {
+    return await repositoryAt(cwd);
+  } catch (error) {
+    if (error instanceof WorkspaceError) return null;
+    throw error;
+  }
+}
+
+// A worktree's .git file names its Git directory, so metadata can be read
+// without starting Git for every retained workspace.
+async function metadataAt(worktreePath) {
+  try {
+    const pointer = (await readFile(path.join(worktreePath, ".git"), "utf8")).match(/^gitdir: (.+)$/m);
+    return pointer ? await readMetadata(path.resolve(worktreePath, pointer[1].trim())) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Workspaces outside any repository the caller stands in: the worktree beside
+// an evidence directory containing cwd (any root, including retired ones), then
+// every workspace under paths.worktreeRoot (<root>/<repository>/<leaf>).
+export async function workspaceCandidates(cwd) {
+  const candidates = [];
+  for (let directory = path.resolve(cwd); ; directory = path.dirname(directory)) {
+    if (directory.endsWith(EVIDENCE_SUFFIX)) candidates.push(directory.slice(0, -EVIDENCE_SUFFIX.length));
+    if (path.dirname(directory) === directory) break;
+  }
+  const { paths } = await workspaceConfig();
+  const directories = async (parent) => (await readdir(parent, { withFileTypes: true }).catch(() => []))
+    .filter((entry) => entry.isDirectory() && !entry.name.endsWith(EVIDENCE_SUFFIX))
+    .map((entry) => path.join(parent, entry.name));
+  for (const repositoryFolder of await directories(paths.worktreeRoot)) {
+    candidates.push(...await directories(repositoryFolder));
+  }
+  const found = [];
+  for (const worktreePath of new Set(candidates)) {
+    const metadata = await metadataAt(worktreePath);
+    if (metadata) found.push({ worktreePath, metadata });
+  }
+  return found;
+}
+
+// Finds the repository holding the workspaces whose metadata matches: the one
+// containing cwd when it has a match, otherwise the one a workspace found by
+// workspaceCandidates belongs to. Session and PR lookups therefore work from
+// any directory, including a session's evidenceDir.
+export async function locateWorkspaces(cwd, matches) {
+  const filterOwned = (repository, inspected) => inspected.filter(
+    (entry) => entry.metadata && matches(entry.metadata)
+      && entry.metadata.commonDirectory === repository.commonDirectory,
+  );
+  const here = await repositoryOrNull(cwd);
+  if (here) {
+    const inspected = await inspectImplementationWorktrees(here.commonDirectory);
+    const matched = filterOwned(here, inspected);
+    if (matched.length) return { repository: here, inspected, matched };
+  }
+  const elsewhere = (await workspaceCandidates(cwd)).filter((candidate) => matches(candidate.metadata));
+  const commonDirectories = new Set(elsewhere.map((candidate) => candidate.metadata.commonDirectory));
+  if (commonDirectories.size > 1) {
+    throw new WorkspaceError(
+      "matching workspaces belong to more than one repository; ownership is ambiguous",
+      elsewhere.map((candidate) => candidate.worktreePath).join("\n"),
+    );
+  }
+  for (const candidate of elsewhere) {
+    const repository = await repositoryOrNull(candidate.worktreePath);
+    if (!repository) continue;
+    const inspected = await inspectImplementationWorktrees(repository.commonDirectory);
+    return { repository, inspected, matched: filterOwned(repository, inspected) };
+  }
+  return { repository: here, inspected: [], matched: [] };
+}
+
+// The single retained workspace a session id owns, without the lifecycle
+// checks ownedSession adds; for read-only and bookkeeping commands.
+export async function sessionWorkspace(cwd, sessionId) {
+  if (!sessionId) throw new WorkspaceError("the operation requires --session <session-id>");
+  const located = await locateWorkspaces(cwd, (metadata) => metadata.sessionId === sessionId);
+  if (located.matched.length === 0) {
+    throw new WorkspaceError(
+      "no implementation worktree for this session exists",
+      `Session: ${sessionId}. The session may have been adopted by another session or cleaned up; see ibni list.`,
+    );
+  }
+  if (located.matched.length > 1) {
+    throw new WorkspaceError(
+      `session ${sessionId} owns more than one repository worktree; ownership is ambiguous`,
+      "Manually inspect the implementation worktrees before further lifecycle operations.",
+    );
+  }
+  return { repository: located.repository, inspected: located.inspected, entry: located.matched[0] };
+}
 
 export async function ownedSession(cwd, sessionId) {
-  if (!sessionId) throw new WorkspaceError("the operation requires --session <session-id>");
-  const repository = await repositoryAt(cwd);
-  const inspected = await inspectImplementationWorktrees(repository.commonDirectory);
+  const { repository, inspected, entry: owned } = await sessionWorkspace(cwd, sessionId);
 
   const cwdIsLinkedImplementationWorktree = repository.gitDirectory !== repository.commonDirectory
     && inspected.some((entry) => entry.worktreeExists && entry.gitDirectory === repository.gitDirectory);
@@ -34,24 +131,7 @@ export async function ownedSession(cwd, sessionId) {
     }
   }
 
-  const owned = inspected.filter(
-    (entry) => entry.metadata?.sessionId === sessionId
-      && entry.metadata?.commonDirectory === repository.commonDirectory,
-  );
-  if (owned.length === 0) {
-    throw new WorkspaceError(
-      "no implementation worktree for this session exists in this repository",
-      `Session: ${sessionId}. Run lifecycle operations from the repository or its worktrees.`,
-    );
-  }
-  if (owned.length > 1) {
-    throw new WorkspaceError(
-      `session ${sessionId} owns more than one repository worktree; ownership is ambiguous`,
-      "Manually inspect the implementation worktrees before further lifecycle operations.",
-    );
-  }
-
-  const { worktreePath, gitDirectory, metadata } = owned[0];
+  const { worktreePath, gitDirectory, metadata } = owned;
   if (!metadata.worktreePath || metadata.worktreePath !== worktreePath) {
     throw new WorkspaceError(
       "implementation ownership metadata does not path-match this worktree",

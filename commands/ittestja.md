@@ -13,8 +13,8 @@ observes and reports; it never edits code, commits, or switches branches.
 1. If `$ARGUMENTS` or this session identifies a retained implementation
    workspace, run `ibni info --session "<sessionId>"`. For
    a pull request, find its workspace with `ibni list` by
-   `prUrl`. Work in that `worktreePath` and write evidence to its
-   `evidenceDir`.
+   `prUrl`. Work in that `worktreePath`, start the app on its recorded `port`,
+   and write evidence to its `evidenceDir`.
 2. Otherwise use the current checkout and a fresh system temporary directory
    for evidence. For a pull request with no retained workspace, confirm with
    `gh pr view` that the checkout is on its head branch; if it is not, say so
@@ -33,5 +33,6 @@ Return the `rendered-qa` report: each finding's severity, what you saw, where
 smallest suggested fix. Then list what was tested and worked, the checks you
 skipped, and the suggested executable checks.
 
-Stop after the report. Fixes go through `/wettaq`: its follow-up path when
-this session owns the workspace, otherwise a new request.
+Stop after the report. Fixes go through `/wettaq`'s follow-up path, which
+adopts the pull request's workspace when this session does not own it, or a
+new request when there is no pull request.

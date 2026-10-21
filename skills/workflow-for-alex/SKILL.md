@@ -182,7 +182,9 @@ worktree before repository work begins, and all subsequent feature operations
 remain there. The tool must fail closed rather than stash user state, reuse an
 ambiguously owned worktree, rewrite shared history, or guess through conflicts.
 Retain the workspace after pull-request creation so the owning session can make
-follow-up changes. Each `prepare` sweeps retained workspaces: PR-state-driven
+follow-up changes, or a later session can take it over with `ibni adopt`, which
+moves ownership only after proving the open pull request's head matches the
+workspace. Each `prepare` sweeps retained workspaces: PR-state-driven
 cleanup decides from authoritative GitHub state plus deterministic Git evidence
 that the implementation history is consumed by the remote default branch,
 protecting open, dirty, metadata-less, or unproven workspaces fail-closed.

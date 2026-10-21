@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// ibni's entry point: argument parsing and dispatch. Each subcommand lives in
-// commands/, and the Git, locking, metadata and config helpers they share in lib/.
+// ibni's entry point: argument parsing, help and dispatch. Each subcommand lives
+// in commands/, and the Git, locking, metadata and config helpers they share in lib/.
 import { pathToFileURL } from "node:url";
+import { adoptWorkspace } from "./commands/adopt.mjs";
 import { cleanupWorkspaces } from "./commands/cleanup.mjs";
 import { workspaceInfo } from "./commands/info.mjs";
 import { listWorkspaces } from "./commands/list.mjs";
@@ -9,11 +10,16 @@ import { markPullRequest } from "./commands/mark-pr.mjs";
 import { prepareWorkspace } from "./commands/prepare.mjs";
 import { publishMedia } from "./commands/publish-media.mjs";
 import { publishWorkspace } from "./commands/publish.mjs";
+import { recordGate } from "./commands/record.mjs";
 import { recordEvidence } from "./commands/record-evidence.mjs";
+import { workspaceStats } from "./commands/stats.mjs";
 import { synchronizeWorkspace } from "./commands/sync.mjs";
 import { WorkspaceError } from "./lib/errors.mjs";
+import { MEDIA_EXTENSIONS } from "./lib/media.mjs";
+import { recordStep } from "./lib/timings.mjs";
 
 export {
+  adoptWorkspace,
   cleanupWorkspaces,
   listWorkspaces,
   markPullRequest,
@@ -21,9 +27,172 @@ export {
   publishMedia,
   publishWorkspace,
   recordEvidence,
+  recordGate,
   synchronizeWorkspace,
   workspaceInfo,
+  workspaceStats,
 };
+
+const SESSION_LOOKUP = "The session's workspace is found from its metadata, so this runs from any directory, including the session's evidenceDir.";
+
+// The registry is the CLI: dispatch, help and the help test all read it, so a
+// subcommand cannot exist without a usage line. Lifecycle steps (`timed`) are
+// recorded with start, end and outcome in the session's metadata for `stats`.
+export const COMMANDS = {
+  prepare: {
+    usage: "ibni prepare --slug <name> [--prefix <prefix>]",
+    summary: "Create an isolated worktree and branch for a new task.",
+    details: [
+      "Run from the repository's clean primary checkout on its default branch. Fast-forwards it,",
+      "sweeps retained workspaces whose pull requests are proven merged, then creates a locked",
+      "worktree, its evidenceDir and a free PORT (from workflow.ports in config.json).",
+      "Prints sessionId, worktreePath, branch, evidenceDir, port, provisionedEnv and cleanup.",
+    ],
+    options: {
+      slug: "Short task name for the branch and worktree folder.",
+      prefix: "Branch prefix; defaults to workflow.branchPrefix in config.json.",
+    },
+    timed: true,
+    run: (options) => prepareWorkspace({ slug: options.slug, prefix: options.prefix }),
+  },
+  sync: {
+    usage: "ibni sync --session <id>",
+    summary: "Integrate the latest default branch into the session's branch.",
+    details: ["Rebases unpublished work, merges into published work, and aborts cleanly on conflict.", SESSION_LOOKUP],
+    options: { session: "The sessionId from prepare or adopt." },
+    timed: true,
+    run: (options) => synchronizeWorkspace({ sessionId: options.session }),
+  },
+  "record-evidence": {
+    usage: "ibni record-evidence --session <id>",
+    summary: "Record that the committed tree passed the gates.",
+    details: ["Required before publish; any later commit needs it again.", SESSION_LOOKUP],
+    options: { session: "The sessionId from prepare or adopt." },
+    timed: true,
+    run: (options) => recordEvidence({ sessionId: options.session }),
+  },
+  publish: {
+    usage: "ibni publish --session <id>",
+    summary: "Sync, then push the evidenced branch without force.",
+    details: [
+      "Returns published: false with a nextAction when evidence is missing or stale.",
+      "A push failing with an HTTP 5xx from the Git host is retried once.",
+      SESSION_LOOKUP,
+    ],
+    options: { session: "The sessionId from prepare or adopt." },
+    timed: true,
+    run: (options) => publishWorkspace({ sessionId: options.session }),
+  },
+  "publish-media": {
+    usage: "ibni publish-media --session <id> [--files <a.png,b.gif>]",
+    summary: "Publish screenshots and recordings from evidenceDir to the pr-media branch.",
+    details: [
+      `Allowed file types: ${[...MEDIA_EXTENSIONS].join(", ")}.`,
+      "Files must be inside the session's evidenceDir; returns embeddable GitHub URLs.",
+      SESSION_LOOKUP,
+    ],
+    options: {
+      session: "The sessionId from prepare or adopt.",
+      files: "Comma-separated paths relative to evidenceDir; defaults to every media file in it.",
+    },
+    timed: true,
+    run: (options) => publishMedia({
+      sessionId: options.session,
+      files: options.files ? options.files.split(",").map((file) => file.trim()).filter(Boolean) : [],
+    }),
+  },
+  "mark-pr": {
+    usage: "ibni mark-pr --session <id> --url <pull-request-url>",
+    summary: "Record the pull request for a published session.",
+    details: ["Cleanup only removes a workspace once its recorded pull request is merged.", SESSION_LOOKUP],
+    options: { session: "The sessionId from prepare or adopt.", url: "The pull request's URL." },
+    timed: true,
+    run: (options) => markPullRequest({ sessionId: options.session, url: options.url }),
+  },
+  adopt: {
+    usage: "ibni adopt --pr <pull-request-url>",
+    summary: "Take over the retained workspace of an open pull request from a new session.",
+    details: [
+      "Finds the workspace that recorded this pull request, then proves the PR is open, its head",
+      "branch is the workspace's branch, and its head commit equals the recorded publication, the",
+      "remote branch and the clean local HEAD. Only then does it print a new sessionId.",
+      "Ownership moves rather than being shared: the previous session id stops working at once.",
+      "Any failed check changes nothing.",
+    ],
+    options: { pr: "The pull request's URL, exactly as recorded by mark-pr." },
+    timed: true,
+    run: (options) => adoptWorkspace({ prUrl: options.pr }),
+  },
+  info: {
+    usage: "ibni info --session <id>",
+    summary: "Print one session's workspace: paths, branch, port, PR and state.",
+    details: [SESSION_LOOKUP],
+    options: { session: "The sessionId from prepare or adopt." },
+    run: (options) => workspaceInfo({ sessionId: options.session }),
+  },
+  list: {
+    usage: "ibni list",
+    summary: "List the retained workspaces of the current repository.",
+    details: [],
+    options: {},
+    run: () => listWorkspaces({}),
+  },
+  record: {
+    usage: "ibni record --session <id> (--verify <pass|fail> | --review <count> | --qa <count>)",
+    summary: "Record a verify run, or the finding count of a review or QA pass.",
+    details: ["One result per call; stats reports them.", SESSION_LOOKUP],
+    options: {
+      session: "The sessionId from prepare or adopt.",
+      verify: "Outcome of a full npm run verify: pass or fail.",
+      review: "Number of findings an independent review pass returned.",
+      qa: "Number of findings a rendered QA pass returned.",
+    },
+    run: (options) => recordGate({ sessionId: options.session, verify: options.verify, review: options.review, qa: options.qa }),
+  },
+  stats: {
+    usage: "ibni stats --session <id>",
+    summary: "Print the session's lifecycle step timings, verify attempts and finding counts as JSON.",
+    details: [SESSION_LOOKUP],
+    options: { session: "The sessionId from prepare or adopt." },
+    run: (options) => workspaceStats({ sessionId: options.session }),
+  },
+  cleanup: {
+    usage: "ibni cleanup [--dry-run false]",
+    summary: "Remove workspaces whose pull requests are merged and consumed.",
+    details: ["A dry run by default; protects open, dirty, unrecorded and unproven workspaces."],
+    options: { "dry-run": "false to remove; anything else only reports." },
+    run: (options) => cleanupWorkspaces({ dryRun: options["dry-run"] !== "false" }),
+  },
+};
+
+const HELP_FLAGS = new Set(["--help", "-h"]);
+
+export function toolHelp() {
+  const width = Math.max(...Object.keys(COMMANDS).map((name) => name.length));
+  return [
+    "Usage: ibni <command> [options]",
+    "",
+    "Isolated worktrees per task, through to a published pull request. Output is JSON.",
+    "",
+    "Commands:",
+    ...Object.entries(COMMANDS).map(([name, command]) => `  ${name.padEnd(width)}  ${command.summary}`),
+    "",
+    "Run ibni <command> --help for its options.",
+  ].join("\n");
+}
+
+export function commandHelp(name) {
+  const command = COMMANDS[name];
+  const options = Object.entries(command.options);
+  const width = Math.max(0, ...options.map(([option]) => option.length + 2));
+  return [
+    `Usage: ${command.usage}`,
+    "",
+    command.summary,
+    ...(command.details.length ? ["", ...command.details] : []),
+    ...(options.length ? ["", "Options:", ...options.map(([option, text]) => `  ${`--${option}`.padEnd(width)}  ${text}`)] : []),
+  ].join("\n");
+}
 
 function parseOptions(args) {
   const [operation, ...rest] = args;
@@ -41,34 +210,37 @@ function parseOptions(args) {
 
 export async function main(args = process.argv.slice(2)) {
   try {
-    const { operation, options } = parseOptions(args);
-    let result;
-    if (operation === "prepare") {
-      result = await prepareWorkspace({ slug: options.slug, prefix: options.prefix });
-    } else if (operation === "sync") {
-      result = await synchronizeWorkspace({ sessionId: options.session });
-    } else if (operation === "publish") {
-      result = await publishWorkspace({ sessionId: options.session });
-    } else if (operation === "record-evidence") {
-      result = await recordEvidence({ sessionId: options.session });
-    } else if (operation === "mark-pr") {
-      result = await markPullRequest({ sessionId: options.session, url: options.url });
-    } else if (operation === "info") {
-      result = await workspaceInfo({ sessionId: options.session });
-    } else if (operation === "list") {
-      result = await listWorkspaces({});
-    } else if (operation === "publish-media") {
-      result = await publishMedia({
-        sessionId: options.session,
-        files: options.files ? options.files.split(",").map((file) => file.trim()).filter(Boolean) : [],
-      });
-    } else if (operation === "cleanup") {
-      result = await cleanupWorkspaces({ dryRun: options["dry-run"] !== "false" });
-    } else {
+    const [first, second] = args;
+    if (HELP_FLAGS.has(first) || (first === "help" && !second)) {
+      process.stdout.write(`${toolHelp()}\n`);
+      return;
+    }
+    if (first === "help" && Object.hasOwn(COMMANDS, second)) {
+      process.stdout.write(`${commandHelp(second)}\n`);
+      return;
+    }
+    if (!Object.hasOwn(COMMANDS, first)) {
       throw new WorkspaceError(
-        "expected prepare, sync, record-evidence, publish, publish-media, mark-pr, info, list, or cleanup",
-        "Usage: ibni prepare --slug <name> [--prefix <prefix>]",
+        `expected ${Object.keys(COMMANDS).join(", ")}`,
+        "Usage: ibni prepare --slug <name> [--prefix <prefix>]\nRun ibni --help for every command.",
       );
+    }
+    if (args.some((arg) => HELP_FLAGS.has(arg))) {
+      process.stdout.write(`${commandHelp(first)}\n`);
+      return;
+    }
+    const { operation, options } = parseOptions(args);
+    const command = COMMANDS[operation];
+    const startedAt = new Date().toISOString();
+    let result;
+    try {
+      result = await command.run(options);
+    } catch (error) {
+      if (command.timed) await recordStep({ cwd: process.cwd(), sessionId: options.session, step: operation, startedAt, error });
+      throw error;
+    }
+    if (command.timed) {
+      await recordStep({ cwd: process.cwd(), sessionId: result.sessionId ?? options.session, step: operation, startedAt, result });
     }
     process.stdout.write(`${JSON.stringify(result)}\n`);
   } catch (error) {

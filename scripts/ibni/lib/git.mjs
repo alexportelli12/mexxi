@@ -186,3 +186,20 @@ export async function refExists(root, ref) {
   });
   return result.code === 0;
 }
+
+// A transient server error from the Git host (HTTP 5xx) is retried once; every
+// other failure, including rejections and authentication errors, is final.
+const TRANSIENT_HTTP_FAILURE = /\b(?:HTTP|returned error:)\s*5\d\d\b/i;
+
+export async function push(root, args, options = {}) {
+  const attempt = () => git(root, ["push", ...args], options);
+  let result;
+  try {
+    result = await attempt();
+  } catch (error) {
+    if (error instanceof WorkspaceError && TRANSIENT_HTTP_FAILURE.test(error.message)) return attempt();
+    throw error;
+  }
+  if (result.code !== 0 && TRANSIENT_HTTP_FAILURE.test(result.stderr)) return attempt();
+  return result;
+}
