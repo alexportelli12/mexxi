@@ -401,11 +401,23 @@ export async function install(options = {}) {
       await symlink(source, destination, process.platform === "win32" && !source.endsWith(".md") && !source.endsWith(".json") && !source.endsWith(".toml") ? "junction" : undefined);
     }
   }
-  if (modsPlan?.available) applyMods(modsPlan, { checkout, ...claudeCli });
+  // Mods go last, through a CLI that can fail on its own (offline, logged
+  // out). By then the links and settings already point at this clone, so a
+  // failure here is reported, not thrown: throwing would read as "nothing
+  // changed" and invite undoing a move that has happened. The mods stay in
+  // --check's drift until a rerun installs them.
+  let modsFailed;
+  if (modsPlan?.available) {
+    try {
+      applyMods(modsPlan, { checkout, ...claudeCli });
+    } catch (error) {
+      modsFailed = error.message;
+    }
+  }
   const registration = Object.fromEntries(Object.entries(registrationCommands(config.browser)).filter(([host]) => config.hosts[host]));
   return {
     created: pending.length, relinked: relinks.length, removed: stale.length, rendered: drift.length, checked: entries.length,
-    settings: settingsPlan?.drift.length ?? 0, ...modsSummary(modsPlan), registration,
+    settings: settingsPlan?.drift.length ?? 0, ...modsSummary(modsPlan), ...(modsFailed && { mods: "failed", modsFailed }), registration,
     // Codex skips a new or changed hook until it is trusted in /hooks.
     codexHooksChanged: Boolean(codexHooksPlan?.file),
   };
@@ -447,7 +459,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       codex: process.env.CODEX_HOME ? path.resolve(process.env.CODEX_HOME) : undefined,
       configFile: configPath(),
     });
-    const { registration = {}, codexHooksChanged, ...summary } = result;
+    const { registration = {}, codexHooksChanged, modsFailed, ...summary } = result;
     process.stdout.write(`${JSON.stringify(summary)}\n`);
     if (result.dryRun) process.stdout.write("Nothing would stop an install, and nothing was changed.\n");
     if (codexHooksChanged) {
@@ -457,6 +469,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     // `install --check` fails until each registered server matches them.
     if (Object.keys(registration).length) {
       process.stdout.write(`Register the Playwright MCP server on each host (not run by the installer):\n${Object.values(registration).map((line) => `  ${line}`).join("\n")}\n`);
+    }
+    if (modsFailed) {
+      process.stderr.write(`Everything else is installed and linked to this clone, but the Claude Code mods are not: ${modsFailed}\n`
+        + "Fix the cause and rerun the install; install --check reports the mods until then.\n");
+      process.exitCode = 1;
     }
   } catch (error) {
     process.stderr.write(`${error.message}\n`);

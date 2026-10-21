@@ -1094,3 +1094,28 @@ test("a failing claude CLI stops the install only while Claude Code is on", asyn
   await configure(home);
   await assert.rejects(install(options), /plugin list --json failed: not logged in/);
 });
+
+// Mods are applied last, after the links and settings have moved to this
+// clone, so a claude CLI that fails there must not read as an install that
+// changed nothing: the install completes, says what failed, and --check keeps
+// reporting the mods until a rerun installs them.
+test("a failing mod step leaves the rest installed, reports the failure and stays red in --check until rerun", async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-mods-fail-"));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  await configure(home);
+  await registerPlaywright(home);
+  const failing = path.join(home, "offline-claude");
+  await writeFile(failing, "#!/bin/sh\nif [ \"$2\" = marketplace ]; then echo 'network unreachable' >&2; exit 1; fi\nexec claude \"$@\"\n", { mode: 0o755 });
+  const options = { home, checkout };
+
+  const result = await install({ ...options, claudeCli: failing });
+  assert.match(result.modsFailed, /plugin marketplace add .* failed: network unreachable/);
+  assert.equal(result.mods, "failed");
+  assert.equal(await readlink(path.join(home, ".claude/CLAUDE.md")), path.join(home, ".local/share/mexxi/generated/claude/CLAUDE.md"));
+  assert.ok(JSON.parse(await readFile(path.join(home, ".claude/settings.json"), "utf8")).hooks);
+  await assert.rejects(install({ ...options, check: true }), /setup incomplete:\nclaude: mod run-pane@mexxi is not installed\nclaude: mod command-fixer@mexxi is not installed$/);
+
+  // With the cause fixed, a rerun installs the mods and --check is green.
+  assert.equal((await install(options)).modsFailed, undefined);
+  await install({ ...options, check: true });
+});
