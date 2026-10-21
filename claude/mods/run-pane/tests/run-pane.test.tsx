@@ -131,13 +131,21 @@ test('Jev triage is absent until a triage call is answered', async ($, on) => {
   await ui.unmount()
 })
 
-test('the band suggests a fresh session and adopt once the PR is delivered, and can be dismissed', async ($, on) => {
+test('the band says the PR is delivered and where follow-ups go, and can be dismissed', async ($, on) => {
   engine(on, { info, stats })
   await $.tool.call({ tool: 'Bash', command: `ibni stats --session ${SESSION}` })
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect((await ui.find({ type: 'Text', text: /PR delivered/ }))?.text).toContain('ibni adopt --pr https://github.com/alexportelli12/example/pull/42')
+  expect((await ui.find({ type: 'Text', text: /delivered/ }))?.text).toBe(' ✓ PR #42 delivered   Follow-ups go in a fresh session: give /wettaq the PR link.')
   await ui.press({ key: 'dismiss' })
-  expect(await ui.find({ type: 'Text', text: /PR delivered/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /delivered/ })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('the band stays out of the way while Claude is working', async ($, on) => {
+  engine(on, { info, stats })
+  await $.tool.call({ tool: 'Bash', command: `ibni stats --session ${SESSION}` })
+  const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, isWorking: true }, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text', text: /delivered/ })).toBeUndefined()
   await ui.unmount()
 })
 
@@ -147,7 +155,7 @@ test('the band suggests a fresh session when context runs high', async ($, on) =
   await $.tool.call({ tool: 'Bash', command: `ibni info --session ${SESSION}` })
   await $.turn.complete({ turnId: 'turn-1', reason: 'answer', answer: '', durationMs: 1, isAborted: false })
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect((await ui.find({ type: 'Text', text: /Context is 82% full/ }))?.text).toBeDefined()
+  expect((await ui.find({ type: 'Text', text: /82% context/ }))?.text).toBe(' 82% context   Finish this run here, then start the next task in a fresh session.')
   await ui.unmount()
 })
 
@@ -156,7 +164,7 @@ test('the band stays away while context is below claude.contextNudgePercent', as
   await $.tool.call({ tool: 'Bash', command: `ibni info --session ${SESSION}` })
   await $.turn.complete({ turnId: 'turn-1', reason: 'answer', answer: '', durationMs: 1, isAborted: false })
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect(await ui.find({ type: 'Text', text: /Context is/ })).toBeUndefined()
+  expect(await ui.find({ type: 'Text', text: /% context/ })).toBeUndefined()
   await ui.unmount()
 })
 
