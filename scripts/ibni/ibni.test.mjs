@@ -7,7 +7,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-const cli = fileURLToPath(new URL("./implementation-workspace.mjs", import.meta.url));
+const cli = fileURLToPath(new URL("./ibni.mjs", import.meta.url));
 
 function run(command, args, { cwd, env, allowedExitCodes = [0] } = {}) {
   return new Promise((resolve, reject) => {

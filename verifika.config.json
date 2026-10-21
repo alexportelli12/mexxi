@@ -11,8 +11,8 @@
       "paths": ["scripts/config.test.mjs", "scripts/lib/config.mjs", "config.schema.json"]
     },
     "workspace": {
-      "command": "node --test scripts/implementation-workspace.test.mjs",
-      "paths": ["scripts/implementation-workspace*", "scripts/lib/config.mjs", "config.schema.json"]
+      "command": "node --test scripts/ibni/ibni.test.mjs",
+      "paths": ["scripts/ibni/**", "scripts/implementation-workspace*", "scripts/lib/config.mjs", "config.schema.json"]
     },
     "repo-context": {
       "command": "node --test skills/repo-context/tests/inspect.test.js",

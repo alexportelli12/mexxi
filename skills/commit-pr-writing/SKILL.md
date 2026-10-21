@@ -52,7 +52,7 @@ Ground the description in the full final diff against the PR's actual base,
 including all commits, and the verified evidence. Session plans explain intent,
 not what shipped. On subsequent delivery, rewrite the title and body to match
 the current whole PR; remove superseded claims, checks and media rather than
-appending an update diary. `/implement` owns posting and media publication.
+appending an update diary. `/wettaq` owns posting and media publication.
 
 ### Shape The Description
 
@@ -113,8 +113,8 @@ explain this change. Distinguish current from intended/future behaviour. Avoid
 symbol-heavy trees, code dumps and miniature diffs that make the reader decode
 the implementation. A diagram explains design; it does not prove execution.
 
-**UI media.** Embed URLs returned by `implementation-workspace publish-media`;
-capture and publishing safety stay with `rendered-qa` and `/implement`. Choose
+**UI media.** Embed URLs returned by `ibni publish-media`;
+capture and publishing safety stay with `rendered-qa` and `/wettaq`. Choose
 the route, state and viewport that best shows the outcome—mobile first for a
 phone-first task. Keep that comparison in the open, near the lead; link or
 collapse secondary states and viewports only when useful. For example:

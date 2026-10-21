@@ -5,7 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { links } from "./install.mjs";
 import { loadSchema, resolveConfig, supportedKeywords, validate, withDefaults } from "./lib/config.mjs";
-import { agentRoles, renderHostFiles } from "./lib/render.mjs";
+import { agentRoles, commandAliases, renderHostFiles } from "./lib/render.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const generated = path.join(path.sep, "rendered");
@@ -72,6 +72,15 @@ export async function check(base = root) {
     assert.match(text, /\$ARGUMENTS/, `command ${name} lost argument substitution`);
     assert.doesNotMatch(text, /(?:openai|opencode-go)\/[a-z0-9.-]+/i);
   }
+  // An alias only runs its new command, so it must name a real one and list
+  // with that command's description.
+  for (const [file, target] of Object.entries(commandAliases)) {
+    const alias = await readFile(path.join(base, "commands", file), "utf8");
+    const description = (await readFile(path.join(base, "commands", `${target}.md`), "utf8")).match(/^---\ndescription: ([^\n]+)\n/)[1];
+    assert.ok(!(`${target}.md` in commandAliases), `alias ${file} must point at a command, not another alias`);
+    assert.ok(alias.includes(`commands/${target}.md`), `alias ${file} must run commands/${target}.md`);
+    assert.ok(alias.startsWith(`---\ndescription: Old name for /${target}, kept for one release. ${description}\n`), `alias ${file} must keep /${target}'s description`);
+  }
   for (const name of await readdir(path.join(base, "skills"))) {
     const file = path.join(base, "skills", name, "SKILL.md");
     const text = await readFile(file, "utf8").catch((error) => {
@@ -95,7 +104,9 @@ export async function check(base = root) {
     }
   }
   if (process.platform !== "win32") {
-    assert.ok((await stat(path.join(base, "scripts/implementation-workspace"))).mode & 0o111, "implementation-workspace is not executable");
+    for (const executable of ["scripts/ibni/ibni", "scripts/implementation-workspace"]) {
+      assert.ok((await stat(path.join(base, executable))).mode & 0o111, `${executable} is not executable`);
+    }
   }
   const pkg = JSON.parse(await readFile(path.join(base, "package.json"), "utf8"));
   assert.equal(pkg.scripts.verify, "verifika --all", "npm run verify must run every Verifika check");
@@ -105,7 +116,7 @@ export async function check(base = root) {
   // A test file no check names would silently drop out of the delivery gate.
   const commands = Object.values(verifika.checks).map((entry) => entry.command);
   const tests = [
-    ...(await readdir(path.join(base, "scripts"))).filter((name) => name.endsWith(".test.mjs")).map((name) => `scripts/${name}`),
+    ...(await readdir(path.join(base, "scripts"), { recursive: true })).filter((name) => name.endsWith(".test.mjs")).map((name) => `scripts/${name.split(path.sep).join("/")}`),
     ...(await readdir(path.join(base, "skills/repo-context/tests"))).filter((name) => name.endsWith(".test.js")).map((name) => `skills/repo-context/tests/${name}`),
   ];
   for (const test of tests) {

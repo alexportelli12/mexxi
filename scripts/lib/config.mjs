@@ -1,5 +1,5 @@
 // Loads, validates and defaults ~/.config/mexxi/config.json against
-// config.schema.json. Shared by the installer and implementation-workspace, so
+// config.schema.json. Shared by the installer and ibni, so
 // both read paths from one place. The validator covers only the JSON Schema
 // subset config.schema.json uses; config.test.mjs fails if the schema reaches
 // for a keyword this file does not understand.

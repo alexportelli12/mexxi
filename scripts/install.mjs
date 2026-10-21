@@ -88,8 +88,12 @@ export async function links({
   for (const name of Object.keys(JSON.parse(await readFile(path.join(checkout, "claude/agents.json"), "utf8")))) {
     entries.push([path.join(claude, "agents", `${name}.md`), path.join(generated, "claude/agents", `${name}.md`), "claude"]);
   }
-  const workspaceExecutable = process.platform === "win32" ? "implementation-workspace.cmd" : "implementation-workspace";
-  entries.push([path.join(bin, workspaceExecutable), path.join(checkout, "scripts", workspaceExecutable), "shared"]);
+  // implementation-workspace is ibni's one-release alias; it keeps its old
+  // source path so links earlier installs made stay valid.
+  for (const executable of ["ibni/ibni", "implementation-workspace"]) {
+    const source = path.join(checkout, "scripts", process.platform === "win32" ? `${executable}.cmd` : executable);
+    entries.push([path.join(bin, path.basename(source)), source, "shared"]);
+  }
   for (const name of Object.keys(JSON.parse(await readFile(path.join(checkout, "codex/agents.json"), "utf8")))) {
     entries.push([path.join(codex, "agents", `${name}.toml`), path.join(generated, "codex/agents", `${name}.toml`), "codex"]);
   }

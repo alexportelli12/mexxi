@@ -53,5 +53,5 @@ committing rather than guessing what belongs to the task.
 Never merge; push to the default branch; force push; rewrite published or
 unrelated history; stash, discard, or overwrite changes you did not make; or
 include unrelated changes in a commit. Merge decisions and final product
-validation stay with me. `/implement` keeps its stricter isolated-worktree
+validation stay with me. `/wettaq` keeps its stricter isolated-worktree
 lifecycle; this policy does not relax it.

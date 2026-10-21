@@ -1,6 +1,6 @@
 ---
 name: rendered-qa
-description: Exercise a running UI hands-on and capture evidence — viewports, motion, hydration, scrolling, interaction, keyboard, touch targets, console — then report findings with a severity. Use for /implement's rendered pass, before-shots, the /qa command, or when a reviewer must close a named rendered-evidence gap. Do not use to design UI or to edit code.
+description: Exercise a running UI hands-on and capture evidence — viewports, motion, hydration, scrolling, interaction, keyboard, touch targets, console — then report findings with a severity. Use for /wettaq's rendered pass, before-shots, the /ittestja command, or when a reviewer must close a named rendered-evidence gap. Do not use to design UI or to edit code.
 ---
 
 # Rendered QA
@@ -21,7 +21,7 @@ Pick the checks below that can plausibly fail for this change and say which
 ones you skipped.
 
 Write every artifact to the session's `evidenceDir` (from
-`implementation-workspace prepare` or `info`). Outside a workspace, use a fresh
+`ibni prepare` or `info`). Outside a workspace, use a fresh
 system temporary directory. Never write into a worktree or checkout. Name files
 `<before|after>-<route-slug>-<viewport>.<ext>` so before and after pairs line up.
 

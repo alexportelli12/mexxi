@@ -1,0 +1,6 @@
+#!/usr/bin/env node
+
+import("./ibni.mjs").then(({ main }) => main()).catch((error) => {
+  process.stderr.write(`Implementation workspace error: ${error.message}\n`);
+  process.exitCode = 1;
+});

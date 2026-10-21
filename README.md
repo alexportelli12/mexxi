@@ -28,7 +28,7 @@ The agent gets to do the work. **Product decisions and merges stay with me.**
 
 ```mermaid
 flowchart TD
-  A["/implement request"] --> B["Fresh worktree<br/>(merged ones swept)"]
+  A["/wettaq request"] --> B["Fresh worktree<br/>(merged ones swept)"]
   B --> C["Investigate repo,<br/>agree what done means"]
   C --> D{"verify green?"}
   D -- no --> S["Stop and report"]
@@ -47,10 +47,10 @@ Not every change needs every step. A one-line fix doesn't get an independent rev
 
 | | Name | What it does |
 | --- | --- | --- |
-| Command | [`/implement`](commands/implement.md) | Takes a request from investigation to a reviewable PR |
-| Command | [`/qa`](commands/qa.md) | Hands-on rendered QA of a route, flow, PR or session; reports, never edits |
-| Command | [`/update-my-workflow`](commands/update-my-workflow.md) | Audits or changes this configuration coherently |
-| Command | [`/ux.principles`](commands/ux.principles.md) | Writes or refines a product's `UX_PRINCIPLES.md` |
+| Command | [`/wettaq`](commands/wettaq.md) | Takes a request from investigation to a reviewable PR |
+| Command | [`/ittestja`](commands/ittestja.md) | Hands-on rendered QA of a route, flow, PR or session; reports, never edits |
+| Command | [`/sewwi`](commands/sewwi.md) | Audits or changes this configuration coherently |
+| Command | [`/fassal`](commands/fassal.md) | Writes or refines a product's `UX_PRINCIPLES.md` |
 | Agent | [`code-reviewer`](agent/code-reviewer.md) | Independent review via OCR delegation, plus the merge-danger call |
 | Agent | [`ui-designer`](agent/ui-designer.md) | Designs and implements UI grounded in the repo |
 | Skill | [`rendered-qa`](skills/rendered-qa/SKILL.md) | How to exercise a running UI and capture evidence |
@@ -64,8 +64,10 @@ Not every change needs every step. A one-line fix doesn't get an independent rev
 | Skill | [`skill-creator`](skills/skill-creator/SKILL.md) | Creating and evaluating skills |
 | Skill | [`workflow-for-alex`](skills/workflow-for-alex/SKILL.md) | Governance for changing this workflow |
 | Skill | [`verifika`](https://github.com/alexportelli12/verifika/blob/main/skills/verifika/SKILL.md) | Running and diagnosing Verifika checks; linked from the pinned npm package |
-| Script | [`implementation-workspace`](scripts/implementation-workspace.mjs) | Worktree lifecycle: prepare, publish, PR media, cleanup |
+| Script | [`ibni`](scripts/ibni/ibni.mjs) | Worktree lifecycle: prepare, publish, PR media, cleanup |
 | Script | [`install.mjs`](scripts/install.mjs) | Links shared configuration into all three hosts |
+
+The previous names (`/implement`, `/qa`, `/update-my-workflow`, `/ux.principles`, Codex's `$workflow-…` wrappers and `implementation-workspace`) still work for one release, as thin aliases of the new ones.
 
 [`AGENTS.md`](AGENTS.md) holds the cross-project engineering principles, including when agents may branch, commit and open PRs. `opencode/opencode.json`, `claude/agents.json`, and `codex/agents.json` are templates for the host-specific bits; the installer renders them, with the agent definitions from `agent/` and Codex's explicit-invocation skill wrappers from `commands/`, using your `config.json`.
 
@@ -85,7 +87,7 @@ node scripts/install.mjs --check
 
 **Configuration lives in one file:** `~/.config/mexxi/config.json` (or the file `MEXXI_CONFIG` names). The first install writes a minimal one; every key is optional and falls back to the default in [`config.schema.json`](config.schema.json), which also describes it. [`config.example.json`](config.example.json) spells out every key: the clone's location, the worktree root (`~/.local/share/mexxi/worktrees`), which hosts to install for, the model per agent and host, and the branch prefix. Change that file, never a tracked one, then run `node scripts/install.mjs` again. To clone somewhere else, write `{"paths": {"checkout": "<your clone>"}}` to `config.json` first; the installer refuses to run from any clone but the one it names.
 
-The installer renders the host files from `config.json` into `~/.local/share/mexxi/generated/`, then links them and the shared files into `~/.config/opencode/`, `~/.claude/`, and Codex's home (`~/.codex/`, or `CODEX_HOME` when set). Codex gets the shared `AGENTS.md` at its config root and rendered TOML agents in `agents/`. Shared skills, Verifika's skill from `node_modules`, and rendered command wrappers are linked individually into `~/.agents/skills/`, Codex's user skill discovery location; this stays under your home even with a custom `CODEX_HOME`. The installer puts `implementation-workspace` in `~/.local/bin`, removes the retired `verify-runner` link it used to install, and adds a `post-merge` hook so a later `git pull` on `main` reinstalls automatically. It never overwrites existing configuration; on a conflict it stops and lists the paths. Your personal Codex `config.toml` is preserved, and agents without a model in `config.json` inherit the host's. The Codex reviewer defaults to a read-only sandbox; Codex's parent runtime permission overrides still take precedence.
+The installer renders the host files from `config.json` into `~/.local/share/mexxi/generated/`, then links them and the shared files into `~/.config/opencode/`, `~/.claude/`, and Codex's home (`~/.codex/`, or `CODEX_HOME` when set). Codex gets the shared `AGENTS.md` at its config root and rendered TOML agents in `agents/`. Shared skills, Verifika's skill from `node_modules`, and rendered command wrappers are linked individually into `~/.agents/skills/`, Codex's user skill discovery location; this stays under your home even with a custom `CODEX_HOME`. The installer puts `ibni` in `~/.local/bin`, removes the retired `verify-runner` link it used to install, and adds a `post-merge` hook so a later `git pull` on `main` reinstalls automatically. It never overwrites existing configuration; on a conflict it stops and lists the paths. Your personal Codex `config.toml` is preserved, and agents without a model in `config.json` inherit the host's. The Codex reviewer defaults to a read-only sandbox; Codex's parent runtime permission overrides still take precedence.
 
 `install --check` renders again and fails on any difference, so a hand-edited host file or a stale render shows up as a red check. Moving from an older checkout (for example the clone that used to live in `~/.config/opencode`)? Pass the path its links point at, `node scripts/install.mjs --migrate-from ~/.config/opencode`, and the installer relinks them to the new clone instead of stopping on them as conflicts.
 
@@ -101,26 +103,26 @@ For Codex, configure the same MCP server in user scope:
 codex mcp add playwright -- npx -y @playwright/mcp@latest --headless --isolated
 ```
 
-Start a new Codex session after installation. A non-empty `AGENTS.override.md` in Codex's home takes precedence over the installed `AGENTS.md`; remove your override when you want the shared guidance. Invoke command wrappers explicitly as `$workflow-implement <request>`, `$workflow-qa <request>`, `$workflow-update-my-workflow <request>`, or `$workflow-ux-principles <request>`. These use the canonical command bodies with the invocation's request as their arguments; ordinary skills retain their existing names. Codex discovers skills through `/skills` or `$` and agents from its `agents/` directory. Unlike OpenCode and Claude's slash commands, these wrappers use Codex's native skill invocation.
+Start a new Codex session after installation. A non-empty `AGENTS.override.md` in Codex's home takes precedence over the installed `AGENTS.md`; remove your override when you want the shared guidance. Invoke command wrappers explicitly as `$mexxi-wettaq <request>`, `$mexxi-ittestja <request>`, `$mexxi-sewwi <request>`, or `$mexxi-fassal <request>`. These use the canonical command bodies with the invocation's request as their arguments; ordinary skills retain their existing names. Codex discovers skills through `/skills` or `$` and agents from its `agents/` directory. Unlike OpenCode and Claude's slash commands, these wrappers use Codex's native skill invocation.
 
 **An app repo needs one thing:** an `npm run verify` script that defines "mechanically healthy" for that project (lint, types, tests, whatever fits). Nothing host-specific. The recommended way is [Verifika](https://github.com/alexportelli12/verifika): list the checks in `verifika.config.json` and set `"verify": "verifika --all"`, as this repo does. Agents can then run only the checks a change affects while they work, and read compact failures and per-check logs.
 
 **A first command to try**, from the app repo's default branch:
 
 ```text
-/implement show the last sync time on the settings page
+/wettaq show the last sync time on the settings page
 ```
 
 For occasional manual use:
 
 ```bash
-implementation-workspace list                     # retained workspaces
-implementation-workspace info --session <id>      # paths, branch and PR for one
-implementation-workspace cleanup                  # what would be removed (dry run)
-implementation-workspace cleanup --dry-run false  # remove merged, consumed ones
+ibni list                     # retained workspaces
+ibni info --session <id>      # paths, branch and PR for one
+ibni cleanup                  # what would be removed (dry run)
+ibni cleanup --dry-run false  # remove merged, consumed ones
 ```
 
-You rarely need the last two: every `/implement` sweeps merged workspaces on the way in.
+You rarely need the last two: every `/wettaq` sweeps merged workspaces on the way in.
 
 ## Principles
 

@@ -23,7 +23,7 @@
           "default": "~/workspace/mexxi"
         },
         "worktreeRoot": {
-          "description": "Directory under which implementation-workspace creates a folder per repository, holding each task's worktree and its evidence directory.",
+          "description": "Directory under which ibni creates a folder per repository, holding each task's worktree and its evidence directory.",
           "type": "string",
           "pattern": "^(~/|/)",
           "default": "~/.local/share/mexxi/worktrees"

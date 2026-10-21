@@ -52,13 +52,17 @@ test("shared setup is idempotent and installs the pinned Verifika skill", async 
   const verifikaSkill = await readFile(path.join(checkout, "node_modules/verifika/skills/verifika/SKILL.md"), "utf8");
   assert.equal(await readFile(path.join(home, ".claude/skills/verifika/SKILL.md"), "utf8"), verifikaSkill);
   assert.equal(await readFile(path.join(home, ".agents/skills/verifika/SKILL.md"), "utf8"), verifikaSkill);
-  assert.deepEqual(await readdir(path.join(home, ".local/bin")), [process.platform === "win32" ? "implementation-workspace.cmd" : "implementation-workspace"]);
+  const executables = ["ibni", "implementation-workspace"].map((name) => process.platform === "win32" ? `${name}.cmd` : name);
+  assert.deepEqual((await readdir(path.join(home, ".local/bin"))).sort(), executables);
   assert.match(await readFile(path.join(home, ".claude/CLAUDE.md"), "utf8"), /senior engineering deputy/);
   assert.equal(await readFile(path.join(home, ".codex/AGENTS.md"), "utf8"), await readFile(path.join(checkout, "AGENTS.md"), "utf8"));
   assert.equal(await readFile(path.join(home, ".agents/skills/workflow-for-alex/SKILL.md"), "utf8"), await readFile(path.join(checkout, "skills/workflow-for-alex/SKILL.md"), "utf8"));
   assert.match(await readFile(path.join(home, ".codex/agents/code-reviewer.toml"), "utf8"), /sandbox_mode = "read-only"/);
-  assert.match(await readFile(path.join(home, ".agents/skills/workflow-implement/SKILL.md"), "utf8"), /implementation-workspace prepare/);
-  assert.match(await readFile(path.join(home, ".agents/skills/workflow-implement/agents/openai.yaml"), "utf8"), /allow_implicit_invocation: false/);
+  assert.match(await readFile(path.join(home, ".agents/skills/mexxi-wettaq/SKILL.md"), "utf8"), /ibni prepare/);
+  assert.match(await readFile(path.join(home, ".agents/skills/mexxi-wettaq/agents/openai.yaml"), "utf8"), /allow_implicit_invocation: false/);
+  // The old wrapper name stays for one release and runs the renamed command.
+  assert.match(await readFile(path.join(home, ".agents/skills/workflow-implement/SKILL.md"), "utf8"), /commands\/wettaq\.md/);
+  await assert.rejects(lstat(path.join(home, ".agents/skills/mexxi-implement")), /ENOENT/);
   assert.match(await readFile(path.join(home, "git-hooks/post-merge"), "utf8"), /--after-merge/);
   const generated = path.join(home, ".local/share/mexxi/generated");
   assert.equal(await readlink(path.join(home, ".claude/agents/code-reviewer.md")), path.join(generated, "claude/agents/code-reviewer.md"));
@@ -128,6 +132,16 @@ test("setup retires verify-runner links it installed and keeps user-owned files"
   assert.equal(await readFile(path.join(bin, "verify-runner"), "utf8"), "#!/bin/sh\necho mine\n");
   assert.equal(await readFile(path.join(bin, "verify-runner.cmd"), "utf8"), "@echo off\r\necho mine\r\n");
   assert.ok((await lstat(path.join(bin, "vfk"))).isSymbolicLink());
+});
+
+test("ibni and its implementation-workspace alias run the same CLI", async () => {
+  const results = [];
+  for (const shim of ["scripts/ibni/ibni", "scripts/implementation-workspace"]) {
+    results.push(await execute(process.execPath, [path.join(checkout, shim)], checkout));
+  }
+  assert.match(results[0].output, /^Implementation workspace error: expected prepare, sync, [\s\S]*Usage: ibni prepare/);
+  assert.deepEqual(results[1], results[0]);
+  assert.equal(results[0].code, 2);
 });
 
 test("setup explains a missing Verifika install instead of linking a partial skill set", async (t) => {
@@ -211,7 +225,7 @@ test("Codex setup respects a custom home and preserves personal settings", async
 });
 
 test("Codex conflicts stop the whole installation before any writes", async (t) => {
-  for (const relative of [".codex/AGENTS.md", ".codex/agents/code-reviewer.toml", ".agents/skills/workflow-implement"]) {
+  for (const relative of [".codex/AGENTS.md", ".codex/agents/code-reviewer.toml", ".agents/skills/mexxi-wettaq"]) {
     const home = await mkdtemp(path.join(os.tmpdir(), "coding-agent-codex-conflict-"));
     t.after(() => rm(home, { recursive: true, force: true }));
     await configure(home);
@@ -286,8 +300,8 @@ test("rendered host files keep command bodies canonical and --check catches drif
   const options = { home, checkout: clone };
   await install(options);
   await install({ ...options, check: true });
-  const command = await readFile(path.join(clone, "commands/implement.md"), "utf8");
-  const wrapper = await readFile(path.join(home, ".agents/skills/workflow-implement/SKILL.md"), "utf8");
+  const command = await readFile(path.join(clone, "commands/wettaq.md"), "utf8");
+  const wrapper = await readFile(path.join(home, ".agents/skills/mexxi-wettaq/SKILL.md"), "utf8");
   assert.ok(wrapper.endsWith(command.replace(/^---\n[\s\S]*?\n---\n/, "")));
 
   await writeFile(path.join(clone, "agent/code-reviewer.md"), "Updated canonical review instructions\n");
@@ -298,11 +312,11 @@ test("rendered host files keep command bodies canonical and --check catches drif
 
   await writeFile(path.join(clone, "commands/retired.md"), "---\ndescription: Retired\n---\n$ARGUMENTS\n");
   await install(options);
-  assert.ok((await lstat(path.join(home, ".agents/skills/workflow-retired"))).isSymbolicLink());
+  assert.ok((await lstat(path.join(home, ".agents/skills/mexxi-retired"))).isSymbolicLink());
   await rm(path.join(clone, "commands/retired.md"));
-  await assert.rejects(install({ ...options, check: true }), /workflow-retired\/SKILL\.md \(no longer generated\)/);
+  await assert.rejects(install({ ...options, check: true }), /mexxi-retired\/SKILL\.md \(no longer generated\)/);
   assert.equal((await install(options)).removed, 1);
-  await assert.rejects(lstat(path.join(home, ".agents/skills/workflow-retired")), /ENOENT/);
+  await assert.rejects(lstat(path.join(home, ".agents/skills/mexxi-retired")), /ENOENT/);
   await install({ ...options, check: true });
 });
 

@@ -45,9 +45,20 @@ async function renderClaude(checkout, config, files) {
   }
 }
 
-// Codex has no slash commands, so each command becomes an explicitly invoked skill.
+// Renamed commands keep their old name for one release: the old file in
+// commands/ is a thin alias that runs the new one. Maps old file to new name.
+export const commandAliases = {
+  "implement.md": "wettaq",
+  "qa.md": "ittestja",
+  "update-my-workflow.md": "sewwi",
+  "ux.principles.md": "fassal",
+};
+
+// Codex has no slash commands, so each command becomes an explicitly invoked
+// skill. An alias keeps the `workflow-` wrapper name Codex users typed before.
 export function codexCommandSkill(file) {
-  const name = `workflow-${file.slice(0, -3).replaceAll(".", "-")}`;
+  const prefix = file in commandAliases ? "workflow" : "mexxi";
+  const name = `${prefix}-${file.slice(0, -3).replaceAll(".", "-")}`;
   if (!/^[a-z][a-z0-9-]*$/.test(name)) throw new Error(`invalid command skill name: ${name}`);
   return name;
 }

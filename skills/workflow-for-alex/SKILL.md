@@ -119,7 +119,7 @@ signals, security checks, secrets detection, or other appropriate invariants.
 These are examples, not a universal gauntlet.
 
 The global invariant is the interface: `npm run verify` is the repository's
-authoritative deterministic quality contract. `/implement` requires a green
+authoritative deterministic quality contract. `/wettaq` requires a green
 baseline before implementation and a green final result afterward. Do not
 duplicate repository-specific checks in global prose or add project tooling
 from this configuration.
@@ -166,17 +166,17 @@ the change warrants them, and remediation loops remain bounded.
 
 `AGENTS.md` owns the general Git delivery policy: agents deliver completed,
 green work as pull requests by default and never merge. For successful
-`/implement` execution, the orchestrator owns that delivery through the
+`/wettaq` execution, the orchestrator owns that delivery through the
 stricter isolated-worktree lifecycle below rather than the general policy.
 The human reviews the completed pull request, performs final product
 validation, requests further changes when needed, and decides whether and when
-to merge. `/implement` orchestrates the
+to merge. `/wettaq` orchestrates the
 lifecycle; centralized tooling owns deterministic default-branch
 synchronization, session ownership, worktree isolation, safe history updates,
 and non-force feature-branch publication. `commit-pr-writing` owns specialist
 judgement for commit and pull-request copy.
 
-The normal repository checkout is the control worktree for `/implement`, not
+The normal repository checkout is the control worktree for `/wettaq`, not
 the feature workspace. Each invocation must receive a distinct owned linked
 worktree before repository work begins, and all subsequent feature operations
 remain there. The tool must fail closed rather than stash user state, reuse an
@@ -189,11 +189,11 @@ protecting open, dirty, metadata-less, or unproven workspaces fail-closed.
 
 Transient evidence is not deliverable work. Screenshots, recordings,
 rendered-inspection output, review background, and temporary reports go to the
-session's `evidenceDir` from `implementation-workspace prepare` or `info`,
+session's `evidenceDir` from `ibni prepare` or `info`,
 which lives beside the worktree so it never dirties the tree the lifecycle
 requires clean, or to a system temporary directory outside any workspace.
 Never write them into the control checkout or a worktree. Media a pull request
-should show is published by `implementation-workspace publish-media` to the
+should show is published by `ibni publish-media` to the
 repository's `pr-media` branch, never the feature branch, and cleanup removes
 it with the workspace.
 
