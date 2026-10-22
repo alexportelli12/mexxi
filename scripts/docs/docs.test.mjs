@@ -203,18 +203,45 @@ test("a command page leads with its summary and folds the agent instructions; a 
   // The headings folded in the instructions stay out of the built page's outline.
   assert.match(await readFile(path.join(built.out, "commands/wettaq.md"), "utf8"), /^---\noutline: false\n---\n\n# \/wettaq/);
 
-  // Start here leads, and Principles and Decisions sit together under the hood.
+  // Start here leads, and Principles, Decisions and History sit under the hood.
   const sidebar = buildSidebar(pages);
   assert.deepEqual(sidebar.map((section) => section.text), ["Start here", "Commands", "Agents", "Skills", "CLI reference", "Configuration", "Under the hood"]);
-  assert.deepEqual(sidebar.at(-1).items.map((group) => group.text), ["Principles", "Decisions"]);
+  assert.deepEqual(sidebar.at(-1).items.map((group) => group.text), ["Principles", "Decisions", "History"]);
   assert.equal(sidebar[0].items[2].link, "/reviewing-a-pull-request");
+  // Commands run in names.json's order, by how often people use them.
+  assert.deepEqual(sidebar[1].items.slice(1, 4).map((item) => item.text), ["/wettaq", "/lesti", "/ittestja"]);
 
-  // Optional skills are listed apart from the core ones.
+  // Skills are grouped by purpose, an optional one says so, and every page
+  // says first what problem it solves.
   const skills = await readFile(path.join(built.out, "skills/index.md"), "utf8");
-  assert.match(skills.split("## Optional skills")[1], /\[angular\]/);
-  assert.doesNotMatch(skills.split("## Optional skills")[0], /\[angular\]/);
+  assert.match(skills.split("## UI work")[1].split("## Setup")[0], /\[angular\]\(angular\.md\) \(optional: Angular repositories only\)/);
+  assert.match(skills.split("## Setup")[1], /\[ibda\]/);
+  assert.match(wettaq, /\n\*\*The problem it solves:\*\* .+\n\nUse it for any change/);
+  const cli = await readFile(path.join(built.out, "public/cli/index.md"), "utf8");
+  assert.ok(cli.indexOf("## The agent's lifecycle") < cli.indexOf("### ibni prepare") && cli.indexOf("### ibni prepare") < cli.indexOf("### ibni mark-pr") && cli.indexOf("### ibni mark-pr") < cli.indexOf("## Commands you might run"));
+  assert.match(cli, /### ibni cleanup\n\n\*\*The problem it solves:\*\* /);
+  assert.match(await readFile(path.join(built.out, "public/agents/code-reviewer.md"), "utf8"), /\*\*What it cannot do:\*\* .+\n[\s\S]*::: details Full agent instructions/);
+  const configuration = await readFile(path.join(built.out, "public/configuration/index.md"), "utf8");
+  assert.ok(configuration.indexOf("## Common changes") < configuration.indexOf("## Settings in config.json"));
+  assert.match(configuration, /### jev\n\n::: info Experimental/);
+  assert.match(configuration, /## Settings in \.mexxi\.json[\s\S]*`ciCheck`/);
 
   const bad = await copyRepo({ edit: { "commands/lesti.md": (text) => text.replace(/^summary: >-\n(?: {2}.+\n)+/m, "") } });
   const { out, site } = outputs(bad);
   await assert.rejects(buildDocs({ root: bad, out, site, render: false }), /commands\/lesti\.md has no `summary`/);
+});
+
+test("a command, skill, agent, config group or ibni subcommand without a why fails the build", async () => {
+  const cases = [
+    [{ "commands/lesti.md": (text) => text.replace(/^why: .*\n/m, "") }, /commands\/lesti\.md has no `why`/],
+    [{ "skills/angular/SKILL.md": (text) => text.replace(/^ {2}why: .*\n/m, "") }, /skills\/angular\/SKILL\.md has no `metadata\.why`/],
+    [{ "docs/agents.json": (text) => text.replace(/"why": "An agent that reviews[^"]*",/, "") }, /docs\/agents\.json has no `code-reviewer\.why`/],
+    [{ "config.schema.json": (text) => text.replace(/\n {6}"why": "Session transcripts[^"]*",/, "") }, /config\.schema\.json: retro has no `why`/],
+    [{ "scripts/ibni/ibni.mjs": (text) => text.replace(/^ {4}why: "Kept worktrees[^"]*",\n/m, "") }, /ibni cleanup --help has no "Why:" line/],
+  ];
+  for (const [edit, message] of cases) {
+    const directory = await copyRepo({ edit });
+    const { out, site } = outputs(directory);
+    await assert.rejects(buildDocs({ root: directory, out, site, render: false }), message);
+  }
 });

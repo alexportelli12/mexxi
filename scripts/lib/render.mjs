@@ -108,9 +108,10 @@ async function renderCodex(checkout, config, files) {
   for (const file of (await readdir(path.join(checkout, "commands"))).sort()) {
     if (!file.endsWith(".md")) continue;
     const text = await readFile(path.join(checkout, "commands", file), "utf8");
-    // `summary` is the docs site's human summary; the agent never needs it, so
-    // it is dropped here and the skill carries only the description.
-    const match = text.match(/^---\ndescription: ([^\n]+)\n(?:summary: >-\n(?: {2}[^\n]+\n)+)?---\n/);
+    // `why` and `summary` are the docs site's: the problem the command solves
+    // and its human summary. The agent never needs them, so they are dropped
+    // here and the skill carries only the description.
+    const match = text.match(/^---\ndescription: ([^\n]+)\n(?:why: [^\n]+\n)?(?:summary: >-\n(?: {2}[^\n]+\n)+)?---\n/);
     if (!match) throw new Error(`invalid command header: ${file}`);
     const name = codexCommandSkill(file);
     const body = text.slice(match[0].length);

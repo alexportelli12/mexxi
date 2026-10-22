@@ -40,15 +40,15 @@
     },
     "docs": {
       "command": "node scripts/docs/check.mjs",
-      "paths": ["README.md", "AGENTS.md", "docs/**", "site/**", "commands/**", "agent/**", "skills/**", "names.json", "prompts.json", "config.schema.json", "config.example.json", "claude/agents.json", "codex/agents.json", "opencode/opencode.json", "scripts/install.mjs", "scripts/ibni/**", "scripts/docs/**", "scripts/lib/**", ".github/workflows/docs.yml"]
+      "paths": ["README.md", "AGENTS.md", "docs/**", "site/**", "commands/**", "agent/**", "skills/**", "names.json", "prompts.json", "config.schema.json", "mexxi.schema.json", "config.example.json", "claude/agents.json", "codex/agents.json", "opencode/opencode.json", "scripts/install.mjs", "scripts/ibni/**", "scripts/docs/**", "scripts/lib/**", ".github/workflows/docs.yml"]
     },
     "docs-tests": {
       "command": "node --test scripts/docs/docs.test.mjs scripts/docs/fresh.test.mjs scripts/docs/vale.test.mjs",
-      "paths": ["scripts/docs/**", "docs/**", "site/**", "names.json", "prompts.json", "skills/*/SKILL.md"]
+      "paths": ["scripts/docs/**", "docs/**", "site/**", "names.json", "prompts.json", "mexxi.schema.json", "config.schema.json", "commands/**", "agent/**", "scripts/ibni/**", "skills/*/SKILL.md"]
     },
     "docs-fresh": {
       "command": "node scripts/docs/fresh.mjs",
-      "paths": ["README.md", "AGENTS.md", "docs/**", "site/**", "commands/**", "agent/**", "skills/**", "names.json", "prompts.json", "config.schema.json", "config.example.json", "claude/agents.json", "codex/agents.json", "opencode/opencode.json", "scripts/install.mjs", "scripts/ibni/**", "scripts/docs/**", "scripts/lib/**"]
+      "paths": ["README.md", "AGENTS.md", "docs/**", "site/**", "commands/**", "agent/**", "skills/**", "names.json", "prompts.json", "config.schema.json", "mexxi.schema.json", "config.example.json", "claude/agents.json", "codex/agents.json", "opencode/opencode.json", "scripts/install.mjs", "scripts/ibni/**", "scripts/docs/**", "scripts/lib/**"]
     },
     "prose": {
       "command": "npm run --silent prose",

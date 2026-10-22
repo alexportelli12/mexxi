@@ -84,4 +84,4 @@ Read the diff, or ask someone who knows that area, when:
 
 ## Asking for changes
 
-Ask with `/wettaq` and the pull request's link, for example `/wettaq follow up on <pull request URL>: keep the old label as a tooltip`. It picks up the same [worktree](glossary.md#worktree), runs the same gates and updates the same pull request. For a second look without code changes, [`/ittestja`](../commands/ittestja.md), the command that tests a UI by hand in a browser, returns a findings report.
+Ask with `/wettaq` and the pull request's link, for example `/wettaq follow up on <pull request URL>: keep the old label as a tooltip`. It picks up the same [worktree](glossary.md#worktree), runs the same gates and updates the same pull request. For a second look without code changes, [`/ittestja`](../commands/ittestja.md), the command that tests a UI by hand in a browser, returns a findings report. [Commands](../commands/index.md) lists the rest, with the problem each one solves.

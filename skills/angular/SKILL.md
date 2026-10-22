@@ -9,6 +9,8 @@ description: >-
   Angular design judgement.
 metadata:
   optional: "Angular repositories only."
+  why: "Angular has its own patterns, and generic advice gets them wrong."
+  group: ui
 ---
 
 # Angular Engineering

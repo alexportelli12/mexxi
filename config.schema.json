@@ -12,6 +12,7 @@
     },
     "paths": {
       "description": "Where mexxi lives and where it creates task worktrees.",
+      "why": "mexxi has to know where its own clone is and where to put each task's copy of a repository.",
       "type": "object",
       "additionalProperties": false,
       "default": {},
@@ -32,6 +33,7 @@
     },
     "hosts": {
       "description": "Which coding-agent hosts the installer links the workflow into. Switching one off removes what an earlier install gave it: links, settings and hooks entries, and Claude Code mods.",
+      "why": "You may use only one or two of the three agents, and mexxi should touch only those.",
       "type": "object",
       "additionalProperties": false,
       "default": {},
@@ -43,6 +45,7 @@
     },
     "models": {
       "description": "Model per role and host. null means the role inherits the host's own model.",
+      "why": "Different jobs suit different models, and a reviewer from another model family catches what the builder's family misses.",
       "type": "object",
       "additionalProperties": false,
       "default": {},
@@ -57,7 +60,7 @@
             "explore": { "description": "OpenCode's built-in explore subagent.", "type": ["string", "null"], "default": null },
             "uiDesigner": { "description": "The shared ui-designer agent.", "type": ["string", "null"], "default": null },
             "reviewer": { "description": "The shared code-reviewer agent.", "type": ["string", "null"], "default": null },
-            "crossFamilyReviewer": { "description": "A reviewer model from a different family to the implementer's, as provider/model; rendered as the code-reviewer's model in place of reviewer. null falls back to the reviewer's model.", "type": ["string", "null"], "default": null }
+            "crossFamilyReviewer": { "description": "A reviewer model from a different family to the implementer's, as provider/model, because a reviewer from the builder's own family shares its blind spots. Rendered as the code-reviewer's model in place of reviewer. null falls back to the reviewer's model.", "type": ["string", "null"], "default": null }
           }
         },
         "claude": {
@@ -68,7 +71,7 @@
           "properties": {
             "uiDesigner": { "description": "The shared ui-designer agent.", "type": ["string", "null"], "default": null },
             "reviewer": { "description": "The shared code-reviewer agent.", "type": ["string", "null"], "default": null },
-            "crossFamilyReviewer": { "description": "A Codex model that `ibni cross-review` runs the code-reviewer on through codex exec in a read-only sandbox, so the reviewer is not the implementer's family. null, or Codex not installed, falls back to the reviewer's model and says so in the pull request's Evidence.", "type": ["string", "null"], "default": null }
+            "crossFamilyReviewer": { "description": "A Codex model that `ibni cross-review` runs the code-reviewer on through codex exec in a read-only sandbox, so the reviewer is not the implementer's family and does not share its blind spots. null, or Codex not installed, falls back to the reviewer's model and says so in the pull request's Evidence.", "type": ["string", "null"], "default": null }
           }
         },
         "codex": {
@@ -86,6 +89,7 @@
     },
     "workflow": {
       "description": "Defaults the workflow applies to every repository.",
+      "why": "Branch names, screen sizes and free ports differ from one team and machine to the next.",
       "type": "object",
       "additionalProperties": false,
       "default": {},
@@ -108,7 +112,7 @@
           "additionalProperties": false,
           "default": {},
           "properties": {
-            "first": { "description": "Lowest port ibni assigns.", "type": "integer", "minimum": 1024, "maximum": 65535, "default": 4300 },
+            "first": { "description": "Lowest port ibni assigns. Each task gets its own port from this range, so two tasks can run their development servers at once.", "type": "integer", "minimum": 1024, "maximum": 65535, "default": 4300 },
             "last": { "description": "Highest port ibni assigns; at least first.", "type": "integer", "minimum": 1024, "maximum": 65535, "default": 4999 }
           }
         }
@@ -116,6 +120,7 @@
     },
     "review": {
       "description": "How the independent code-reviewer selects what to review.",
+      "why": "The reviewer needs a way to choose what to read, and you may not have ocr installed.",
       "type": "object",
       "additionalProperties": false,
       "default": {},
@@ -125,6 +130,7 @@
     },
     "browser": {
       "description": "The Playwright MCP server every host uses for rendered QA.",
+      "why": "The browser check should behave the same on every agent and every run, so the browser tooling is pinned to one version.",
       "type": "object",
       "additionalProperties": false,
       "default": {},
@@ -136,6 +142,7 @@
     },
     "guard": {
       "description": "What the shared guard hook blocks on every host.",
+      "why": "A stuck agent occasionally runs something destructive, so a hook backs up the rules by stopping the commands you list.",
       "type": "object",
       "additionalProperties": false,
       "default": {},
@@ -173,6 +180,8 @@
     },
     "claude": {
       "description": "Claude Code-only settings: the ones the installer merges into Claude Code's own settings.json (alongside the deny rules and hooks it owns; everything else in that file stays yours), and the ones the mods read.",
+      "why": "Claude Code has settings the other agents lack, such as its limit on how long a shell command may run.",
+      "scope": "Claude Code only",
       "type": "object",
       "additionalProperties": false,
       "default": {},
@@ -183,6 +192,7 @@
     },
     "forge": {
       "description": "Which code forge a repository's pull requests, CI state, issues and media URLs come from: GitHub through gh, GitLab through glab. github.com and gitlab.com are known; a repository can name its own with \"forge\" in its committed .mexxi.json, which wins over this group. A remote on any other host has no forge, and the steps that need one fail or skip with the reason.",
+      "why": "mexxi has to know whether a repository lives on GitHub or GitLab to open its pull requests and read its CI.",
       "type": "object",
       "additionalProperties": false,
       "default": {},
@@ -197,6 +207,8 @@
     },
     "jev": {
       "description": "Jev triage through OpenRouter; the API key is read from OPENROUTER_API_KEY, never from this file.",
+      "why": "Jev is an outside decision model, reached through OpenRouter. This tests whether it would choose a task's checks better than the agent, while only recording its answers.",
+      "scope": "Experimental, and off by default",
       "type": "object",
       "additionalProperties": false,
       "default": {},
@@ -214,6 +226,7 @@
     },
     "retro": {
       "description": "Where session retrospectives go and how long transcripts are kept for them.",
+      "why": "Session transcripts are private, so retrospectives need a home that no public repository ever commits.",
       "type": "object",
       "additionalProperties": false,
       "default": {},
@@ -224,6 +237,8 @@
     },
     "mods": {
       "description": "Which Claude Code mods the installer installs.",
+      "why": "Claude Code can load two optional extras: the run pane, which shows where a run stands beside the chat, and the command fixer, which repairs shell commands that would otherwise fail.",
+      "scope": "Claude Code only",
       "type": "array",
       "items": { "type": "string", "enum": ["run-pane", "command-fixer"] },
       "default": ["run-pane", "command-fixer"]

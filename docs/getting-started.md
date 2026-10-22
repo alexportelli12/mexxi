@@ -98,7 +98,7 @@ Every run starts by running verify once, to prove the starting point is green. T
 { "ciCheck": "verify" }
 ```
 
-The CI result counts only when that check succeeded on exactly the commit the task starts from. Otherwise, such as when the run is pending, failed or on another commit, the agent runs verify itself as usual.
+The CI result counts only when that check succeeded on exactly the commit the task starts from. Otherwise, such as when the run is pending, failed or on another commit, the agent runs verify itself as usual. [Configuration](configuration/index.md#settings-in-mexxi-json) lists every `.mexxi.json` key.
 
 ## Try it
 
@@ -110,4 +110,4 @@ From the repository's default branch, type this in your agent's chat to ask [`/w
 
 The agent works on its own and asks you only about product decisions it cannot settle from the code. [How a run works](how-a-run-works.md) walks through what happens next, and [Reviewing a mexxi pull request](reviewing-a-pull-request.md) covers what you check when the pull request arrives.
 
-You rarely run `ibni` yourself. Each task's worktree is kept after its pull request opens, for follow-up changes. A kept worktree and its record are called a [workspace](glossary.md#workspace). Once the pull request merges, the next task you start removes it. `ibni list` shows the kept workspaces, and `ibni cleanup` shows what it would remove. [CLI reference](cli/index.md) covers the rest.
+You rarely run `ibni` yourself. Each task's worktree is kept after its pull request opens, for follow-up changes. A kept worktree and its record are called a [workspace](glossary.md#workspace). Once the pull request merges, the next task you start removes it. `ibni list` shows the kept workspaces, and `ibni cleanup` shows what it would remove. The [CLI reference](cli/index.md) lists the few subcommands you might run, and why each exists.

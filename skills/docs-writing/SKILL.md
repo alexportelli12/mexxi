@@ -1,6 +1,9 @@
 ---
 name: docs-writing
 description: Write or edit the Markdown that people read in the mexxi repository, such as its README, hand-written docs pages and landing page copy. Use when creating or changing any of them there, or when mexxi's prose check fails. Do not use in other repositories, or for agent instructions in commands, skills or agents.
+metadata:
+  why: "Docs written for insiders lose newcomers, so mexxi's pages need one plain voice that says why before how."
+  group: mexxi
 ---
 
 # Docs Writing
@@ -12,6 +15,7 @@ One voice for the docs site and every Markdown file a person reads here. The `pr
 Readers include developers who have never handed a task to a coding agent. Every page, section and generated entry opens with the problem it solves, in plain words, before it says how anything works.
 
 - Open a page with what goes wrong without it, or what it lets the reader do. Mechanics come after.
+- Commands, agents, skills, config groups and `ibni` subcommands each carry a `why`: one plain sentence naming the problem it solves. It lives in a command's frontmatter, a skill's `metadata`, `docs/agents.json`, `config.schema.json` and each subcommand's `--help`. The docs generator shows it first and fails when one is missing. Write it for a newcomer: no workflow jargon, and do not restate the name.
 - Give each step or setting a reason in a few words: "picks a free port, so two tasks can run development servers at once", not "picks a free port".
 - Prefer a concrete example to an abstract rule.
 

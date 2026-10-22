@@ -1,6 +1,9 @@
 ---
 name: repo-context
 description: Inspect a repository and report a concise, evidence-based map of its stack, structure, observed patterns, testing, CI/CD, and infrastructure. Use when repository-wide evidence is needed before implementation or architectural reasoning; do not treat the report as an architecture decision.
+metadata:
+  why: "An agent that changes code before it understands the repository breaks the patterns already there."
+  group: run
 ---
 
 # Repo Context

@@ -17,6 +17,7 @@ export const ALLOWLIST = [
   "prompts.json",
   "config.schema.json",
   "config.example.json",
+  "mexxi.schema.json",
   "commands/*.md",
   "agent/*.md",
   "claude/agents.json",
@@ -27,6 +28,7 @@ export const ALLOWLIST = [
   "docs/*.md",
   "docs/decisions/*.md",
   "docs/freshness.json",
+  "docs/agents.json",
   "site/favicon.svg",
   "site/index.html", // read by the consistency check, never published as a docs page
 ];

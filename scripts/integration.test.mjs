@@ -73,7 +73,7 @@ async function copyCheckout(base) {
     await cp(path.join(checkout, directory), path.join(base, directory), { recursive: true });
   }
   await cp(path.join(checkout, "docs"), path.join(base, "docs"), { recursive: true });
-  for (const file of ["AGENTS.md", "README.md", "config.example.json", "config.schema.json", "names.json", "package.json", "prompts.json", "verifika.config.json"]) {
+  for (const file of ["AGENTS.md", "README.md", "config.example.json", "config.schema.json", "mexxi.schema.json", "names.json", "package.json", "prompts.json", "verifika.config.json"]) {
     await cp(path.join(checkout, file), path.join(base, file));
   }
 }

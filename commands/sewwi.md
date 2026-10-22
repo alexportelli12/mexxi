@@ -1,5 +1,6 @@
 ---
 description: Audit or coherently update Alex's global coding-agent workflow configuration
+why: A change to one command, skill or rule can quietly contradict the others, so the workflow is changed as a whole.
 summary: >-
   Use it to audit or change the workflow itself: the commands, skills, agents and rules in your
   mexxi clone. You get one coherent change, with stale duplicates removed and the docs pages it

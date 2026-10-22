@@ -1,6 +1,9 @@
 ---
 name: ibda
 description: Install, set up, repair or upgrade mexxi, the coding-agent workflow in github.com/alexportelli12/mexxi, on this machine. Use when asked to install or set up mexxi, to fix a broken mexxi install, to upgrade or update it, or when a pasted prompt points at this file. Do not use to prepare a repository for mexxi (that is /lesti) or to change the workflow's own rules (that is /sewwi).
+metadata:
+  why: "Installing one workflow into three different agents by hand is fiddly and easy to get wrong."
+  group: setup
 ---
 
 # Ibda: install, repair or upgrade mexxi

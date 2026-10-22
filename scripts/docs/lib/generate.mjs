@@ -11,13 +11,68 @@ const posix = path.posix;
 
 // A page is { route, title, nav, section, markdown }. Routes have no extension;
 // "index" is the Start here page.
-// "Under the hood" nests Principles and Decisions, which explain why mexxi
-// works as it does; a newcomer needs the other sections first.
+// "Under the hood" nests Principles, Decisions and History, which explain why
+// mexxi works as it does and where it came from; a newcomer needs the other
+// sections first.
 const SECTIONS = ["Start here", "Commands", "Agents", "Skills", "CLI reference", "Configuration", "Under the hood"];
-const UNDER_THE_HOOD = ["Principles", "Decisions"];
+const UNDER_THE_HOOD = ["Principles", "Decisions", "History"];
 // Hand-written pages are Start here pages unless listed here.
-// The session statistics behind the problems are evidence, not a first read.
-const HANDWRITTEN_SECTIONS = { "host-details": "Configuration", "migrating-from-coding-agent-config": "Configuration", "where-the-problems-come-from": "Principles" };
+// The session statistics behind the problems are evidence, not a first read,
+// and only people moving an old install need the migration guide.
+const HANDWRITTEN_SECTIONS = { "host-details": "Configuration", "migrating-from-coding-agent-config": "History", "where-the-problems-come-from": "Principles" };
+// Hand-written opening of the generated configuration page, not a page itself.
+const CONFIGURATION_GUIDE = "docs/configuration-guide.md";
+
+// What each skill is for; every skill names one in `metadata.group`.
+const SKILL_GROUPS = {
+  run: { title: "The run itself", text: "What a `/wettaq` run loads along the way: mapping the repository, checking the UI in a browser, the independent review and the pull request." },
+  ui: { title: "UI work", text: "Design judgement and tests for interfaces, loaded when a change has a UI. Some are for one stack only." },
+  setup: { title: "Setup", text: "Installing, repairing and upgrading mexxi itself." },
+  mexxi: { title: "Working on mexxi", text: "For changing mexxi: its docs, its rules and its skills." },
+};
+
+// The CLI page groups ibni's subcommands by who runs them. A subcommand in no
+// group, or a group naming one that does not exist, fails the build.
+const CLI_GROUPS = [
+  {
+    title: "The agent's lifecycle",
+    text: "The agent runs these during a `/wettaq` run, in this order. `record` runs whenever a gate finishes, and `publish-media` only when the run has screenshots. `publish` brings in the latest default branch itself; the agent runs `sync` first when it picks up an existing pull request for a follow-up.",
+    diagram: [
+      "sequenceDiagram",
+      "  participant A as Agent",
+      "  participant I as ibni",
+      "  participant G as Git and the forge",
+      "  A->>I: prepare",
+      "  I->>G: new worktree and branch from the default branch",
+      "  opt follow-up on an existing pull request",
+      "    A->>I: sync",
+      "    I->>G: bring in the latest default branch",
+      "  end",
+      "  A->>I: record (each verify, browser check and review)",
+      "  A->>I: record-evidence",
+      "  Note over I: remembers the exact code that passed",
+      "  A->>I: publish",
+      "  I->>G: bring in the default branch, push, never by force",
+      "  opt the run has screenshots",
+      "    A->>I: publish-media",
+      "    I->>G: screenshots to the pr-media branch",
+      "  end",
+      "  A->>G: open the pull request",
+      "  A->>I: mark-pr",
+    ].join("\n"),
+    names: ["prepare", "sync", "record", "record-evidence", "publish", "publish-media", "mark-pr"],
+  },
+  {
+    title: "Commands you might run",
+    text: "You might run these yourself now and then, to see what a run left behind or to continue a pull request from a new session.",
+    names: ["list", "info", "cleanup", "stats", "adopt"],
+  },
+  {
+    title: "Experimental or host-specific",
+    text: "These run only in some setups: an experiment that is off by default, a step only Claude Code uses, and one that needs the browser check's suggestions.",
+    names: ["triage", "cross-review", "file-qa-checks"],
+  },
+];
 
 export class DocsError extends Error {}
 
@@ -84,6 +139,32 @@ export const firstSentenceOf = (text) => text.replace(/\s+/g, " ").match(/^.*?[.
 const sentence = (text) => (/[.!?]$/.test(text.trim()) ? text.trim() : `${text.trim()}.`);
 const stripTitle = (body) => body.replace(/^\s*# .*\n+/, "");
 const titleOf = (body, fallback) => body.match(/^# (.+)$/m)?.[1].trim() ?? fallback;
+// Every reference entry says first, in one plain sentence, what problem it
+// solves; a missing one fails the build, as a missing description does.
+function requireWhy(where, value, field) {
+  if (typeof value !== "string" || !value.trim()) throw new DocsError(`${where} has no ${field}: add one plain sentence saying what problem it solves`);
+  return sentence(value);
+}
+const whyLine = (why) => `**The problem it solves:** ${why}`;
+
+// The agent's own instructions are long, so the page leads with the human
+// summary and folds them below it.
+function foldedInstructions({ file, body, kind, description, links }) {
+  const intro = { command: "The agent follows the instructions below", skill: "The agent loads the instructions below when a task needs this skill", agent: "This agent follows the instructions below" }[kind];
+  return [
+    `## ${kind === "skill" ? "Skill" : "Agent"} instructions`,
+    "",
+    `${intro}, from [\`${file}\`](${REPO_URL}/blob/main/${file}).${description ? ` Its one-line description is: ${sentence(description)}` : ""}`,
+    "",
+    `::: details Full ${kind === "skill" ? "skill" : "agent"} instructions`,
+    "",
+    rewriteLinks(stripTitle(body), links).trim(),
+    "",
+    ":::",
+    "",
+  ];
+}
+
 const codeCell = (value) => `\`${String(value).replace(/\|/g, "\\|")}\``;
 
 // A name from names.json as a dictionary entry: the word, how to say it, its
@@ -196,7 +277,7 @@ export async function generatePages({ root, files }) {
   add({ route: "index", title: titleOf(get("README.md"), "mexxi"), nav: "Overview", section: "Start here", markdown: fromSource("README.md", "index") });
 
   // The hand-written pages and the names page.
-  for (const file of [...files.keys()].filter((name) => /^docs\/[^/]+\.md$/.test(name)).sort()) {
+  for (const file of [...files.keys()].filter((name) => /^docs\/[^/]+\.md$/.test(name) && name !== CONFIGURATION_GUIDE).sort()) {
     const route = routeFor(file, aliasTargets);
     const { body } = parseFrontmatter(get(file));
     add({ route, title: titleOf(body, route), nav: titleOf(body, route), section: HANDWRITTEN_SECTIONS[route] ?? "Start here", markdown: rewriteLinks(body, context(file, route)) });
@@ -278,24 +359,27 @@ export async function generatePages({ root, files }) {
     });
   }
 
-  // Skills (the workflow-for-alex skill is the governance page under Principles).
+  // Skills, grouped by what they are for. Each carries, in its `metadata` map
+  // (Agent Skills allows one), `why`: the problem it solves, and `group`.
   const skillFiles = [...files.keys()].filter((name) => /^skills\/[^/]+\/SKILL\.md$/.test(name)).sort();
-  const skillRows = { core: [], optional: [] };
+  const skillRows = Object.fromEntries(Object.keys(SKILL_GROUPS).map((group) => [group, []]));
   for (const file of skillFiles) {
     const dir = file.split("/")[1];
     const { data, body } = parseFrontmatter(get(file));
     if (!data.description?.trim()) throw new DocsError(`${file} has no \`description\` in its frontmatter`);
     if (data.name !== dir) throw new DocsError(`${file}: frontmatter name "${data.name}" must match the folder "${dir}"`);
+    const metadata = typeof data.metadata === "object" ? data.metadata : {};
+    const why = requireWhy(file, metadata.why, "`metadata.why`");
+    if (!SKILL_GROUPS[metadata.group]) throw new DocsError(`${file}: set \`metadata.group\` to one of ${Object.keys(SKILL_GROUPS).join(", ")}, the purpose it serves`);
     const route = routeFor(file, aliasTargets);
     const references = [...files.keys()].filter((name) => name.startsWith(`skills/${dir}/references/`)).sort();
     // `metadata.optional` marks a skill the core workflow never needs, with
-    // the reason someone would want it (Agent Skills allows a metadata map).
-    const optional = typeof data.metadata === "object" ? data.metadata.optional?.trim() : undefined;
+    // the reason someone would want it.
+    const optional = metadata.optional?.trim();
     const parts = [`# ${dir}`, ""];
     if (byName.has(dir)) parts.push(dictionaryEntry(byName.get(dir)));
-    parts.push(sentence(data.description), "");
+    parts.push(whyLine(why), "", sentence(data.description), "");
     if (optional) parts.push("::: info Optional skill", `A run uses this skill only in one situation. **When you need it:** ${optional}`, ":::", "");
-    parts.push(rewriteLinks(stripTitle(body), context(file, route)).trim(), "");
     const children = references.map((reference) => {
       const referenceRoute = routeFor(reference, aliasTargets);
       const text = parseFrontmatter(get(reference)).body;
@@ -303,13 +387,12 @@ export async function generatePages({ root, files }) {
       add({ route: referenceRoute, title, nav: title, section: "Skills", parent: route, markdown: `${rewriteLinks(text, context(reference, referenceRoute)).trim()}\n` });
       return { route: referenceRoute, nav: title };
     });
-    if (children.length) parts.push("## References", "", ...children.map((child) => `- [${child.nav}](${pageLink(route, child.route)})`), "");
-    parts.push(...oldNameNote(byName.get(dir)));
+    if (children.length) parts.push("**References**, loaded only when a task needs them:", "", ...children.map((child) => `- [${child.nav}](${pageLink(route, child.route)})`), "");
+    parts.push(...foldedInstructions({ file, body, kind: "skill", links: context(file, route) }), ...oldNameNote(byName.get(dir)));
     const nav = route === "principles/workflow" ? "Workflow governance" : optional ? `${dir} (optional)` : dir;
-    add({ route, title: dir, nav, section: route === "principles/workflow" ? "Principles" : "Skills", markdown: parts.join("\n") });
-    const link = `[${dir}](${pageLink("skills/index", route)})`;
-    if (optional) skillRows.optional.push(`| ${link} | ${optional} | ${firstSentenceOf(data.description)} |`);
-    else skillRows.core.push(`| ${link} | ${firstSentenceOf(data.description)} |`);
+    add({ route, title: dir, nav, section: route === "principles/workflow" ? "Principles" : "Skills", frontmatter: { outline: false }, markdown: parts.join("\n") });
+    const link = `[${dir}](${pageLink("skills/index", route)})${optional ? ` (optional: ${optional.replace(/\.$/, "")})` : ""}`;
+    skillRows[metadata.group].push(`| ${link} | ${why} | ${firstSentenceOf(data.description)} |`);
   }
   add({
     route: "skills/index",
@@ -319,80 +402,88 @@ export async function generatePages({ root, files }) {
     markdown: [
       "# Skills",
       "",
-      "Agents load a skill by matching its name and description, so every skill carries both. The tables give the first sentence of each description.",
+      "A coding agent cannot hold every piece of specialist know-how in its standing instructions; they would grow too long to follow. A skill is know-how it loads only when a task needs it, by matching the skill's name and description. A run that changes no UI never loads the UI skills.",
       "",
-      "## Core skills",
-      "",
-      "The workflow relies on these, whatever your stack.",
-      "",
-      "| Skill | Summary |",
-      "| --- | --- |",
-      ...skillRows.core,
-      "",
-      "## Optional skills",
-      "",
-      "A run uses these only in the situation the second column names, such as one stack or one job.",
-      "",
-      "| Skill | For | Summary |",
-      "| --- | --- | --- |",
-      ...skillRows.optional,
-      "",
+      ...Object.entries(SKILL_GROUPS).flatMap(([group, { title, text }]) => [`## ${title}`, "", text, "", "| Skill | The problem it solves | What it does |", "| --- | --- | --- |", ...skillRows[group], ""]),
     ].join("\n"),
   });
 
-  // Commands: one page each; aliases are mentioned on the page they point at.
+  // Commands: one page each, in the order names.json lists them, which is how
+  // often people use them; aliases are mentioned on the page they point at.
+  const commandOrder = names.filter((entry) => entry.kind === "command").map((entry) => entry.name);
   const commandRows = [];
-  for (const file of commandFiles.filter((name) => !isAlias(get(name))).sort()) {
+  const rank = (file) => commandOrder.indexOf(posix.basename(file, ".md"));
+  for (const file of commandFiles.filter((name) => !isAlias(get(name))).sort((a, b) => rank(a) - rank(b))) {
     const name = posix.basename(file, ".md");
     const route = `commands/${name}`;
     const { data, body } = parseFrontmatter(get(file));
     if (!data.description) throw new DocsError(`${file} has no description`);
+    const why = requireWhy(file, data.why, "`why`");
     // The page leads with the human summary; the agent's own instructions are
     // long, so they sit collapsed below it.
     if (!data.summary?.trim()) throw new DocsError(`${file} has no \`summary\`: add a short one to its frontmatter saying when to use it, what you get and what it needs from you`);
     const entry = byName.get(name);
     const parts = [`# /${name}`, ""];
     if (entry) parts.push(dictionaryEntry(entry));
-    parts.push(data.summary.trim(), "");
-    parts.push(
-      "## Agent instructions",
-      "",
-      `The agent follows the instructions below, from [\`${file}\`](${REPO_URL}/blob/main/${file}). Its one-line description is: ${sentence(data.description)}`,
-      "",
-      "::: details Full agent instructions",
-      "",
-      rewriteLinks(stripTitle(body), context(file, route)).trim(),
-      "",
-      ":::",
-      "",
-      ...oldNameNote(entry),
-    );
+    parts.push(whyLine(why), "", data.summary.trim(), "", ...foldedInstructions({ file, body, kind: "command", description: data.description, links: context(file, route) }), ...oldNameNote(entry));
     // The outline would list the headings folded inside the details block,
-    // which go nowhere while it is closed, so command pages have none.
-    add({ route, title: `/${name}`, nav: `/${name}`, section: "Commands", frontmatter: { outline: false }, markdown: parts.join("\n") });
-    commandRows.push(`| [/${name}](${pageLink("commands/index", route)}) | ${entry?.job ?? ""} | ${firstSentenceOf(data.summary)} |`);
+    // which go nowhere while it is closed, so these pages have none.
+    add({ route, title: `/${name}`, nav: `/${name}`, section: "Commands", order: rank(file), frontmatter: { outline: false }, markdown: parts.join("\n") });
+    commandRows.push(`| [/${name}](${pageLink("commands/index", route)}) | ${why} | ${firstSentenceOf(data.summary)} |`);
   }
-  add({ route: "commands/index", title: "Commands", nav: "All commands", section: "Commands", markdown: ["# Commands", "", "Each command is a Markdown file in `commands/`, shared by all three hosts. Codex runs them as `$mexxi-<name>` skills.", "", "| Command | Job | When to use it |", "| --- | --- | --- |", ...commandRows, ""].join("\n") });
+  add({
+    route: "commands/index",
+    title: "Commands",
+    nav: "All commands",
+    section: "Commands",
+    markdown: [
+      "# Commands",
+      "",
+      "A command is a workflow you start by typing its name in your coding agent's chat, such as `/wettaq show the last sync time on the settings page`. Each is one Markdown file in `commands/`, shared by all three hosts; Codex runs them as `$mexxi-<name>` skills.",
+      "",
+      "They are listed by how often you will use them: `/wettaq` for every change, then the ones you use once per repository or now and then.",
+      "",
+      "| Command | The problem it solves | When to use it |",
+      "| --- | --- | --- |",
+      ...commandRows,
+      "",
+    ].join("\n"),
+  });
 
-  // Agents, with what each host adapter grants.
+  // Agents: what each is, why it is a separate agent, when it runs and what it
+  // cannot do (docs/agents.json, since the shared agent files take no
+  // frontmatter), then what each host grants and the folded instructions.
+  const about = json("docs/agents.json");
+  for (const name of Object.keys(about)) {
+    if (!files.has(`agent/${name}.md`)) throw new DocsError(`docs/agents.json describes ${name}, which has no agent/${name}.md`);
+  }
   const roles = { "ui-designer": "uiDesigner", "code-reviewer": "reviewer" };
   const agentRows = [];
   for (const file of [...files.keys()].filter((name) => /^agent\/[^/]+\.md$/.test(name)).sort()) {
     const name = posix.basename(file, ".md");
     const route = `agents/${name}`;
-    const body = get(file);
+    const facts = about[name] ?? {};
+    const why = requireWhy("docs/agents.json", facts.why, `\`${name}.why\``);
+    for (const key of ["runs", "cannot"]) {
+      if (!facts[key]?.trim()) throw new DocsError(`docs/agents.json: give ${name} a \`${key}\` sentence`);
+    }
     const grants = hostGrants(name, { claude, codex, opencode, schema, role: roles[name] ?? name });
     add({
       route,
       title: name,
       nav: name,
       section: "Agents",
+      frontmatter: { outline: false },
       markdown: [
         `# ${name}`,
         "",
-        claude[name]?.description ?? "",
+        sentence(claude[name]?.description ?? ""),
         "",
-        rewriteLinks(stripTitle(body), context(file, route)).trim(),
+        whyLine(why),
+        "",
+        `**When it runs:** ${facts.runs.trim()}`,
+        "",
+        `**What it cannot do:** ${facts.cannot.trim()}`,
         "",
         "## What each host grants",
         "",
@@ -402,15 +493,45 @@ export async function generatePages({ root, files }) {
         "| --- | --- | --- | --- |",
         ...grants,
         "",
+        ...foldedInstructions({ file, body: get(file), kind: "agent", links: context(file, route) }),
       ].join("\n"),
     });
-    agentRows.push(`| [${name}](${pageLink("agents/index", route)}) | ${claude[name]?.description ?? ""} |`);
+    agentRows.push(`| [${name}](${pageLink("agents/index", route)}) | ${why} | ${facts.runs.trim()} |`);
   }
-  add({ route: "agents/index", title: "Agents", nav: "All agents", section: "Agents", markdown: ["# Agents", "", "| Agent | What it does |", "| --- | --- |", ...agentRows, ""].join("\n") });
+  add({
+    route: "agents/index",
+    title: "Agents",
+    nav: "All agents",
+    section: "Agents",
+    markdown: [
+      "# Agents",
+      "",
+      "Here an agent is a specialist role that the main coding agent hands part of a task to. A separate agent can have fewer powers than the main one, or another model, and that is the point: the reviewer cannot edit code, so it can only judge.",
+      "",
+      "| Agent | The problem it solves | When it runs |",
+      "| --- | --- | --- |",
+      ...agentRows,
+      "",
+    ].join("\n"),
+  });
 
-  // CLI reference from the real --help output.
+  // CLI reference from the real --help output, grouped by who runs each
+  // subcommand. Each subcommand's help carries a "Why:" line, shown first.
   const help = describeHelp(root);
   const ibni = byName.get("ibni");
+  const helpByName = new Map(help.commands.map((command) => [command.name, command]));
+  const grouped = CLI_GROUPS.flatMap((group) => group.names);
+  for (const name of helpByName.keys()) {
+    if (!grouped.includes(name)) throw new DocsError(`ibni ${name} is in no group: add it to CLI_GROUPS in scripts/docs/lib/generate.mjs`);
+  }
+  for (const name of grouped) {
+    if (!helpByName.has(name)) throw new DocsError(`CLI_GROUPS names ibni ${name}, which \`ibni --help\` does not list`);
+  }
+  const subcommand = (name) => {
+    const text = helpByName.get(name).help;
+    const why = requireWhy(`ibni ${name} --help`, text.match(/^Why: (.+)$/m)?.[1], "\"Why:\" line");
+    return [`### ibni ${name}`, "", whyLine(why), "", "```text", text.replace(/\n\nWhy: .+$/m, ""), "```", ""];
+  };
   add({
     route: "cli/index",
     title: "CLI reference",
@@ -420,30 +541,57 @@ export async function generatePages({ root, files }) {
       "# CLI reference",
       "",
       ibni ? dictionaryEntry(ibni) : "",
-      "Every subcommand prints JSON. The text below is each subcommand's own `--help`.",
+      `**You rarely run \`ibni\` yourself.** The coding agent runs it at each step of a task, as [\`/wettaq\`](${pageLink("cli/index", "commands/wettaq")}) instructs. You might use a few of its subcommands now and then; they are listed below.`,
+      "",
+      `**Why it exists.** The steps that matter most, such as giving a task its own worktree and pushing its branch, should not depend on an agent saying it did them right. So \`ibni\` does them in code. It gives each task its own worktree and port, and the agent records with it the exact code its checks passed on. \`ibni\` then refuses to push any other code, or to push by force. [Decision 0004](${pageLink("cli/index", "decisions/0004-isolated-worktree-per-task")}) and [decision 0006](${pageLink("cli/index", "decisions/0006-rules-stay-rules-guard-backs-up")}) explain why.`,
+      "",
+      `Every subcommand prints JSON, so the agent can read the result. A few terms recur: a *session* is one agent conversation, a *workspace* is a kept worktree with its record, and a *gate* is a check a run must pass, such as verify. The [glossary](${pageLink("cli/index", "glossary")}) has the rest.`,
+      "",
+      ...CLI_GROUPS.flatMap((group) => [`## ${group.title}`, "", group.text, "", ...(group.diagram ? ["```mermaid", group.diagram, "```", ""] : []), ...group.names.flatMap(subcommand)]),
+      "## Every subcommand",
+      "",
+      "The tool's own overview, from `ibni --help`:",
       "",
       "```text",
       help.overview,
       "```",
       "",
-      ...help.commands.flatMap(({ name, help: text }) => [`## ibni ${name}`, "", "```text", text, "```", ""]),
       ...oldNameNote(ibni),
     ].join("\n"),
   });
 
-  // Configuration: keys from the schema, links from the installer.
+  // Configuration: the hand-written guide (why two files, common changes),
+  // then every key from the schemas, then what the installer links.
   const { links } = await import(pathToFileURL(path.join(root, "scripts/install.mjs")).href);
   const installation = await links({ home: "~", checkout: root, generated: "<generated>", hosts: { opencode: true, claude: true, codex: true } });
   const groups = Object.entries(schema.properties).filter(([key]) => key !== "$schema");
-  const configuration = ["# Configuration", "", "One file configures mexxi: `~/.config/mexxi/config.json`, or the file `MEXXI_CONFIG` names. Every key is optional; the table gives the default. [`config.example.json`](" + `${REPO_URL}/blob/main/config.example.json` + ") spells them all out.", ""];
+  const guide = parseFrontmatter(get(CONFIGURATION_GUIDE)).body;
+  const keyRows = (properties) => schemaRows({ properties }).map((row) => `| ${codeCell(row.name)} | ${row.type} | ${codeCell(JSON.stringify(row.default))} | ${row.description.replace(/\|/g, "\\|")} |`);
+  const keyTable = ["| Key | Type | Default | What it sets |", "| --- | --- | --- | --- |"];
+  const configuration = [
+    rewriteLinks(guide, context(CONFIGURATION_GUIDE, "configuration/index")).trim(),
+    "",
+    "## Settings in config.json",
+    "",
+    `Every key is optional; the tables give the defaults. [\`config.example.json\`](${REPO_URL}/blob/main/config.example.json) spells them all out. To use another file, name it in \`MEXXI_CONFIG\`.`,
+    "",
+  ];
   for (const [key, group] of groups) {
-    configuration.push(`## ${key}`, "", group.description, "", "| Key | Type | Default | What it sets |", "| --- | --- | --- | --- |");
-    for (const row of schemaRows({ properties: { [key]: group } })) {
-      configuration.push(`| ${codeCell(row.name)} | ${row.type} | ${codeCell(JSON.stringify(row.default))} | ${row.description.replace(/\|/g, "\\|")} |`);
-    }
-    configuration.push("");
+    const why = requireWhy(`config.schema.json: ${key}`, group.why, "`why`");
+    configuration.push(`### ${key}`, "", ...(group.scope ? [`::: info ${group.scope}`, ":::", ""] : []), whyLine(why), "", group.description, "", ...keyTable, ...keyRows({ [key]: group }), "");
   }
-  configuration.push("## What the installer links", "", "`node scripts/install.mjs` links these into each host's home. Destinations are under your home directory; `<checkout>` is `paths.checkout`.", "", "| Host | Destination | Source |", "| --- | --- | --- |", ...installerRows(installation, root, tracked), "");
+  const repositorySchema = json("mexxi.schema.json");
+  configuration.push("## Settings in .mexxi.json", "", repositorySchema.why, "", repositorySchema.description, "", ...keyTable, ...keyRows(repositorySchema.properties), "");
+  configuration.push(
+    "## What the installer links",
+    "",
+    `The installer links one set of files into each host's home, so a change to the workflow reaches every agent. It records what it links and touches nothing else; [decision 0003](${pageLink("configuration/index", "decisions/0003-installer-owns-what-it-records")}) explains why. Destinations are under your home directory. \`<checkout>\` is \`paths.checkout\`, and \`<generated>\` is \`~/.local/share/mexxi/generated\`, where the installer renders each host's files from your \`config.json\`. \`implementation-workspace\` is \`ibni\`'s old name, kept for one release.`,
+    "",
+    "| Host | Destination | Source |",
+    "| --- | --- | --- |",
+    ...installerRows(installation, root, tracked),
+    "",
+  );
   add({ route: "configuration/index", title: "Configuration", nav: "Configuration", section: "Configuration", markdown: configuration.join("\n") });
 
   // Children follow their parent, so listings read in order.
@@ -460,7 +608,7 @@ export function buildSidebar(pages) {
   const order = ["index", "ideas", "reviewing-a-pull-request", "getting-started", "how-a-run-works", "names", "glossary"];
   const itemsFor = (section) => {
     const inSection = pages.filter((page) => page.section === section && !page.parent);
-    const sorted = section === "Start here" ? order.map((route) => inSection.find((page) => page.route === route)).filter(Boolean).concat(inSection.filter((page) => !order.includes(page.route))) : [...inSection].sort((a, b) => (a.route.endsWith("/index") ? -1 : b.route.endsWith("/index") ? 1 : a.nav.localeCompare(b.nav)));
+    const sorted = section === "Start here" ? order.map((route) => inSection.find((page) => page.route === route)).filter(Boolean).concat(inSection.filter((page) => !order.includes(page.route))) : [...inSection].sort((a, b) => (a.route.endsWith("/index") ? -1 : b.route.endsWith("/index") ? 1 : (a.order ?? 0) - (b.order ?? 0) || a.nav.localeCompare(b.nav)));
     return sorted.map((page) => {
       const children = pages.filter((child) => child.parent === page.route);
       return { text: page.nav, link: link(page.route), ...(children.length ? { collapsed: true, items: children.map((child) => ({ text: child.nav, link: link(child.route) })) } : {}) };

@@ -1,6 +1,9 @@
 ---
 name: rendered-qa
 description: Exercise a running UI hands-on and capture evidence — viewports, motion, hydration, scrolling, interaction, keyboard, touch targets, console — then report findings with a severity. Use for /wettaq's rendered pass, before-shots, the /ittestja command, or when a reviewer must close a named rendered-evidence gap. Do not use to design UI or to edit code.
+metadata:
+  why: "Code and stylesheets cannot show what a page actually looks like; a real browser and screenshots can."
+  group: run
 ---
 
 # Rendered QA

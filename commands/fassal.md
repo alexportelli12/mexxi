@@ -1,5 +1,6 @@
 ---
 description: Generate or refine the product's UX principles document
+why: Without written UX principles, every agent makes interface decisions its own way.
 summary: >-
   Use it when a product with a UI has no UX principles yet, or they need refining. You get a
   `UX_PRINCIPLES.md` that /wettaq and the UI designer follow when they make interface

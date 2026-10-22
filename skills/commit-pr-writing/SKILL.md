@@ -1,6 +1,9 @@
 ---
 name: commit-pr-writing
 description: Write outcome-focused commit messages, pull-request titles, and concise pull-request descriptions from completed work and its evidence. Use whenever an agent is preparing commit or pull-request copy, especially during automated implementation delivery; do not use it for Git execution, branching, releases, or repository management.
+metadata:
+  why: "A pull request you have to reverse-engineer from the diff costs more time than the agent saved."
+  group: run
 ---
 
 # Commit And Pull Request Writing

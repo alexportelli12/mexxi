@@ -44,7 +44,7 @@ You review the pull request and decide whether to merge; [Reviewing a mexxi pull
 
 ## What stops an agent talking its way past a step
 
-Part of the delivery step is code: `ibni publish` refuses to push code other than what the agent recorded as passing. Running the checks before recording them is a rule the agent follows, and the pull request's evidence shows the result. The [loop breaker](glossary.md#loop-breaker) tells an agent to stop and re-diagnose when the same command fails a third time. See [the CLI reference](cli/index.md) for each step.
+Part of the delivery step is code: `ibni publish` refuses to push code other than what the agent recorded as passing. Running the checks before recording them is a rule the agent follows, and the pull request's evidence shows the result. The [loop breaker](glossary.md#loop-breaker) tells an agent to stop and re-diagnose when the same command fails a third time. [The CLI reference](cli/index.md#the-agent-s-lifecycle) shows the order in which the agent runs `ibni`, and why each step exists.
 
 The red lines are rules: the agent never merges, force pushes or pushes to the default branch. The [guard](glossary.md#guard) hook is a backup for some of them, not a substitute. A command it lets through is not thereby allowed.
 
