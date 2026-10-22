@@ -8,7 +8,7 @@ reviewed: 2026-10-22
 
 # Reviewing a mexxi pull request
 
-A pull request from [`/wettaq`](../commands/wettaq.md) (build it) is written so you can review it in about a minute. Its first screen tells you whether to merge and what only you can decide. The rest is there when you want to dig in.
+Checking an agent's work is now the slow part, not writing it. So a pull request from [`/wettaq`](../commands/wettaq.md), the command that builds a change, is written to be reviewed in about a minute. Its first screen tells you whether to merge and what only you can decide. The rest is there when you want to dig in.
 
 You still own the merge. mexxi never merges for you.
 
@@ -84,4 +84,4 @@ Read the diff, or ask someone who knows that area, when:
 
 ## Asking for changes
 
-Ask with `/wettaq` and the pull request's link, for example `/wettaq follow up on <pull request URL>: keep the old label as a tooltip`. It picks up the same [worktree](glossary.md#worktree), runs the same gates and updates the same pull request. For a second look without code changes, [`/ittestja`](../commands/ittestja.md) (test the UI) returns a findings report.
+Ask with `/wettaq` and the pull request's link, for example `/wettaq follow up on <pull request URL>: keep the old label as a tooltip`. It picks up the same [worktree](glossary.md#worktree), runs the same gates and updates the same pull request. For a second look without code changes, [`/ittestja`](../commands/ittestja.md), the command that tests a UI by hand in a browser, returns a findings report.

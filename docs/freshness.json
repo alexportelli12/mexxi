@@ -1,6 +1,6 @@
 {
   "README.md": {
-    "sources": ["names.json", "prompts.json", "scripts/install.mjs"],
+    "sources": ["names.json", "prompts.json", "scripts/install.mjs", "scripts/ibni/commands/publish.mjs", "scripts/ibni/commands/record-evidence.mjs"],
     "reviewed": "2026-10-22"
   },
   "site/index.html": {

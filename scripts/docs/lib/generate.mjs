@@ -16,7 +16,8 @@ const posix = path.posix;
 const SECTIONS = ["Start here", "Commands", "Agents", "Skills", "CLI reference", "Configuration", "Under the hood"];
 const UNDER_THE_HOOD = ["Principles", "Decisions"];
 // Hand-written pages are Start here pages unless listed here.
-const HANDWRITTEN_SECTIONS = { "host-details": "Configuration", "migrating-from-coding-agent-config": "Configuration" };
+// The session statistics behind the problems are evidence, not a first read.
+const HANDWRITTEN_SECTIONS = { "host-details": "Configuration", "migrating-from-coding-agent-config": "Configuration", "where-the-problems-come-from": "Principles" };
 
 export class DocsError extends Error {}
 
@@ -454,7 +455,9 @@ export async function generatePages({ root, files }) {
 // Sidebar: sections in a fixed order, hand-written pages first.
 export function buildSidebar(pages) {
   const link = (route) => (route === "index" ? "/" : `/${route}`);
-  const order = ["index", "getting-started", "reviewing-a-pull-request", "how-a-run-works", "names", "glossary"];
+  // Why first: the overview and the ideas, then what a pull request looks like,
+  // then how to set up and what happens in a run.
+  const order = ["index", "ideas", "reviewing-a-pull-request", "getting-started", "how-a-run-works", "names", "glossary"];
   const itemsFor = (section) => {
     const inSection = pages.filter((page) => page.section === section && !page.parent);
     const sorted = section === "Start here" ? order.map((route) => inSection.find((page) => page.route === route)).filter(Boolean).concat(inSection.filter((page) => !order.includes(page.route))) : [...inSection].sort((a, b) => (a.route.endsWith("/index") ? -1 : b.route.endsWith("/index") ? 1 : a.nav.localeCompare(b.nav)));

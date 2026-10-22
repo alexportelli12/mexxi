@@ -19,13 +19,13 @@ export function checkConsistency(files) {
       if (!flat(files.get(page) ?? "").includes(prompt.text)) problems.push(`${page}: must contain the "${key}" prompt from prompts.json`);
     }
   }
-  // The README reads as an argument: the problems, how mexxi solves them, then
+  // The README reads as an argument: the problem, how mexxi solves it, then
   // getting started (where the prompts belong), then where to read more.
   const readmeSections = (files.get("README.md") ?? "").split(/^(?=## )/m).slice(1);
-  const order = [/^## The problems/, /^## How mexxi solves/, /^## Getting started/, /^## Learn more/];
+  const order = [/^## The problem\n/, /^## How mexxi solves/, /^## Getting started/, /^## Learn more/];
   const found = order.map((heading) => readmeSections.findIndex((section) => heading.test(section)));
   if (found[0] !== 0 || found.some((index, at) => index === -1 || (at && index <= found[at - 1]))) {
-    problems.push("README.md: sections must run The problems, How mexxi solves..., Getting started, Learn more, with the problems first");
+    problems.push("README.md: sections must run The problem, How mexxi solves..., Getting started, Learn more, with the problem first");
   }
   const gettingStarted = flat(readmeSections[found[2]] ?? "");
   for (const [key, prompt] of Object.entries(prompts)) {
