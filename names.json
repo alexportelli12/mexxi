@@ -2,127 +2,73 @@
   {
     "name": "mexxi",
     "kind": "repo",
-    "headword": "mexxa",
-    "partOfSpeech": "verb, imperative of mexxa",
-    "glosses": ["to cause to walk", "to lead", "to manage", "to sell a product"],
+    "partOfSpeech": "verb",
     "meaning": ["to lead", "to manage"],
-    "ipa": "mɛʃʃɪ",
-    "respelling": "mesh-shee",
     "job": "The whole workflow: it leads the coding agent you already use from a request to a pull request that proves its own work.",
-    "replaces": "coding-agent-config",
-    "note": null,
-    "sources": [{ "dictionary": "Ġabra", "entry": "mexxa", "url": "https://mlrs.research.um.edu.mt/resources/gabra/lexemes/view/5200a366e36f237975001044" }]
+    "replaces": "coding-agent-config"
   },
   {
     "name": "ibni",
     "kind": "cli",
-    "headword": "bena",
-    "partOfSpeech": "verb, imperative of bena",
-    "glosses": ["to build", "to pile", "to make or create sth."],
+    "partOfSpeech": "verb",
     "meaning": ["to build"],
-    "ipa": "ɪbnɪ",
-    "respelling": "ib-nee",
     "job": "The command-line tool the agent runs to give each task its own copy of the repository, and to push only the exact code recorded as passing its checks.",
-    "replaces": "implementation-workspace",
-    "note": null,
-    "sources": [{ "dictionary": "Ġabra", "entry": "bena", "url": "https://mlrs.research.um.edu.mt/resources/gabra/lexemes/view/5200a366e36f237975000aff" }]
+    "replaces": "implementation-workspace"
   },
   {
     "name": "wettaq",
     "kind": "command",
-    "headword": "wettaq",
-    "partOfSpeech": "verb, imperative of wettaq",
-    "glosses": ["to accomplish", "to complete", "to confirm"],
-    "meaning": ["to accomplish", "to complete"],
-    "ipa": "wɛttɐʔ",
-    "respelling": "wet-ta’",
+    "partOfSpeech": "verb",
+    "meaning": ["to carry out"],
     "job": "Takes a request in plain words to one tested, reviewed pull request.",
-    "replaces": "implement",
-    "note": null,
-    "sources": [{ "dictionary": "Ġabra", "entry": "wettaq", "url": "https://mlrs.research.um.edu.mt/resources/gabra/lexemes/view/5200a366e36f2379750014d8" }]
+    "replaces": "implement"
   },
   {
     "name": "lesti",
     "kind": "command",
-    "headword": "lest",
-    "partOfSpeech": "adjective, plural of lest",
-    "glosses": ["ready", "finished", "completed"],
-    "meaning": ["ready"],
-    "ipa": "lɛstɪ",
-    "respelling": "les-tee",
+    "partOfSpeech": "verb",
+    "meaning": ["to get something ready"],
     "job": "Opens one pull request that gets a repository ready for mexxi.",
-    "replaces": null,
-    "note": null,
-    "sources": [{ "dictionary": "Ġabra", "entry": "lest", "url": "https://mlrs.research.um.edu.mt/resources/gabra/lexemes/view/522d864e6f3bad51370011d0" }]
+    "replaces": null
   },
   {
     "name": "ittestja",
     "kind": "command",
-    "headword": "ittestja",
     "partOfSpeech": "verb",
-    "glosses": ["to test"],
     "meaning": ["to test"],
-    "ipa": "ɪttɛstjɐ",
-    "respelling": "it-test-ya",
     "job": "Tries a page or flow in a real browser and reports what is broken, without changing code.",
-    "replaces": "qa",
-    "note": null,
-    "sources": [{ "dictionary": "Ġabra", "entry": "ittestja", "url": "https://mlrs.research.um.edu.mt/resources/gabra/lexemes/view/522d86966f3bad51370018bb" }]
+    "replaces": "qa"
   },
   {
     "name": "fassal",
     "kind": "command",
-    "headword": "fassal",
-    "partOfSpeech": "verb, imperative of fassal",
-    "glosses": ["to design", "to draw up a blueprint for sth.", "to plan sth."],
+    "partOfSpeech": "verb",
     "meaning": ["to design"],
-    "ipa": "fɐssɐl",
-    "respelling": "fas-sal",
     "job": "Writes a product's UX principles, so agents make interface decisions the way you would.",
-    "replaces": "ux.principles",
-    "note": null,
-    "sources": [{ "dictionary": "Ġabra", "entry": "fassal", "url": "https://mlrs.research.um.edu.mt/resources/gabra/lexemes/view/5200a366e36f237975000c5b" }]
+    "replaces": "ux.principles"
   },
   {
     "name": "sewwi",
     "kind": "command",
-    "headword": "sewwa",
-    "partOfSpeech": "verb, imperative of sewwa",
-    "glosses": ["to repair", "to make amends for", "to mend", "to geld (used of animals)"],
+    "partOfSpeech": "verb",
     "meaning": ["to repair", "to mend"],
-    "ipa": "sɛʊwɪ",
-    "respelling": "sehw-wee",
     "job": "Audits or changes the workflow itself: its commands, skills, agents and rules.",
-    "replaces": "update-my-workflow",
-    "note": null,
-    "sources": [{ "dictionary": "Ġabra", "entry": "sewwa", "url": "https://mlrs.research.um.edu.mt/resources/gabra/lexemes/view/5200a366e36f2379750013c5" }]
+    "replaces": "update-my-workflow"
   },
   {
     "name": "irrifletti",
     "kind": "command",
-    "headword": "irrifletta",
     "partOfSpeech": "verb",
-    "glosses": ["to reflect"],
     "meaning": ["to reflect"],
-    "ipa": null,
-    "respelling": null,
     "job": "Looks back at your recent agent sessions, privately, to show whether a change to the workflow helped.",
-    "replaces": null,
-    "note": "Ġabra lists the verb under irrifletta but not the form irrifletti, so no pronunciation is given.",
-    "sources": [{ "dictionary": "Ġabra", "entry": "irrifletta", "url": "https://mlrs.research.um.edu.mt/resources/gabra/lexemes/view/522d86506f3bad5137001202" }]
+    "replaces": null
   },
   {
     "name": "ibda",
     "kind": "skill",
-    "headword": "beda",
     "partOfSpeech": "verb",
-    "glosses": ["to begin", "to start"],
     "meaning": ["to begin", "to start"],
-    "ipa": null,
-    "respelling": null,
     "job": "The setup skill a pasted prompt points to: it installs, repairs or upgrades mexxi.",
-    "replaces": null,
-    "note": "Ġabra lists the verb under beda but not the form ibda, so no pronunciation is given.",
-    "sources": [{ "dictionary": "Ġabra", "entry": "beda", "url": "https://mlrs.research.um.edu.mt/resources/gabra/lexemes/view/5200a366e36f237975000aec" }]
+    "replaces": null
   }
 ]

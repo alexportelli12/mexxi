@@ -474,11 +474,6 @@ h3 {
   color: var(--text);
 }
 
-.names__key {
-  margin-top: 8px;
-  font-size: 14px;
-}
-
 .dictionary {
   columns: 2 22em;
   column-gap: 48px;
@@ -510,11 +505,6 @@ h3 {
   color: var(--ink);
   font-size: 22px;
   font-weight: 700;
-}
-
-.entry__say {
-  font-variant: small-caps;
-  letter-spacing: 0.03em;
 }
 
 .entry__pos {

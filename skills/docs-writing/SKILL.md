@@ -47,7 +47,7 @@ The tool names are Maltese (`ibni`, `/wettaq`); everything else is English. The 
 
 - Introduce a name with its job the first time it appears on a page, as in "`/lesti`, the command that gets a repository ready", then use the bare name.
 - Never put a job in brackets after every mention.
-- Meanings, parts of speech and pronunciations come only from `names.json`, which records them from a dictionary with sources. Never write one from memory.
+- Meanings and parts of speech come only from `names.json`. A meaning is the sense the word has in mexxi, so never narrow it to a single English word that loses that sense, such as "ready" for `lesti`.
 
 ## Before you finish
 

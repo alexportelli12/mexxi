@@ -167,11 +167,11 @@ function foldedInstructions({ file, body, kind, description, links }) {
 
 const codeCell = (value) => `\`${String(value).replace(/\|/g, "\\|")}\``;
 
-// A name from names.json as a dictionary entry: the word, how to say it, its
-// part of speech and meaning, then its job in mexxi. The trailing {…} is a
+// A name from names.json as a dictionary entry: the word, its part of speech
+// and meaning, then its job in mexxi. The trailing {…} is a
 // VitePress attribute that styles the paragraph; the plain .md copies drop it.
 export function dictionaryEntry(entry, { id = false } = {}) {
-  const head = [`**${entry.name}**`, entry.respelling ? `*${entry.respelling}*` : null, entry.partOfSpeech, `“${entry.meaning.join(", ")}”`].filter(Boolean).join(" · ");
+  const head = [`**${entry.name}**`, entry.partOfSpeech, `“${entry.meaning.join(", ")}”`].join(" · ");
   return `${head}  \n${entry.job} {${id ? `#${entry.name} ` : ""}.dictionary}\n`;
 }
 
@@ -181,9 +181,6 @@ function oldNameNote(entry) {
   const old = entry.kind === "command" ? `/${entry.replaces}` : entry.replaces;
   return [`*Old name: \`${old}\`${entry.kind === "command" ? ", which still works for one release" : ""}.*`, ""];
 }
-
-// How the respellings work, from the transcriptions they come from.
-export const RESPELLING_KEY = "The respellings come from the dictionary's phonetic transcriptions. Doubled letters are held, as in \"book-keeper\", and ’ is a glottal stop, the catch in \"uh-oh\".";
 
 function describeHelp(root) {
   // MEXXI_CONFIG points at the shipped example so no machine-local value can
@@ -283,16 +280,15 @@ export async function generatePages({ root, files }) {
     add({ route, title: titleOf(body, route), nav: titleOf(body, route), section: HANDWRITTEN_SECTIONS[route] ?? "Start here", markdown: rewriteLinks(body, context(file, route)) });
   }
   // The names page is a small dictionary: one entry per name, each with the
-  // page where you meet it and the dictionary entry it comes from.
+  // page where you meet it.
   const nameLink = (entry) => {
     const target = { command: `commands/${entry.name}`, skill: `skills/${entry.name}`, cli: "cli/index", repo: "index" }[entry.kind];
     const label = { command: `the /${entry.name} command`, skill: `the ${entry.name} skill`, cli: "the ibni CLI", repo: "the overview" }[entry.kind];
     return `[${label}](${pageLink("names", target)})`;
   };
-  const sourceLinks = (entry) => entry.sources.map((source) => `[${source.dictionary}, *${source.entry}*](${source.url})`).join(", ");
   const nameEntries = names.flatMap((entry) => [
     dictionaryEntry(entry, { id: true }),
-    `Read more: ${nameLink(entry)}. Source: ${sourceLinks(entry)}.${entry.note ? ` ${entry.note}` : ""}`,
+    `Read more: ${nameLink(entry)}.`,
     "",
   ]);
   // Only the old command names still work, as aliases; the others are history.
@@ -311,15 +307,9 @@ export async function generatePages({ root, files }) {
       "",
       "## The dictionary",
       "",
-      RESPELLING_KEY,
+      "Each meaning is the sense the word has in mexxi; most of these words have others too.",
       "",
       ...nameEntries,
-      "## Where the meanings come from",
-      "",
-      "Every part of speech, meaning and pronunciation above comes from [Ġabra](https://mlrs.research.um.edu.mt/resources/gabra/), the University of Malta's lexicon of Maltese, and each entry links to its source. The live Ġabra site now redirects to the University's home page, so the entries were checked on 22 October 2026 against [Ġabra's own data export of 1 August 2021](https://web.archive.org/web/20211209195107/https://mlrs.research.um.edu.mt/resources/gabra-api/data/gabra_data_2021-08-01.tar.gz), as archived. [Dizzjunarju.mt](https://dizzjunarju.mt/), the National Dictionary of Maltese, was checked first; its first entries do not yet include these words.",
-      "",
-      "Where the dictionary does not list the exact form a tool uses, the entry gives the headword's meaning and leaves the pronunciation out rather than guess it.",
-      "",
       "## Old names",
       "",
       `Some tools had English names before. The old command names still work for one release: ${oldCommands.join("; ")}. The repository and the CLI were renamed too: ${oldOthers.join("; ")}.`,

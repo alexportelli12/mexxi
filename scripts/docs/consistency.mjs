@@ -45,12 +45,17 @@ export function checkConsistency(files) {
       continue;
     }
     const text = visibleText(block);
-    for (const [field, value] of [["respelling", entry.respelling], ["partOfSpeech", entry.partOfSpeech], ["meaning", entry.meaning.join(", ")], ["job", entry.job]]) {
-      if (value && !text.includes(value)) problems.push(`site/index.html: the ${entry.name} entry must show its ${field} from names.json: "${value}"`);
+    // Every part of speech is a short word such as "verb", so it is matched in
+    // its own span rather than anywhere in the entry.
+    const partOfSpeech = visibleText(block.match(/<span class="entry__pos">([\s\S]*?)<\/span>/)?.[1] ?? "").trim();
+    if (partOfSpeech !== entry.partOfSpeech) problems.push(`site/index.html: the ${entry.name} entry must show its partOfSpeech from names.json: "${entry.partOfSpeech}"`);
+    for (const [field, value] of [["meaning", entry.meaning.join(", ")], ["job", entry.job]]) {
+      if (!text.includes(value)) problems.push(`site/index.html: the ${entry.name} entry must show its ${field} from names.json: "${value}"`);
     }
   }
-  // The hero or footer says how to pronounce mexxi and what it means.
+  // The hero or footer says what mexxi means.
   const mexxi = names.find((entry) => entry.name === "mexxi");
-  if (mexxi && !landingText.includes(`mexxi (${mexxi.respelling}): Maltese for “${mexxi.meaning.join(", ")}”`)) problems.push(`site/index.html: give mexxi's pronunciation and meaning as "mexxi (${mexxi.respelling}): Maltese for “${mexxi.meaning.join(", ")}”" from names.json`);
+  // Tags read as spaces, so the word may be followed by " :".
+  if (mexxi && !landingText.replace(/mexxi :/g, "mexxi:").includes(`mexxi: Maltese for “${mexxi.meaning.join(", ")}”`)) problems.push(`site/index.html: give mexxi's meaning as "mexxi: Maltese for “${mexxi.meaning.join(", ")}”" from names.json`);
   return problems;
 }

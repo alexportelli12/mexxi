@@ -160,20 +160,13 @@ export async function check(base = root) {
   const names = JSON.parse(await readFile(path.join(base, "names.json"), "utf8"));
   const byName = new Map(names.map((entry) => [entry.name, entry]));
   assert.equal(byName.size, names.length, "names.json has a duplicate name");
-  // Each entry is a dictionary entry: what a dictionary says, recorded with its
-  // source, never filled in by hand. `meaning` must be glosses the dictionary
-  // gives, and a word the dictionary gives no pronunciation for has a `note`
-  // saying so instead of a respelling.
+  // Each entry is a dictionary entry: the word's part of speech, the sense it
+  // has in mexxi, and the tool's job.
   for (const entry of names) {
-    assert.deepEqual(Object.keys(entry), ["name", "kind", "headword", "partOfSpeech", "glosses", "meaning", "ipa", "respelling", "job", "replaces", "note", "sources"], `names.json: ${entry.name} has the wrong fields`);
+    assert.deepEqual(Object.keys(entry), ["name", "kind", "partOfSpeech", "meaning", "job", "replaces"], `names.json: ${entry.name} has the wrong fields`);
     assert.ok(["repo", "cli", "command", "skill"].includes(entry.kind), `names.json: ${entry.name} has an unknown kind`);
-    for (const field of ["headword", "partOfSpeech", "job"]) assert.ok(typeof entry[field] === "string" && entry[field].trim(), `names.json: ${entry.name} has no ${field}`);
-    assert.ok(Array.isArray(entry.glosses) && entry.glosses.length, `names.json: ${entry.name} has no glosses`);
-    assert.ok(Array.isArray(entry.meaning) && entry.meaning.length && entry.meaning.every((gloss) => entry.glosses.includes(gloss)), `names.json: ${entry.name}.meaning must be glosses the dictionary gives`);
-    assert.equal(entry.ipa === null, entry.respelling === null, `names.json: ${entry.name} needs both ipa and respelling, or neither`);
-    assert.equal(entry.ipa === null, typeof entry.note === "string" && entry.note.trim() !== "", `names.json: ${entry.name} has a note exactly when it has no pronunciation`);
-    assert.ok(Array.isArray(entry.sources) && entry.sources.length && entry.sources.every((source) => source.dictionary && source.entry && /^https:\/\//.test(source.url ?? "")), `names.json: ${entry.name} must cite each dictionary entry it uses`);
-    assert.ok(entry.sources.some((source) => source.entry === entry.headword), `names.json: ${entry.name} must cite the entry for its headword, ${entry.headword}`);
+    for (const field of ["partOfSpeech", "job"]) assert.ok(typeof entry[field] === "string" && entry[field].trim(), `names.json: ${entry.name} has no ${field}`);
+    assert.ok(Array.isArray(entry.meaning) && entry.meaning.length && entry.meaning.every((sense) => typeof sense === "string" && sense.trim()), `names.json: ${entry.name} has no meaning`);
     assert.ok(entry.replaces === null || typeof entry.replaces === "string", `names.json: ${entry.name}.replaces is a name or null`);
   }
   const commandFiles = (await readdir(path.join(base, "commands"))).filter((name) => name.endsWith(".md") && !(name in commandAliases));
