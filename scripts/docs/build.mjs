@@ -46,7 +46,10 @@ export async function buildDocs({ root = repoRoot, out = path.join(root, "docs-s
   await rm(out, { recursive: true, force: true });
   for (const page of pages) {
     await mkdir(path.dirname(path.join(out, `${page.route}.md`)), { recursive: true });
-    await writeFile(path.join(out, `${page.route}.md`), page.markdown);
+    // VitePress options such as `outline` go only on the built page; the plain
+    // copy stays the Markdown itself.
+    const options = Object.entries(page.frontmatter ?? {}).map(([key, value]) => `${key}: ${JSON.stringify(value)}`);
+    await writeFile(path.join(out, `${page.route}.md`), `${options.length ? `---\n${options.join("\n")}\n---\n\n` : ""}${page.markdown}`);
     // A plain copy of each page, for agents and for reading offline.
     await mkdir(path.dirname(path.join(out, "public", `${page.route}.md`)), { recursive: true });
     await writeFile(path.join(out, "public", `${page.route}.md`), page.markdown);

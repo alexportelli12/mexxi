@@ -41,10 +41,12 @@ follow-up information.
 ## Git delivery
 
 Deliver completed work as a pull request without waiting to be asked. Once the
-repository's quality gate (`npm run verify` where it exists) is green, you may
-create a feature branch, commit the intended changes, push that branch, and
-open or update a pull request with the `gh` CLI. If you are on the default
-branch, create a feature branch first, preferably in a linked worktree
+repository's verify command (`npm run verify` unless its committed `.mexxi.json`
+names another) is green, you may create a feature branch, commit the intended
+changes, push that branch, and open or update a pull request with the forge's
+CLI (`gh` on GitHub, `glab` on GitLab).
+If you are on the default branch, create a feature branch first, preferably in
+a linked worktree
 (`git worktree add`) so my checkout stays on its branch; never commit to the
 default branch directly. Delivery belongs to the top-level session: delegated
 agents never commit, push, or open pull requests.
@@ -69,11 +71,12 @@ its architecture, and follow them:
 - [0002 One user config file; host files rendered at install](docs/decisions/0002-one-config-rendered-host-files.md)
 - [0003 The installer owns only what it records](docs/decisions/0003-installer-owns-what-it-records.md)
 - [0004 One isolated worktree per task, run by ibni](docs/decisions/0004-isolated-worktree-per-task.md)
-- [0005 `npm run verify` is each repository's deterministic contract](docs/decisions/0005-verify-is-the-contract.md)
+- [0005 `npm run verify` is each repository's deterministic contract](docs/decisions/0005-verify-is-the-contract.md) (superseded by 0010)
 - [0006 Rules stay rules; deterministic layers back them up](docs/decisions/0006-rules-stay-rules-guard-backs-up.md)
 - [0007 Implementers implement, reviewers judge](docs/decisions/0007-implementers-implement-reviewers-judge.md)
 - [0008 Jev triage runs in shadow, from metadata only](docs/decisions/0008-jev-shadow-metadata-only.md)
 - [0009 Docs are generated from the files they describe](docs/decisions/0009-docs-generated-from-sources.md)
+- [0010 Each repository names its verify command](docs/decisions/0010-repository-names-its-verify-command.md)
 
 To change a decision, add a new record that supersedes it and change only the
 old record's status; never rewrite its reasoning.

@@ -5,9 +5,9 @@ description: Write outcome-focused commit messages, pull-request titles, and con
 
 # Commit And Pull Request Writing
 
-Translate a completed change into copy that lets a reviewer understand its
-purpose, outcome, behavioural impact, validation target, and quality evidence
-without reading the diff.
+Translate a completed change into copy that lets a reviewer decide whether to
+merge without reading the diff: what changed for the user, whether the merge is
+safe, what they must do, and what proved it.
 
 ## Evidence And Precedence
 
@@ -42,63 +42,103 @@ of the change.
 
 ## Pull Request Description
 
-Let a reviewer grasp the purpose and main outcomes within 30 seconds. Start
-with what changed and why it matters, in one or two short sentences. Use the
-application's user-facing language (and its glossary when available); explain
-specialised terms only when they are essential. For architecture work, name
-the capability or boundary gained before describing the machinery.
+The reader is a reviewer who will not read the diff and wants to decide
+whether to merge in about a minute. Everything that decision needs sits in the
+first screen; everything else sits below it or folds away.
 
 Ground the description in the full final diff against the PR's actual base,
 including all commits, and the verified evidence. Session plans explain intent,
-not what shipped. On subsequent delivery, rewrite the title and body to match
-the current whole PR; remove superseded claims, checks and media rather than
-appending an update diary. `/wettaq` owns posting and media publication.
+not what shipped. On every later delivery, rewrite the title and body to match
+the whole PR as it now stands, including the current merge call; never append
+"follow-up" sections or leave the verdict in review comments. `/wettaq` owns
+posting and media publication.
+
+Use the application's user-facing language. Explain or drop workflow names,
+phase numbers and finding IDs; say "easy to undo" or "hard to undo" rather than
+"two-way door" or "one-way door".
 
 ### Shape The Description
 
-Normally aim for about 100–200 words of main-body prose, plus a useful visual.
-This is a guide, not a quota: a straightforward change can be shorter; important
-risks or evidence limits can need more. Do not move essential information out
-of sight just to meet a word count.
-
-Use the smallest structure that explains the change. Follow a repository's
-template when present, keeping each answer concise and checkboxes honest.
-Otherwise, this is a starting shape, not a form to fill mechanically:
+Follow a repository's own template when present, putting the first-screen items
+below at its top. Otherwise use this shape:
 
 ```markdown
-<Outcome and why it matters.>
+<What changed for the user or maintainer, and why, in one or two sentences.>
 
-**Important:** <Material limitation, deployment action or hard-to-reverse effect,
-when present. Keep it above long media.>
+**Merge call:** <Safe to merge | Safe once you <action> | Needs your decision>. <Easy to undo | Hard to undo: <why, in a few words>>. <Deploys on merge, when it does.>
 
-<Focused visual or a few outcome bullets, only if the lead needs them.>
+**Your part:**
+- <A decision only you can make: the options and what each one changes.>
+- <The one check worth doing: where · action · expected result.>
 
-## Evidence
-- <Most useful verified result and any material coverage limit.>
-- <Gates that actually ran.>
+**Evidence:** <verify ✓ · rendered QA ✓ <viewports> · review ✓ <reviewer> · not run: <what>>
 
-**Check:** <Entry point · action · expected result, when useful for human review.>
+<UI changes: one before/after pair of the most important state.>
 
-**Risk / rollback:** <What could break and how to undo it; see below.>
+## What changed
+- <Three to six bullets grouped by behaviour, not by file.>
 
-**Assumptions:** <Unattended runs only; see below.>
+## Decisions and assumptions
+- <Something decided without being asked: the reading taken and the cheapest way to reverse it.>
+
+## Gaps
+- <Known limits and follow-ups.>
+
+<details><summary>Details</summary>
+
+<Supporting depth: other viewports, flake explanations, data tables, and the
+review's out-of-scope or taste-only `low` findings, one line each with why they
+were left.>
+
+</details>
 ```
 
-Choose the two or three outcomes that define the PR, rather than compressing
-every implementation bullet into a dense paragraph. Keep the lead about the
-result; tests, symbols, timeout values and build wiring belong elsewhere only
-when they change a review decision.
+**Length.** Keep the first screen, from the lead to Evidence, to about 120
+words; media goes after Evidence so the evidence stays in view. Keep everything
+visible to about 450 words and never more than 600; past that, fold the rest
+into `<details>`, and if the visible part still cannot fit, say the PR should
+have been split. Omit any section with nothing true to say, except **Merge
+call**, **Your part** and **Evidence**, which every PR has. A straightforward
+change can be the first screen alone.
 
-Avoid repeating the lead in bullets. Omit empty sections, generic assurances,
-routine implementation details, low-value findings, and file-by-file inventories.
-Do not repeat the diff, logs, planning documents or session history. Link an
-existing relevant artifact or use `<details>` only for genuinely useful supporting
-depth; do not create a report just to give the description somewhere to link.
+**Merge call.** Translate the independent reviewer's door and blast radius from
+`code-reviewer` into plain words: how safe the merge is, how hard it is to undo
+and what could break. When no review ran, judge it yourself with
+`code-reviewer`'s door and blast-radius definitions and write
+"(self-assessed)". Give the real undo path only when it is more than reverting
+the PR, such as redeploying or cleaning up data; do not equate a code revert
+with undoing data writes, migrations or an already-deployed change. Anything
+that affects whether to merge, such as a deployment action, a compatibility
+break or a check that could not run, belongs here or in **Your part**, never
+below the first screen.
+
+**Your part.** Say what only the reviewer can do: a product decision, a
+pre- or post-merge action with its exact command, or the shortest human check
+derived from the acceptance criteria. When the repository documents a preview
+deploy (a Firebase Hosting channel, a Vercel preview), put its URL in the check
+so the change can be validated from a phone; never invent one. When there is
+nothing to do, write "Nothing; safe to merge as it is."
+
+**Evidence.** One line of the gates that actually ran, then, only if it changes
+the decision, the most useful proof in plain words, such as "Checkout tests
+cover discounts that would make the total negative." Say what did not run, and
+say when the reviewer shared the implementer's model family. Keep automated
+tests, manual observations and unrun checks distinct. Do not unpack `verify`,
+paste logs, count routine findings resolved, invent fail-then-pass proof, infer
+a passing test from a changed spec, treat an unavailable capture or an
+infrastructure failure as proof, or broaden a local or sampled result into a
+guarantee.
+
+**Decisions and assumptions.** When the run was unattended, or a question went
+unanswered, list each assumption: the open question, the reading taken, and how
+to reverse it. Also list deviations from the request the author was not asked
+for. A question that would have changed the design goes in **Your part** as a
+decision instead.
 
 ### Choose What To Show
 
-Prefer showing when it reduces the explanation, not because a PR needs decoration.
-Pick the smallest view that answers the reviewer's question:
+Show when it saves explanation. Pick the smallest view that answers the
+reviewer's question:
 
 | Change / question | Best starting format |
 | --- | --- |
@@ -108,18 +148,15 @@ Pick the smallest view that answers the reviewer's question:
 | Conditional behaviour: when does each outcome happen? | Simple decision table or short pseudocode |
 | Straightforward fix, configuration or wording | Brief text; no visual needed |
 
-Use one primary visual by default. Add another only when it answers a different,
-important question faster than prose. Replace the explanation it makes redundant.
-Keep diagrams shallow, with only the participants, branches and labels needed to
-explain this change. Distinguish current from intended/future behaviour. Avoid
-symbol-heavy trees, code dumps and miniature diffs that make the reader decode
-the implementation. A diagram explains design; it does not prove execution.
+Use one primary visual, right after Evidence. Keep diagrams shallow and
+distinguish current from intended behaviour; a diagram explains design, it does
+not prove execution. A terminal UI gets a captured screenshot, not a
+hand-drawn mock-up.
 
-**UI media.** Embed URLs returned by `ibni publish-media`;
-capture and publishing safety stay with `rendered-qa` and `/wettaq`. Choose
-the route, state and viewport that best shows the outcome—mobile first for a
-phone-first task. Keep that comparison in the open, near the lead; link or
-collapse secondary states and viewports only when useful. For example:
+**UI media.** Embed URLs returned by `ibni publish-media`; capture and
+publishing safety stay with `rendered-qa` and `/wettaq`. Choose the route,
+state and viewport that best shows the outcome, mobile first for a phone-first
+task, and fold the other viewports:
 
 ```markdown
 | Before | After |
@@ -135,79 +172,36 @@ collapse secondary states and viewports only when useful. For example:
 </details>
 ```
 
-Pair actual before/after captures at comparable routes, states, viewports and
-data. Do not fabricate a before-shot or label a mockup as the running UI; if a
-pair is unavailable, show the verified after-state and state the limit. New UI
-needs no before column. Alt text names the state and viewport; a short caption
-explains what to notice. Include a GIF only when motion or an interaction is
-part of the outcome, not for every animated element. Link original videos
-rather than embedding them. If relevant media cannot be published, say why
-briefly in Evidence without treating an unavailable capture as proof.
-
-### Assumptions
-
-When the run was unattended, or a question went unanswered, the author took the
-most reasonable reading instead of asking. Add an **Assumptions** section after
-the lead and any **Important** note, above media, with one line per assumption:
-the open question, the reading taken, and the cheapest way to reverse it. A
-question that would have changed the design is a review item, so say what the
-reviewer should decide. Omit the section when nothing was assumed.
-
-### Evidence And Material Risks
-
-Give the most useful proof in plain language: the behaviour a test protects,
-what rendered QA exercised, or an observed result with its scope. For example,
-"Checkout tests cover discounts that would make the total negative." List only
-gates that ran, such as `verify ✓ · rendered QA ✓ · review ✓`; do not unpack
-`verify`, paste logs, or count routine findings resolved. Distinguish automated
-tests, manual observations and unrun checks. Do not invent fail-then-pass proof
-or infer a passing test from a changed spec. State sampling or environment
-limits when they affect confidence; local counts are not production estimates,
-and infrastructure failures do not prove behavioural parity. Preserve what a
-measurement actually counted; do not broaden a sample result into a guarantee.
-
-When useful, give the shortest human check derived from acceptance criteria:
-entry point, action and expected result. Link longer existing instructions
-rather than recreating a test plan. When the application repository documents
-a preview deploy (a Firebase Hosting channel, a Vercel preview), put that
-preview's URL in the **Check:** line, so the change can be validated from a
-phone; never invent a URL the repository does not document or the deploy has
-not produced.
-
-List the review's out-of-scope or taste-only `low` findings in one line each,
-with why they were left. If the reviewer had to share the implementer's model
-because no other family was available, say so in Evidence.
-
-Preserve the independent reviewer's door and blast-radius assessment from
-`code-reviewer`, translating it into a concise **Risk / rollback** line: scope
-of possible failure, reversibility and the real undo path. When no review ran,
-mark it "self-assessed" and use that agent's definitions. Do not equate a code
-revert with undoing data writes, migrations or an already-deployed change.
-Material risks, compatibility breaks, required deployment actions and important
-verification gaps stay visible in the main body. If they affect whether to
-merge or use the feature, put them immediately after the lead, above media;
-do not bury them in collapsed details or duplicate them at the bottom.
+Pair actual captures at comparable routes, states, viewports and data. Never
+fabricate a before-shot or label a mockup as the running UI; if a pair is
+unavailable, show the verified after-state and say so in Evidence. New UI needs
+no before column. Alt text names the state and viewport. Include a GIF only when
+motion is part of the outcome, and link videos rather than embedding them.
 
 The visual-selection approach adapts [Matt Pocock's `pr`](https://github.com/mattpocock/skills/blob/main/skills/engineering/pr/SKILL.md)
 and [Dex Horthy's `show-me`](https://github.com/humanlayer/skills/blob/main/plugins/show-me/skills/show-me/SKILL.md).
 Final-diff grounding and refreshing the whole description adapt
 [TanStack AI's PR-description guidance](https://github.com/TanStack/ai/blob/main/.agents/skills/pr-description/SKILL.md).
+The first-screen order comes from a review of 30 recent pull requests (27 made
+with mexxi): the risk call sat in the first screen in 1 of 30 and the evidence
+in 2 of 30, and all 8 descriptions over 1,000 words scored poorly.
 
 ## Final Check
 
-Read the title and body as a busy human reviewer, then perform this editing
-pass before posting (do not print the checklist in the PR):
+Read the title and the first screen as a busy reviewer who will not open the
+diff, then perform this editing pass before posting (do not print the checklist
+in the PR):
 
-- Can the first 30 seconds tell me what changed and why it matters?
-- Does each visual simplify a specific question, with readable labels and
-  honest before/after evidence, rather than duplicate text or expose internals?
-- Are the most important verification result, unrun checks and merge risks easy
-  to find without expanding anything?
-- Can jargon, headings, repeated facts or routine detail be removed without
-  losing meaning? Is remaining technical detail necessary for a review decision?
-- Do the title, outcomes, claims, links, media and rollback advice still match
-  the final whole-PR diff and actual evidence after the latest changes?
+- From the first screen alone, can I tell what changed, whether it is safe to
+  merge, what I must do, and what proved it?
+- Is anything that affects the merge decision below the first screen or
+  folded away?
+- Is the visible text under about 450 words, with no workflow jargon, phase
+  numbers, file-by-file lists or restated title?
+- Does each visual answer a specific question with honest before/after
+  evidence?
+- Do the title, merge call, claims, links and media still match the final
+  whole-PR diff and evidence after the latest changes?
 
 If the draft is still dense, select fewer facts rather than packing more into
-each sentence. Move material risks above media, use available actual before/after
-pairs, and remove numerical or technical detail that does not help the decision.
+each sentence.

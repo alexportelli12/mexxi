@@ -37,6 +37,13 @@ function modelFor(models, name, { crossFamily = false } = {}) {
   return agentRoles[name] ? models[agentRoles[name]] ?? null : null;
 }
 
+// The code-reviewer's grants name the `ocr delegate` commands; with
+// review.tool none it reviews the diff itself, so it gets no ocr grant at all.
+const ocrGrant = /^(?:Bash\()?ocr\b/;
+function withoutOcrGrants(config, grants) {
+  return config.review.tool === "ocr" ? grants : grants.filter((grant) => !ocrGrant.test(grant));
+}
+
 // Claude Code reads one instruction file, so it gets the shared AGENTS.md
 // followed by the rules only its tools need (claude/overlay.md). Rendering the
 // whole file avoids depending on how @imports resolve through a symlink.
@@ -53,7 +60,11 @@ async function renderClaude(checkout, config, files) {
     const body = await sharedAgentBody(checkout, agentName(name));
     const header = ["---", `name: ${name}`];
     const model = modelFor(config.models.claude, name);
-    for (const [key, value] of Object.entries({ ...fields, ...(model ? { model } : {}) })) {
+    // An emptied list must neither fall back to the unfiltered one nor render
+    // as an empty tools line, which Claude Code could read as no restriction.
+    const tools = "tools" in fields ? { tools: withoutOcrGrants(config, fields.tools.split(", ")).join(", ") } : {};
+    if (tools.tools === "") throw new Error(`${name} has no tools left once review.tool ${config.review.tool} removes the ocr grants`);
+    for (const [key, value] of Object.entries({ ...fields, ...tools, ...(model ? { model } : {}) })) {
       if (typeof value !== "string" || value.includes("\n")) throw new Error(`invalid ${name}.${key}`);
       header.push(`${key}: ${JSON.stringify(value)}`);
     }
@@ -97,7 +108,9 @@ async function renderCodex(checkout, config, files) {
   for (const file of (await readdir(path.join(checkout, "commands"))).sort()) {
     if (!file.endsWith(".md")) continue;
     const text = await readFile(path.join(checkout, "commands", file), "utf8");
-    const match = text.match(/^---\ndescription: ([^\n]+)\n---\n/);
+    // `summary` is the docs site's human summary; the agent never needs it, so
+    // it is dropped here and the skill carries only the description.
+    const match = text.match(/^---\ndescription: ([^\n]+)\n(?:summary: >-\n(?: {2}[^\n]+\n)+)?---\n/);
     if (!match) throw new Error(`invalid command header: ${file}`);
     const name = codexCommandSkill(file);
     const body = text.slice(match[0].length);
@@ -120,6 +133,10 @@ async function renderOpencode(checkout, config, files) {
     // opencode.json symlink before reading {file:} references.
     const prompt = `{file:${path.join(checkout, "agent", `${name}.md`)}}`;
     const { description, mode, ...rest } = agent[name];
+    const bash = rest.permission?.bash;
+    if (bash && typeof bash === "object") {
+      rest.permission = { ...rest.permission, bash: Object.fromEntries(withoutOcrGrants(config, Object.keys(bash)).map((key) => [key, bash[key]])) };
+    }
     agent[name] = { description, mode, ...(modelFor(models, name, { crossFamily: true }) ? { model: modelFor(models, name, { crossFamily: true }) } : {}), prompt, ...rest };
   }
   const worktreeRoots = [config.paths.worktreeRoot, ...legacyWorktreeRoots];

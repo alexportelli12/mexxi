@@ -36,7 +36,7 @@ Check each and report the results in one table before going on:
 | Node 22.13 or newer, with npm | `node --version` | Install from https://nodejs.org or the system package manager |
 | git | `git --version` | Install with the system package manager |
 | `gh` for GitHub or `glab` for GitLab, signed in | `gh auth status` or `glab auth status` | Install from https://cli.github.com or https://gitlab.com/gitlab-org/cli, then `gh auth login` or `glab auth login`; a self-hosted forge also needs `forge.hosts` in config.json |
-| `ocr` (OpenCodeReview) | `ocr --version` | The independent review gate needs it; install per https://github.com/alibaba/open-code-review |
+| `ocr` (OpenCodeReview), unless `review.tool` is `none` | `ocr --version` | The independent review's default selection needs it; install per https://github.com/alibaba/open-code-review, or set `review.tool` to `none` so the reviewer reads the diff itself |
 | `ffmpeg` (optional) | `ffmpeg -version` | Only for turning rendered-QA recordings into GIFs; skip if unwanted |
 | `~/.local/bin` on `PATH` | `echo $PATH` | The installer links `ibni` there; offer to add it to the shell profile and wait for a yes |
 
@@ -89,7 +89,8 @@ and on an upgrade alike:
 - **Claude Code's `~/.claude/settings.json`,** merged rather than replaced;
   everything else in it stays the user's:
   - a `permissions.deny` rule, `Bash(<prefix>:*)`, for each `guard.deny`
-    prefix (production deploys, `npm publish`, `gh pr merge`, force pushes);
+    prefix (by default `npm publish`, `gh pr merge`, `gh release create` and
+    force pushes, plus any production deploys the user adds);
   - `env.BASH_MAX_TIMEOUT_MS` from `claude.bashMaxTimeoutMs` (default 15
     minutes), the longest a foreground Bash command may run;
   - `cleanupPeriodDays: 90` from `retro.transcriptRetentionDays`. Claude Code

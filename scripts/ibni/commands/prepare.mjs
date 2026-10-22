@@ -3,7 +3,7 @@ import { copyFile, mkdir, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { workspaceConfig, workspaceRoot, sanitizePrefix, sanitizeSegment } from "../lib/config.mjs";
 import { WorkspaceError } from "../lib/errors.mjs";
-import { provenBaseline } from "../lib/baseline.mjs";
+import { provenBaseline, repositorySettings, verifyCommandFrom } from "../lib/baseline.mjs";
 import { detectForge } from "../lib/forge.mjs";
 import { pathExists } from "../lib/fs.mjs";
 import {
@@ -175,8 +175,10 @@ export async function prepareWorkspace({ cwd = process.cwd(), slug, prefix }) {
 
     const cleanup = await sweepConsumedWorkspaces(repository, config);
     const baseSha = cleanOutput(await git(repository.root, ["rev-parse", "HEAD"]));
+    const settings = await repositorySettings(repository.root, baseSha);
+    const verifyCommand = verifyCommandFrom(settings);
     const forge = await detectForge({ root: repository.root, remote, baseSha, config });
-    const baseline = await provenBaseline(repository.root, baseSha, forge);
+    const baseline = await provenBaseline(repository.root, baseSha, settings, forge);
     const allocation = await allocateWorkspace(
       repository,
       repository.root,
@@ -226,6 +228,7 @@ export async function prepareWorkspace({ cwd = process.cwd(), slug, prefix }) {
         publishedSha: null,
         prUrl: null,
         port,
+        verifyCommand,
         baseline,
         evidenceTreeSha: null,
         evidenceRecordedAt: null,
@@ -246,6 +249,7 @@ export async function prepareWorkspace({ cwd = process.cwd(), slug, prefix }) {
         forgeReason: forge.name ? null : forge.reason,
         evidenceDir,
         port,
+        verifyCommand,
         baseline,
         provisionedEnv,
         cleanup,

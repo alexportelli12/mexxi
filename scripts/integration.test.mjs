@@ -8,7 +8,8 @@ import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { install, parseArguments } from "./install.mjs";
 import { playwrightArguments, registrationCommands } from "./lib/browser.mjs";
-import { ConfigError, loadConfig } from "./lib/config.mjs";
+import { ConfigError, loadConfig, resolveConfig } from "./lib/config.mjs";
+import { renderHostFiles } from "./lib/render.mjs";
 import { claudeHooks } from "./lib/host-hooks.mjs";
 import { check } from "./check-config.mjs";
 
@@ -132,7 +133,8 @@ test("shared setup is idempotent and installs the pinned Verifika skill", async 
   assert.equal(await readlink(path.join(home, ".claude/agents/code-reviewer.md")), path.join(generated, "claude/agents/code-reviewer.md"));
   const opencode = JSON.parse(await readFile(path.join(home, ".config/opencode/opencode.json"), "utf8"));
   assert.equal(opencode.agent["code-reviewer"].prompt, `{file:${path.join(checkout, "agent/code-reviewer.md")}}`);
-  assert.equal(opencode.agent.explore.model, "openai/gpt-5.6-luna");
+  // By default every OpenCode role inherits OpenCode's own model.
+  for (const name of ["general", "explore", "ui-designer", "code-reviewer"]) assert.equal(opencode.agent[name]?.model, undefined, name);
   assert.equal(opencode.permission.external_directory[`${path.join(home, ".local/share/mexxi/worktrees")}/**`], "allow");
 });
 
@@ -431,13 +433,14 @@ test("rendered host files keep command bodies canonical and --check catches drif
 test("models and hosts come from config.json, and --check notices a config change", async (t) => {
   const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-config-render-"));
   t.after(() => rm(home, { recursive: true, force: true }));
-  await configure(home, { hosts: { codex: false }, models: { opencode: { explore: null }, claude: { reviewer: "opus" } } });
+  await configure(home, { hosts: { codex: false }, models: { opencode: { general: "openai/gpt-5.6-luna", uiDesigner: "opencode-go/kimi-k2.7-code" }, claude: { reviewer: "opus" } } });
   await registerPlaywright(home);
   await install({ home, checkout });
   await install({ home, checkout, check: true });
   assert.match(await readFile(path.join(home, ".claude/agents/code-reviewer.md"), "utf8"), /^model: "opus"$/m);
   assert.doesNotMatch(await readFile(path.join(home, ".claude/agents/ui-designer.md"), "utf8"), /^model:/m);
   const opencode = JSON.parse(await readFile(path.join(home, ".config/opencode/opencode.json"), "utf8"));
+  assert.equal(opencode.agent.general.model, "openai/gpt-5.6-luna");
   assert.equal(opencode.agent.explore.model, undefined);
   assert.equal(opencode.agent["ui-designer"].model, "opencode-go/kimi-k2.7-code");
   await assert.rejects(lstat(path.join(home, ".codex")), /ENOENT/);
@@ -475,6 +478,50 @@ test("the cross-family reviewer is the code-reviewer's model on OpenCode and Cod
   const fallback = JSON.parse(await readFile(path.join(home, ".config/opencode/opencode.json"), "utf8"));
   assert.equal(fallback.agent["code-reviewer"].model, "openai/gpt-5.6-luna", "null falls back to the reviewer's model");
   assert.doesNotMatch(await readFile(path.join(home, ".codex/agents/code-reviewer.toml"), "utf8"), /^model =/m);
+});
+
+test("review.tool none takes the ocr grants away from the code-reviewer on every host", async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-review-tool-"));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  await configure(home);
+  await registerPlaywright(home);
+  await install({ home, checkout });
+  const grants = async () => ({
+    claude: (await readFile(path.join(home, ".claude/agents/code-reviewer.md"), "utf8")).match(/^tools: (.*)$/m)[1],
+    opencode: Object.keys(JSON.parse(await readFile(path.join(home, ".config/opencode/opencode.json"), "utf8")).agent["code-reviewer"].permission.bash),
+  });
+  const ocr = await grants();
+  assert.match(ocr.claude, /Bash\(ocr delegate preview \*\), Bash\(ocr delegate rule \*\)/);
+  assert.ok(ocr.opencode.includes("ocr delegate preview*") && ocr.opencode.includes("ocr delegate rule*"));
+
+  await configure(home, { review: { tool: "none" } });
+  await assert.rejects(install({ home, checkout, check: true }), /opencode\.json \(differs[\s\S]*code-reviewer\.md \(differs/);
+  await install({ home, checkout });
+  await install({ home, checkout, check: true });
+  const none = await grants();
+  assert.doesNotMatch(none.claude, /ocr/);
+  assert.equal(none.claude, ocr.claude.replace("Bash(ocr delegate preview *), Bash(ocr delegate rule *), ", ""), "only the ocr grants go");
+  assert.deepEqual(none.opencode, ocr.opencode.filter((key) => !key.startsWith("ocr ")));
+  assert.ok(none.opencode.includes("git diff*"));
+});
+
+test("an agent whose only grants are ocr ones is refused under review.tool none, never rendered with no tools line", async (t) => {
+  const base = await mkdtemp(path.join(os.tmpdir(), "mexxi-ocr-only-"));
+  t.after(() => rm(base, { recursive: true, force: true }));
+  await mkdir(path.join(base, "claude"), { recursive: true });
+  await mkdir(path.join(base, "codex"), { recursive: true });
+  await mkdir(path.join(base, "opencode"), { recursive: true });
+  await mkdir(path.join(base, "agent"), { recursive: true });
+  await mkdir(path.join(base, "commands"), { recursive: true });
+  await writeFile(path.join(base, "AGENTS.md"), "shared\n");
+  await writeFile(path.join(base, "claude/overlay.md"), "overlay\n");
+  await writeFile(path.join(base, "agent/selector.md"), "Select.\n");
+  await writeFile(path.join(base, "claude/agents.json"), JSON.stringify({ selector: { description: "d", tools: "Bash(ocr delegate preview *)" } }));
+  await writeFile(path.join(base, "codex/agents.json"), JSON.stringify({ selector: { description: "d" } }));
+  await writeFile(path.join(base, "opencode/opencode.json"), JSON.stringify({ agent: {} }));
+  const render = async (tool) => renderHostFiles({ checkout: base, config: await resolveConfig({ review: { tool } }) });
+  assert.match((await render("ocr")).get("claude/agents/selector.md"), /^tools: "Bash\(ocr delegate preview \*\)"$/m);
+  await assert.rejects(render("none"), /selector has no tools left once review\.tool none removes the ocr grants/);
 });
 
 test("first run writes a minimal config.json, and only the configured clone may install", async (t) => {
@@ -603,7 +650,7 @@ test("--migrate-from relinks an old checkout's links, then a hand-edited host fi
   await install({ ...options, check: true });
 
   const hostFile = path.join(home, ".local/share/mexxi/generated/opencode/opencode.json");
-  await writeFile(hostFile, (await readFile(hostFile, "utf8")).replace("kimi-k2.7-code", "hand-edited"));
+  await writeFile(hostFile, (await readFile(hostFile, "utf8")).replace('"subagent"', '"hand-edited"'));
   await assert.rejects(install({ ...options, check: true }), /opencode\.json \(differs from config\.json/);
   assert.equal((await install(options)).rendered, 1);
   await install({ ...options, check: true });
@@ -640,6 +687,12 @@ test("Playwright MCP comes from config.json: rendered for OpenCode, printed for 
   await assert.rejects(install({ ...options, check: true }), /claude: Playwright MCP runs @playwright\/mcp@latest, config\.json pins 0\.0\.90; run claude mcp remove/);
   await writeFile(claudeJson, registered.replace(output, "/tmp/opencode-playwright"));
   await assert.rejects(install({ ...options, check: true }), /claude: Playwright MCP writes to \/tmp\/opencode-playwright, config\.json expects/);
+  await writeFile(claudeJson, registered.replace('"--headless"', '"--headless","--browser","chrome"'));
+  await assert.rejects(install({ ...options, check: true }), /claude: Playwright MCP passes --browser chrome, config\.json expects none/);
+  await writeFile(claudeJson, registered.replace("/opt/chrome", "/usr/bin/chromium"));
+  await assert.rejects(install({ ...options, check: true }), /claude: Playwright MCP drives \/usr\/bin\/chromium, config\.json expects \/opt\/chrome/);
+  await writeFile(claudeJson, registered.replace('"--executable-path=/opt/chrome",', ""));
+  await assert.rejects(install({ ...options, check: true }), /claude: Playwright MCP drives no --executable-path, config\.json expects \/opt\/chrome/);
   await writeFile(claudeJson, registered.replace('"--headless"', '"--allow-unrestricted-file-access","--headless"'));
   await assert.rejects(install({ ...options, check: true }), /passes --allow-unrestricted-file-access/);
   await writeFile(claudeJson, "{ not json");
@@ -660,6 +713,36 @@ test("Playwright MCP comes from config.json: rendered for OpenCode, printed for 
   await configure(home, { hosts: { codex: false }, browser: { playwrightMcpVersion: "0.0.90", executablePath: "/opt/chrome", outputDir: output } });
   await install(options);
   await install({ ...options, check: true });
+});
+
+test("with no browser.executablePath, every host runs Playwright's own Chromium (--browser=chromium) and none passes --executable-path", async (t) => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-playwright-default-"));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  const output = path.join(home, "evidence");
+  await configure(home, { browser: { outputDir: output } });
+  const options = { home, checkout };
+  const result = await install(options);
+
+  const { browser } = (await loadConfig({ file: path.join(home, ".config/mexxi/config.json"), home })).config;
+  assert.equal(browser.executablePath, null);
+  const expected = ["npx", "-y", `@playwright/mcp@${browser.playwrightMcpVersion}`, "--headless", "--isolated", "--browser=chromium", `--output-dir=${output}`];
+  const opencode = JSON.parse(await readFile(path.join(home, ".config/opencode/opencode.json"), "utf8"));
+  assert.deepEqual(opencode.mcp.playwright.command, expected);
+  for (const line of Object.values(result.registration)) {
+    assert.ok(line.endsWith(`-- ${expected.join(" ")}`), line);
+    assert.doesNotMatch(line, /--executable-path/);
+  }
+  await registerPlaywright(home);
+  await install({ ...options, check: true });
+
+  // A server still pinned to a browser the config no longer names is drift.
+  const claudeJson = path.join(home, ".claude.json");
+  const registered = await readFile(claudeJson, "utf8");
+  await writeFile(claudeJson, registered.replace('"--headless"', '"--headless","--executable-path=/usr/bin/chromium"'));
+  await assert.rejects(install({ ...options, check: true }), /claude: Playwright MCP drives \/usr\/bin\/chromium, config\.json expects none/);
+  // Without --browser=chromium the server would run the Google Chrome channel instead.
+  await writeFile(claudeJson, registered.replace('"--browser=chromium",', ""));
+  await assert.rejects(install({ ...options, check: true }), /claude: Playwright MCP passes no --browser, config\.json expects --browser chromium/);
 });
 
 test("--migrate-from on a clone still in place stops and names the move-aside sequence", async (t) => {
@@ -692,8 +775,8 @@ test("--migrate-from on a clone still in place stops and names the move-aside se
   await install({ home, checkout, check: true });
 });
 
-// The move from ~/.config/opencode as getting-started.md documents it, run
-// verbatim by bash in a throwaway home: the pre-move layout (the old clone in
+// The move from ~/.config/opencode as docs/migrating-from-coding-agent-config.md
+// documents it, run verbatim by bash in a throwaway home: the pre-move layout (the old clone in
 // place, hosts linked into it) and a new clone, on main, at the default path.
 async function preMoveHome(t) {
   const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-documented-move-"));
@@ -730,8 +813,8 @@ function documentedShell(home, script) {
 }
 
 async function documentedMigration() {
-  const page = await readFile(path.join(checkout, "docs/getting-started.md"), "utf8");
-  const section = page.slice(page.indexOf("If you are moving from the old clone"), page.indexOf("To roll back a completed move"));
+  const page = await readFile(path.join(checkout, "docs/migrating-from-coding-agent-config.md"), "utf8");
+  const section = page.slice(page.indexOf("## Move to the new clone"), page.indexOf("## Roll back"));
   return {
     // Every block of the move, run together as one paste.
     sequence: [...section.matchAll(/```bash\n([\s\S]*?)```/g)].map((block) => block[1]).join(""),
@@ -769,11 +852,11 @@ test("the documented move from ~/.config/opencode stops before moving anything o
   assert.equal(await readFile(settingsFile, "utf8"), JSON.stringify({ env: { BASH_MAX_TIMEOUT_MS: "600000" } }));
 
   // Had it stopped after the move, the recovery line puts the old clone back.
-  assert.ok(recovery, "getting-started.md gives the recovery line");
+  assert.ok(recovery, "migrating-from-coding-agent-config.md gives the recovery line");
   const moved = await documentedShell(home, "mv ~/.config/opencode ~/.config/opencode.pre-move && mkdir ~/.config/opencode");
   assert.equal(moved.code, 0, moved.output);
   await assert.rejects(readFile(path.join(home, ".claude/CLAUDE.md")), /ENOENT/);
-  assert.ok(movedOnceUnder, "getting-started.md says when not to restore");
+  assert.ok(movedOnceUnder, "migrating-from-coding-agent-config.md says when not to restore");
   assert.equal(await documentedRecovery(home, movedOnceUnder), "restore");
   const recovered = await documentedShell(home, recovery);
   assert.equal(recovered.code, 0, recovered.output);
@@ -807,7 +890,7 @@ test("the documented move that stops after the links moved says to fix the cause
   const stopped = await documentedShell(home, `export PATH="${offline}:$PATH"\n${sequence}`);
   assert.notEqual(stopped.code, 0);
   assert.match(stopped.output, /network unreachable\nFix the cause and rerun the install/);
-  assert.ok(movedOnceUnder && rerun, "getting-started.md gives the rule and the rerun command");
+  assert.ok(movedOnceUnder && rerun, "migrating-from-coding-agent-config.md gives the rule and the rerun command");
   assert.equal(await documentedRecovery(home, movedOnceUnder), "rerun");
 
   const rerunResult = await documentedShell(home, `cd ~/workspace/mexxi && ${rerun}`);
@@ -844,7 +927,7 @@ test("ibda's pre-move sequence moves only after a passing dry run, carries over 
   }
   assert.ok(chains.indexOf(moveChain) < chains.indexOf(installChain), "the move comes before the install");
   assert.ok(skill.includes("`rmdir ~/.config/opencode && mv ~/.config/opencode.pre-move ~/.config/opencode`"));
-  // The same rule as getting-started.md for a stop after the links moved.
+  // The same rule as migrating-from-coding-agent-config.md for a stop after the links moved.
   assert.match(section, /`readlink ~\/\.claude\/CLAUDE\.md`[^`]*`~\/\.local\/share\/mexxi\/generated`/);
 });
 
@@ -928,13 +1011,11 @@ test("settings.json gets only the keys mexxi owns, and --check notices a hand-re
   assert.equal(await readFile(settingsFile, "utf8"), "{ not json");
 });
 
-test("the default deny rules are the plan's starter list, and guard has what the Phase 3 guard reads", async () => {
+test("the default deny rules are generic (deploys are personal), and guard has what the Phase 3 guard reads", async () => {
   const { config } = await loadConfig({ file: path.join(os.tmpdir(), "mexxi-no-such-config.json"), home: os.tmpdir() });
   const { desiredSettings } = await import("./lib/claude-settings.mjs");
   assert.deepEqual(desiredSettings(config).deny, [
-    "Bash(firebase deploy:*)", "Bash(npm run deploy:*)", "Bash(npm publish:*)", "Bash(gcloud functions deploy:*)",
-    "Bash(gcloud run deploy:*)", "Bash(vercel --prod:*)", "Bash(netlify deploy --prod:*)", "Bash(gh pr merge:*)",
-    "Bash(gh release create:*)", "Bash(git push --force:*)", "Bash(git push -f:*)",
+    "Bash(npm publish:*)", "Bash(gh pr merge:*)", "Bash(gh release create:*)", "Bash(git push --force:*)", "Bash(git push -f:*)",
   ]);
   assert.deepEqual(config.guard.protectedBranches, []);
   assert.equal(desiredSettings(config).env.BASH_MAX_TIMEOUT_MS, "900000");
@@ -1008,7 +1089,7 @@ test("turning Claude Code off takes back what mexxi added to settings.json and k
   assert.notDeepEqual(JSON.parse(await readFile(settingsFile, "utf8")), mine);
 
   await configure(home, { hosts: { claude: false } });
-  await assert.rejects(install({ ...options, check: true }), /deny entry Bash\(firebase deploy:\*\) was added by mexxi[\s\S]*env\.BASH_MAX_TIMEOUT_MS was added by mexxi[\s\S]*PreToolUse hook .*guard\.mjs was added by mexxi/);
+  await assert.rejects(install({ ...options, check: true }), /deny entry Bash\(npm publish:\*\) was added by mexxi[\s\S]*env\.BASH_MAX_TIMEOUT_MS was added by mexxi[\s\S]*PreToolUse hook .*guard\.mjs was added by mexxi/);
   await install(options);
   assert.deepEqual(JSON.parse(await readFile(settingsFile, "utf8")), mine);
   await install({ ...options, check: true });

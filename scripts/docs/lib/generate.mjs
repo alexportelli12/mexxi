@@ -11,7 +11,12 @@ const posix = path.posix;
 
 // A page is { route, title, nav, section, markdown }. Routes have no extension;
 // "index" is the Start here page.
-const SECTIONS = ["Start here", "Principles", "Decisions", "Commands", "Agents", "Skills", "CLI reference", "Configuration"];
+// "Under the hood" nests Principles and Decisions, which explain why mexxi
+// works as it does; a newcomer needs the other sections first.
+const SECTIONS = ["Start here", "Commands", "Agents", "Skills", "CLI reference", "Configuration", "Under the hood"];
+const UNDER_THE_HOOD = ["Principles", "Decisions"];
+// Hand-written pages are Start here pages unless listed here.
+const HANDWRITTEN_SECTIONS = { "host-details": "Configuration", "migrating-from-coding-agent-config": "Configuration" };
 
 export class DocsError extends Error {}
 
@@ -84,6 +89,7 @@ function nameDetails(entry) {
   const heading = entry.kind === "command" ? `/${entry.name}` : entry.name;
   const lines = [
     `- **Maltese:** \`${heading}\``,
+    `- **Job:** ${entry.job}`,
     `- **Literal meaning:** ${entry.meaning}`,
     `- **What it does:** ${entry.does}`,
   ];
@@ -185,17 +191,17 @@ export async function generatePages({ root, files }) {
   // Start here: the README as it is.
   add({ route: "index", title: titleOf(get("README.md"), "mexxi"), nav: "Overview", section: "Start here", markdown: fromSource("README.md", "index") });
 
-  // The three hand-written pages and the names page.
+  // The hand-written pages and the names page.
   for (const file of [...files.keys()].filter((name) => /^docs\/[^/]+\.md$/.test(name)).sort()) {
     const route = routeFor(file, aliasTargets);
     const { body } = parseFrontmatter(get(file));
-    add({ route, title: titleOf(body, route), nav: titleOf(body, route), section: "Start here", markdown: rewriteLinks(body, context(file, route)) });
+    add({ route, title: titleOf(body, route), nav: titleOf(body, route), section: HANDWRITTEN_SECTIONS[route] ?? "Start here", markdown: rewriteLinks(body, context(file, route)) });
   }
   const nameLink = (entry) => {
     const target = { command: `commands/${entry.name}`, skill: `skills/${entry.name}`, cli: "cli/index", repo: "index" }[entry.kind];
     return `[${entry.kind === "command" ? "/" : ""}${entry.name}](${pageLink("names", target)})`;
   };
-  const nameRows = names.map((entry) => `| ${nameLink(entry)} | ${entry.meaning} | ${entry.does} |`);
+  const nameRows = names.map((entry) => `| ${nameLink(entry)} | ${entry.job} | ${entry.meaning} | ${entry.does} |`);
   add({
     route: "names",
     title: "The names",
@@ -206,8 +212,10 @@ export async function generatePages({ root, files }) {
       "",
       "The tools are named in Maltese, the author's native language, as [Verifika](https://github.com/alexportelli12/verifika) is. Only names are Maltese: the docs, skills, subcommands and flags are English.",
       "",
-      "| Name | Meaning | What it does |",
-      "| --- | --- | --- |",
+      "The README, the landing page and the guides pair a name with its job where it first appears, as in \"`/wettaq` (build it)\". This table is the full list.",
+      "",
+      "| Name | Job | Literal meaning | What it does |",
+      "| --- | --- | --- | --- |",
       ...nameRows,
       "",
       "The old command names stay as aliases for one release.",
@@ -249,7 +257,7 @@ export async function generatePages({ root, files }) {
 
   // Skills (the workflow-for-alex skill is the governance page under Principles).
   const skillFiles = [...files.keys()].filter((name) => /^skills\/[^/]+\/SKILL\.md$/.test(name)).sort();
-  const skillRows = [];
+  const skillRows = { core: [], optional: [] };
   for (const file of skillFiles) {
     const dir = file.split("/")[1];
     const { data, body } = parseFrontmatter(get(file));
@@ -257,7 +265,11 @@ export async function generatePages({ root, files }) {
     if (data.name !== dir) throw new DocsError(`${file}: frontmatter name "${data.name}" must match the folder "${dir}"`);
     const route = routeFor(file, aliasTargets);
     const references = [...files.keys()].filter((name) => name.startsWith(`skills/${dir}/references/`)).sort();
+    // `metadata.optional` marks a skill the core workflow never needs, with
+    // the reason someone would want it (Agent Skills allows a metadata map).
+    const optional = typeof data.metadata === "object" ? data.metadata.optional?.trim() : undefined;
     const parts = [`# ${dir}`, "", sentence(data.description), ""];
+    if (optional) parts.push("::: info Optional skill", `A run uses this skill only in one situation. **When you need it:** ${optional}`, ":::", "");
     if (byName.has(dir)) parts.push(nameDetails(byName.get(dir)));
     parts.push(rewriteLinks(stripTitle(body), context(file, route)).trim(), "");
     const children = references.map((reference) => {
@@ -268,16 +280,39 @@ export async function generatePages({ root, files }) {
       return { route: referenceRoute, nav: title };
     });
     if (children.length) parts.push("## References", "", ...children.map((child) => `- [${child.nav}](${pageLink(route, child.route)})`), "");
-    const nav = route === "principles/workflow" ? "Workflow governance" : dir;
+    const nav = route === "principles/workflow" ? "Workflow governance" : optional ? `${dir} (optional)` : dir;
     add({ route, title: dir, nav, section: route === "principles/workflow" ? "Principles" : "Skills", markdown: parts.join("\n") });
-    skillRows.push(`| [${dir}](${pageLink("skills/index", route)}) | ${firstSentenceOf(data.description)} |`);
+    const link = `[${dir}](${pageLink("skills/index", route)})`;
+    if (optional) skillRows.optional.push(`| ${link} | ${optional} | ${firstSentenceOf(data.description)} |`);
+    else skillRows.core.push(`| ${link} | ${firstSentenceOf(data.description)} |`);
   }
   add({
     route: "skills/index",
     title: "Skills",
     nav: "All skills",
     section: "Skills",
-    markdown: ["# Skills", "", "Agents load a skill by matching its name and description, so every skill carries both. The table gives the first sentence of each description.", "", "| Skill | Summary |", "| --- | --- |", ...skillRows, ""].join("\n"),
+    markdown: [
+      "# Skills",
+      "",
+      "Agents load a skill by matching its name and description, so every skill carries both. The tables give the first sentence of each description.",
+      "",
+      "## Core skills",
+      "",
+      "The workflow relies on these, whatever your stack.",
+      "",
+      "| Skill | Summary |",
+      "| --- | --- |",
+      ...skillRows.core,
+      "",
+      "## Optional skills",
+      "",
+      "A run uses these only in the situation the second column names, such as one stack or one job.",
+      "",
+      "| Skill | For | Summary |",
+      "| --- | --- | --- |",
+      ...skillRows.optional,
+      "",
+    ].join("\n"),
   });
 
   // Commands: one page each; aliases are mentioned on the page they point at.
@@ -287,13 +322,30 @@ export async function generatePages({ root, files }) {
     const route = `commands/${name}`;
     const { data, body } = parseFrontmatter(get(file));
     if (!data.description) throw new DocsError(`${file} has no description`);
-    const parts = [`# /${name}`, "", sentence(data.description), ""];
-    if (byName.has(name)) parts.push(nameDetails(byName.get(name)));
-    parts.push(rewriteLinks(stripTitle(body), context(file, route)).trim(), "");
-    add({ route, title: `/${name}`, nav: `/${name}`, section: "Commands", markdown: parts.join("\n") });
-    commandRows.push(`| [/${name}](${pageLink("commands/index", route)}) | ${sentence(data.description)} |`);
+    // The page leads with the human summary; the agent's own instructions are
+    // long, so they sit collapsed below it.
+    if (!data.summary?.trim()) throw new DocsError(`${file} has no \`summary\`: add a short one to its frontmatter saying when to use it, what you get and what it needs from you`);
+    const entry = byName.get(name);
+    const parts = [`# /${name}${entry ? ` (${entry.job})` : ""}`, "", data.summary.trim(), ""];
+    if (entry) parts.push(nameDetails(entry));
+    parts.push(
+      "## Agent instructions",
+      "",
+      `The agent follows the instructions below, from [\`${file}\`](${REPO_URL}/blob/main/${file}). Its one-line description is: ${sentence(data.description)}`,
+      "",
+      "::: details Full agent instructions",
+      "",
+      rewriteLinks(stripTitle(body), context(file, route)).trim(),
+      "",
+      ":::",
+      "",
+    );
+    // The outline would list the headings folded inside the details block,
+    // which go nowhere while it is closed, so command pages have none.
+    add({ route, title: `/${name}`, nav: `/${name}`, section: "Commands", frontmatter: { outline: false }, markdown: parts.join("\n") });
+    commandRows.push(`| [/${name}](${pageLink("commands/index", route)}) | ${entry?.job ?? ""} | ${firstSentenceOf(data.summary)} |`);
   }
-  add({ route: "commands/index", title: "Commands", nav: "All commands", section: "Commands", markdown: ["# Commands", "", "Each command is a Markdown file in `commands/`, shared by all three hosts. Codex runs them as `$mexxi-<name>` skills.", "", "| Command | What it does |", "| --- | --- |", ...commandRows, ""].join("\n") });
+  add({ route: "commands/index", title: "Commands", nav: "All commands", section: "Commands", markdown: ["# Commands", "", "Each command is a Markdown file in `commands/`, shared by all three hosts. Codex runs them as `$mexxi-<name>` skills.", "", "| Command | Job | When to use it |", "| --- | --- | --- |", ...commandRows, ""].join("\n") });
 
   // Agents, with what each host adapter grants.
   const roles = { "ui-designer": "uiDesigner", "code-reviewer": "reviewer" };
@@ -375,16 +427,18 @@ export async function generatePages({ root, files }) {
 // Sidebar: sections in a fixed order, hand-written pages first.
 export function buildSidebar(pages) {
   const link = (route) => (route === "index" ? "/" : `/${route}`);
-  const order = ["index", "getting-started", "how-a-run-works", "glossary", "names"];
-  const sidebar = [];
-  for (const section of SECTIONS) {
+  const order = ["index", "getting-started", "reviewing-a-pull-request", "how-a-run-works", "names", "glossary"];
+  const itemsFor = (section) => {
     const inSection = pages.filter((page) => page.section === section && !page.parent);
     const sorted = section === "Start here" ? order.map((route) => inSection.find((page) => page.route === route)).filter(Boolean).concat(inSection.filter((page) => !order.includes(page.route))) : [...inSection].sort((a, b) => (a.route.endsWith("/index") ? -1 : b.route.endsWith("/index") ? 1 : a.nav.localeCompare(b.nav)));
-    const items = sorted.map((page) => {
+    return sorted.map((page) => {
       const children = pages.filter((child) => child.parent === page.route);
       return { text: page.nav, link: link(page.route), ...(children.length ? { collapsed: true, items: children.map((child) => ({ text: child.nav, link: link(child.route) })) } : {}) };
     });
-    sidebar.push({ text: section, items });
-  }
-  return sidebar;
+  };
+  return SECTIONS.map((section) =>
+    section === "Under the hood"
+      ? { text: section, collapsed: false, items: UNDER_THE_HOOD.map((group) => ({ text: group, collapsed: true, items: itemsFor(group) })) }
+      : { text: section, items: itemsFor(section) },
+  );
 }

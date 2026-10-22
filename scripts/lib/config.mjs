@@ -106,7 +106,8 @@ export async function resolveConfig(value, { home = os.homedir(), source = "conf
   config.paths.checkout = path.resolve(expandHome(config.paths.checkout, home));
   config.paths.worktreeRoot = path.resolve(expandHome(config.paths.worktreeRoot, home));
   config.retro.output = path.resolve(config.paths.checkout, expandHome(config.retro.output, home));
-  config.browser.executablePath = path.resolve(expandHome(config.browser.executablePath, home));
+  // null leaves the browser to Playwright, so it stays null.
+  if (config.browser.executablePath !== null) config.browser.executablePath = path.resolve(expandHome(config.browser.executablePath, home));
   config.browser.outputDir = path.resolve(expandHome(config.browser.outputDir ?? config.paths.worktreeRoot, home));
   return config;
 }

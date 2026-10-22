@@ -1,6 +1,8 @@
 ---
 name: workflow-for-alex
 description: Design and evolve Alex's global coding-agent workflow configuration. Use when auditing or changing AGENTS.md, agents, commands, skills, implementation orchestration, validation ownership, or workflow governance.
+metadata:
+  optional: "Changing the workflow itself with /sewwi."
 ---
 
 # Workflow Governance
@@ -113,13 +115,14 @@ improvement merely because it is newer.
 
 ## Deterministic quality contract
 
-Repositories using the implementation workflow expose `npm run verify`. The
-repository owns what that command contains. It may combine formatting, lint,
+Repositories using the implementation workflow expose one verify command:
+`npm run verify` by default, or the `verify` their committed `.mexxi.json`
+names. The repository owns what that command contains. It may combine formatting, lint,
 type checks, tests, builds, architecture boundaries, duplication or complexity
 signals, security checks, secrets detection, or other appropriate invariants.
 These are examples, not a universal gauntlet.
 
-The global invariant is the interface: `npm run verify` is the repository's
+The global invariant is the interface: the verify command is the repository's
 authoritative deterministic quality contract. `/wettaq` requires a green
 baseline before implementation (proven by a CI run of the exact base commit
 when the repository names that check in `.mexxi.json`) and a green final result
@@ -131,11 +134,12 @@ request, it installs the verify contract there.
 [Verifika](https://github.com/alexportelli12/verifika) is the recommended
 verification engine, and the one this configuration uses: a repository lists
 its checks in `verifika.config.json` and backs `npm run verify` with
-`verifika --all`. Verifika owns check execution, selection, output, process
+`verifika --all`. A repository that already has another reliable single
+command keeps it and names it in `.mexxi.json`. Verifika owns check execution, selection, output, process
 handling, and logs; its published `verifika` skill, installed from the pinned
 npm package, owns how agents run it and read its results. Do not restate either
-here. Selective runs are implementation feedback; `npm run verify` remains the
-only delivery gate, and implementation lifecycle commands separately enforce
+here. Selective runs are implementation feedback; the verify command remains
+the only delivery gate, and implementation lifecycle commands separately enforce
 workspace and Git safety.
 
 Metrics such as CRAP score and duplication are bounded signals, not global

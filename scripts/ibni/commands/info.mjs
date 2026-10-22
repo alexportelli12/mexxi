@@ -19,5 +19,8 @@ export async function workspaceInfo({ cwd = process.cwd(), sessionId }) {
     ...summary,
     forge: forge.name,
     forgeReason: forge.name ? null : forge.reason,
+    // The code-reviewer's agent text is shared by every host, so the
+    // orchestrator passes it this setting rather than the text being rendered.
+    reviewTool: (await workspaceConfig()).review.tool,
   };
 }
