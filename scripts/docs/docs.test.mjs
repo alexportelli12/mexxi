@@ -217,10 +217,13 @@ test("a command page leads with its summary and folds the agent instructions; a 
   const skills = await readFile(path.join(built.out, "skills/index.md"), "utf8");
   assert.match(skills.split("## UI work")[1].split("## Setup")[0], /\[angular\]\(angular\.md\) \(optional: Angular repositories only\)/);
   assert.match(skills.split("## Setup")[1], /\[ibda\]/);
-  assert.match(wettaq, /\n\*\*The problem it solves:\*\* .+\n\nUse it for any change/);
+  const wettaqWhy = parseFrontmatter(await readFile(path.join(root, "commands/wettaq.md"), "utf8")).data.why;
+  assert.ok(wettaq.includes(`\n${wettaqWhy}\n\nUse it for any change`), "the why is the unlabelled lead sentence");
+  assert.ok((await readFile(path.join(built.out, "commands/wettaq.md"), "utf8")).includes(`${wettaqWhy} {.why}\n`), "the built page styles the why");
+  assert.doesNotMatch(wettaq, /The problem it solves/);
   const cli = await readFile(path.join(built.out, "public/cli/index.md"), "utf8");
   assert.ok(cli.indexOf("## The agent's lifecycle") < cli.indexOf("### ibni prepare") && cli.indexOf("### ibni prepare") < cli.indexOf("### ibni mark-pr") && cli.indexOf("### ibni mark-pr") < cli.indexOf("## Commands you might run"));
-  assert.match(cli, /### ibni cleanup\n\n\*\*The problem it solves:\*\* /);
+  assert.match(cli, /### ibni cleanup\n\n(?!\*\*)[^\n]+\n\n```text/);
   assert.match(await readFile(path.join(built.out, "public/agents/code-reviewer.md"), "utf8"), /\*\*What it cannot do:\*\* .+\n[\s\S]*::: details Full agent instructions/);
   const configuration = await readFile(path.join(built.out, "public/configuration/index.md"), "utf8");
   assert.ok(configuration.indexOf("## Common changes") < configuration.indexOf("## Settings in config.json"));
