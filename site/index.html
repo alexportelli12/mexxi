@@ -190,29 +190,72 @@
       </section>
 
       <section class="section container" aria-labelledby="demo-title">
-        <h2 id="demo-title" class="section__title">See the difference</h2>
+        <h2 id="demo-title" class="section__title">Same request, two pull requests</h2>
         <p class="demo__intro">
-          The same request, "show the last sync time on the settings page", given to the same agent
-          twice in a small demo app. You can read both pull requests in full.
+          One request, “show the last sync time on the settings page”, given to the same agent twice
+          in a small demo app. Here is what each pull request tells you about the questions a reviewer asks.
         </p>
-        <ul class="features features--two">
-          <li class="feature demo">
-            <h3>Without mexxi</h3>
-            <p>A list of what changed and "verify passes". Nobody opened the page, and you have to work out whether it is safe to merge.</p>
-            <a class="demo__shot" href="https://github.com/alexportelli12/mexxi-demo/pull/1">
-              <img src="demo/without-mexxi.png" width="634" height="651" loading="lazy" alt="The pull request description written without mexxi: a What section and a Testing section, no screenshots." />
-            </a>
-            <a class="text-link" href="https://github.com/alexportelli12/mexxi-demo/pull/1">Read the pull request <span aria-hidden="true">→</span></a>
-          </li>
-          <li class="feature demo">
-            <h3>With mexxi</h3>
-            <p>The merge call, the one check worth doing, the evidence and before-and-after screenshots, all on the first screen.</p>
-            <a class="demo__shot" href="https://github.com/alexportelli12/mexxi-demo/pull/2">
-              <img src="demo/with-mexxi.png" width="634" height="920" loading="lazy" alt="The pull request description written with mexxi: a merge call, your part, an evidence line and before and after screenshots of the settings page." />
-            </a>
-            <a class="text-link" href="https://github.com/alexportelli12/mexxi-demo/pull/2">Read the pull request <span aria-hidden="true">→</span></a>
-          </li>
-        </ul>
+        <figure class="demo__card">
+          <div class="demo__card-shots">
+            <div>
+              <p class="demo__card-label">Before</p>
+              <img src="demo/sync-card-before.png" width="374" height="208" loading="lazy" alt="The Cloud sync card with only a Sync now button." />
+            </div>
+            <div>
+              <p class="demo__card-label">After</p>
+              <img src="demo/sync-card-after.png" width="374" height="208" loading="lazy" alt="The Cloud sync card reading Last synced just now beside the Sync now button." />
+            </div>
+          </div>
+          <figcaption>The demo app’s Cloud sync card, before and after the change.</figcaption>
+        </figure>
+        <table class="compare">
+          <thead>
+            <tr>
+              <th scope="col">Without mexxi</th>
+              <th scope="col">With mexxi</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><th colspan="2" scope="colgroup">What changed for the user?</th></tr>
+            <tr>
+              <td>The Cloud sync card shows when notes last synced, and a failed sync says so.</td>
+              <td>The same, worded as “Last synced 5 minutes ago” or “Not synced yet”.</td>
+            </tr>
+          </tbody>
+          <tbody>
+            <tr><th colspan="2" scope="colgroup">Does it work?</th></tr>
+            <tr>
+              <td><code>npm run verify</code> passes; no new tests.</td>
+              <td>Verify passes with 4 new tests, checked in a browser at 3 sizes, reviewed twice.</td>
+            </tr>
+          </tbody>
+          <tbody>
+            <tr><th colspan="2" scope="colgroup">What does it look like?</th></tr>
+            <tr>
+              <td>Described in words; no screenshots.</td>
+              <td>Before and after shots, plus the never-synced and failed states.</td>
+            </tr>
+          </tbody>
+          <tbody>
+            <tr><th colspan="2" scope="colgroup">Is it safe to merge?</th></tr>
+            <tr>
+              <td>No call made; it notes there are no API or store changes.</td>
+              <td>Safe to merge and easy to undo: a page-only change.</td>
+            </tr>
+          </tbody>
+          <tbody>
+            <tr><th colspan="2" scope="colgroup">What’s left for me?</th></tr>
+            <tr>
+              <td>Not stated.</td>
+              <td>Press <strong>Sync now</strong> on Settings and check it reads “Last synced just now”.</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="demo__links">
+          Read both in full:
+          <a class="text-link" href="https://github.com/alexportelli12/mexxi-demo/pull/1">without mexxi</a> and
+          <a class="text-link" href="https://github.com/alexportelli12/mexxi-demo/pull/2">with mexxi</a>.
+        </p>
       </section>
 
       <section class="section container" aria-labelledby="hosts-title">
