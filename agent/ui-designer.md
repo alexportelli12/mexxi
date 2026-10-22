@@ -44,8 +44,8 @@ Infer the mode from the task and keep its boundary clear.
 - Make requested changes directly. Use targeted checks useful to the work,
   including a brief rendered self-check of the primary journey at mobile and
   desktop widths; `rendered-qa` covers technique and where evidence goes. Do
-  not run the full repository validation gauntlet; the orchestrator owns final
-  `npm run verify` and the rendered QA pass.
+  not run the full repository validation gauntlet; the orchestrator owns the
+  final verify command and the rendered QA pass.
 - Fix meaningful implementation issues you find and re-check them. This is
   implementation validation, not the independent final UI judgement gate.
 

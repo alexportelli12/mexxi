@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { DEFAULT_VERIFY_COMMAND } from "./baseline.mjs";
 import { WorkspaceError } from "./errors.mjs";
 import { canonicalPath, pathExists } from "./fs.mjs";
 import { cleanOutput, git } from "./git.mjs";
@@ -93,6 +94,12 @@ export async function updateMetadata(session, changes) {
   session.metadata = metadata;
 }
 
+// Sessions prepared before repositories could name their verify command used
+// the default.
+export function sessionVerifyCommand(metadata) {
+  return metadata.verifyCommand ?? DEFAULT_VERIFY_COMMAND;
+}
+
 export function workspaceSummary(entry) {
   const { metadata } = entry;
   if (!metadata) return null;
@@ -104,6 +111,7 @@ export function workspaceSummary(entry) {
     state: metadata.state,
     prUrl: metadata.prUrl,
     port: metadata.port ?? null,
+    verifyCommand: sessionVerifyCommand(metadata),
     defaultBranch: metadata.defaultBranch,
     baseSha: metadata.baseSha,
     publishedSha: metadata.publishedSha,

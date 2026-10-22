@@ -16,7 +16,7 @@ Handing an agent a task and hoping for the best goes wrong in four ways.
 ## How mexxi solves each one
 
 - **A fresh worktree per task.** `ibni prepare` creates a locked worktree, branch and free port, so parallel tasks never collide. Merged worktrees are swept on the way in.
-- **A green `verify` before and after.** The work starts from a passing `npm run verify` and ends with one. `ibni publish` pushes only a tree whose passing run is recorded.
+- **A green `verify` before and after.** The work starts from a passing run of the repository's verify command (`npm run verify` by default) and ends with one. `ibni publish` pushes only a tree whose passing run is recorded.
 - **Rendered QA.** The agent drives the running UI at three viewports and checks motion, keyboard use, touch targets and console errors. The pull request shows before and after.
 - **An independent reviewer.** A read-only reviewer judges substantial changes, and calls how risky the merge is.
 - **Guardrails in code as well as in the rules.** A hook backs up the rules against force pushes, merges and pushes to the default branch. Claude Code and OpenCode run it before every shell command, and Codex does once you trust it in `/hooks`. A loop breaker stops a third identical failure. A command fixer quotes globs and keeps pipe failures visible.

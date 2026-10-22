@@ -12,6 +12,7 @@ export const info = {
   "state": "pr-open",
   "prUrl": "https://github.com/alexportelli12/example/pull/42",
   "port": 4300,
+  "verifyCommand": "npm run verify",
   "defaultBranch": "trunk",
   "baseSha": "0f0d0cb4d62a1627b2939e8705f0d8958b7959b9",
   "publishedSha": "dbbaed3077fe4576974b32f8e7f29db3f7cb3761",

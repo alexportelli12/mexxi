@@ -26,8 +26,8 @@ applicable.
    delegation mechanics.
 3. If the reviewer reports relevant tests or specs excluded from its
    selection, add narrowly scoped `include` rules to the repository's
-   `.opencodereview/rule.json`, preserving existing rules, rerun
-   `npm run verify`, and invoke the reviewer again. A run halted for coverage
+   `.opencodereview/rule.json`, preserving existing rules, rerun the verify
+   command (`verifyCommand`), and invoke the reviewer again. A run halted for coverage
    is not a review pass.
 
 If delegation or rule resolution fails, the review gate is not clear; report
@@ -59,10 +59,10 @@ taste is left alone and listed in the pull request. Keep a concise finding
 ledger in session context only: each finding's severity and disposition, and the
 remediation for each blocker.
 
-If discovery has no applicable blockers, fix any in-scope lows, rerun
-`npm run verify`, and the gate is complete. Otherwise, batch all blocker and
+If discovery has no applicable blockers, fix any in-scope lows, rerun the
+verify command, and the gate is complete. Otherwise, batch all blocker and
 in-scope low fixes (delegate only when specialist expertise helps, never to the
-reviewer), rerun `npm run verify`, refresh rendered evidence when UI is
+reviewer), rerun the verify command, refresh rendered evidence when UI is
 affected, and invoke the same reviewer once in `confirmation` mode with the
 original requirements, the ledger, a concise remediation summary, the current
 diff, verification status, and rendered evidence.
@@ -96,8 +96,8 @@ the previous session's id stops working. If adopt refuses, report its
 diagnostic and stop; never infer ownership of a retained worktree any other
 way. Then run `ibni sync --session "<sessionId>"` before changing anything,
 refresh the contract for the new request, and establish a green baseline by
-running `npm run verify` (`prepare`'s baseline citation applies only to a fresh
-workspace). Then follow the normal gates of `/wettaq` through delivery;
+running the verify command (`verifyCommand` from `adopt`'s output; `prepare`'s
+baseline citation applies only to a fresh workspace). Then follow the normal gates of `/wettaq` through delivery;
 publication updates the existing branch and `mark-pr` records the same URL
 again. Rewrite the description for the whole pull request as it now stands,
 with a current merge call, rather than appending a follow-up section.

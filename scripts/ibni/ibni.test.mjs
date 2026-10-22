@@ -1028,7 +1028,7 @@ test("publish explains how to proceed when evidence is missing or stale", async 
   await advanceRemote(fixture);
   const stale = await lifecycle(fixture, prepared.json.worktreePath, "publish", { session: prepared.json.sessionId });
   assert.equal(stale.json.requiresRevalidation, true);
-  assert.match(stale.json.nextAction, /npm run verify.*record-evidence.*publish again/);
+  assert.match(stale.json.nextAction, /verify command \(npm run verify\).*record-evidence.*publish again/);
 });
 
 // The configured URL names a GitHub repository while insteadOf routes the
@@ -1566,11 +1566,15 @@ exec "${realGit}" "$@"
   assert.equal(published.json.published, true);
 });
 
-async function optInToBaselineReuse(fixture, ciCheck = "verify") {
+async function commitRepositorySettings(fixture, content, message = "set .mexxi.json") {
   await git(fixture.seed, "pull", "--quiet", "origin", "trunk");
-  const sha = await commit(fixture.seed, ".mexxi.json", `${JSON.stringify({ ciCheck })}\n`, "name the CI check");
+  const sha = await commit(fixture.seed, ".mexxi.json", content, message);
   await git(fixture.seed, "push", "--quiet", "origin", "trunk");
   return sha;
+}
+
+async function optInToBaselineReuse(fixture, ciCheck = "verify") {
+  return commitRepositorySettings(fixture, `${JSON.stringify({ ciCheck })}\n`, "name the CI check");
 }
 
 async function setCheckRuns(fixture, runs) {
@@ -1631,6 +1635,42 @@ test("prepare runs the baseline when the CI run cannot be proven for the exact b
     assert.match(prepared.json.baseline.reason, reason, name);
     assert.equal(prepared.json.baseline.url, undefined, name);
   }
+});
+
+test("prepare reports npm run verify as the verify command unless .mexxi.json names one", async (t) => {
+  const fixture = await createFixture(t);
+  const plain = await lifecycle(fixture, fixture.control, "prepare", { slug: "default verify" });
+  assert.equal(plain.json.verifyCommand, "npm run verify");
+
+  await optInToBaselineReuse(fixture);
+  const checkOnly = await lifecycle(fixture, fixture.control, "prepare", { slug: "check only" });
+  assert.equal(checkOnly.json.verifyCommand, "npm run verify");
+
+  await commitRepositorySettings(fixture, `${JSON.stringify({ verify: "  make check ", ciCheck: "verify" })}\n`);
+  const named = await lifecycle(fixture, fixture.control, "prepare", { slug: "named verify" });
+  assert.equal(named.json.verifyCommand, "make check");
+  assert.equal(JSON.parse(await metadataFile(named.json.worktreePath)).verifyCommand, "make check");
+  const info = await lifecycle(fixture, fixture.control, "info", { session: named.json.sessionId });
+  assert.equal(info.json.verifyCommand, "make check");
+  const earlier = await lifecycle(fixture, fixture.control, "info", { session: plain.json.sessionId });
+  assert.equal(earlier.json.verifyCommand, "npm run verify");
+});
+
+test("prepare refuses a .mexxi.json whose verify command it cannot trust", async (t) => {
+  const fixture = await createFixture(t);
+  const cases = {
+    "an empty verify": [`${JSON.stringify({ verify: " " })}\n`, /verify that is not a non-empty command string/],
+    "a non-string verify": [`${JSON.stringify({ verify: ["make", "check"] })}\n`, /verify that is not a non-empty command string/],
+    "invalid JSON": ["{ verify: make check }\n", /not a JSON object/],
+    "a JSON array": ["[]\n", /not a JSON object/],
+  };
+  for (const [name, [content, message]] of Object.entries(cases)) {
+    await commitRepositorySettings(fixture, content, name);
+    const refused = await lifecycle(fixture, fixture.control, "prepare", { slug: name }, [2]);
+    assert.match(refused.stderr, message, name);
+  }
+  const list = await lifecycle(fixture, fixture.control, "list");
+  assert.equal(list.json.workspaces.length, 0);
 });
 
 // A gh stand-in that keeps labels and issues in a JSON file, and logs what it
