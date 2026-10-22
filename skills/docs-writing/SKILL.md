@@ -15,7 +15,7 @@ One voice for the docs site and every Markdown file a person reads here. The `pr
 Readers include developers who have never handed a task to a coding agent. Every page, section and generated entry opens with the problem it solves, in plain words, before it says how anything works.
 
 - Open a page with what goes wrong without it, or what it lets the reader do. Mechanics come after.
-- Commands, agents, skills, config groups and `ibni` subcommands each carry a `why`: one plain sentence naming the problem it solves. It lives in a command's frontmatter, a skill's `metadata`, `docs/agents.json`, `config.schema.json` and each subcommand's `--help`. The docs generator shows it first and fails when one is missing. Write it for a newcomer: no workflow jargon, and do not restate the name.
+- Commands, agents, skills, config groups and `ibni` subcommands each carry a `why`: one plain sentence naming the problem it solves. It lives in a command's frontmatter, a skill's `metadata`, `docs/agents.json`, `config.schema.json` and each subcommand's `--help`. The docs generator shows it first, as the entry's unlabelled lead sentence, and fails when one is missing. So write it to stand on its own, and never start it with a label such as "The problem it solves". Write it for a newcomer: no workflow jargon, and do not restate the name.
 - Give each step or setting a reason in a few words: "picks a free port, so two tasks can run development servers at once", not "picks a free port".
 - Prefer a concrete example to an abstract rule.
 
