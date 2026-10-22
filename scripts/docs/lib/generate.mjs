@@ -85,20 +85,23 @@ const stripTitle = (body) => body.replace(/^\s*# .*\n+/, "");
 const titleOf = (body, fallback) => body.match(/^# (.+)$/m)?.[1].trim() ?? fallback;
 const codeCell = (value) => `\`${String(value).replace(/\|/g, "\\|")}\``;
 
-function nameDetails(entry) {
-  const heading = entry.kind === "command" ? `/${entry.name}` : entry.name;
-  const lines = [
-    `- **Maltese:** \`${heading}\``,
-    `- **Job:** ${entry.job}`,
-    `- **Literal meaning:** ${entry.meaning}`,
-    `- **What it does:** ${entry.does}`,
-  ];
-  if (entry.replaces) {
-    const old = entry.kind === "command" ? `/${entry.replaces}` : entry.replaces;
-    lines.push(`- **Replaces:** \`${old}\`${entry.kind === "command" ? ", which still works for one release" : ""}`);
-  }
-  return `${lines.join("\n")}\n`;
+// A name from names.json as a dictionary entry: the word, how to say it, its
+// part of speech and meaning, then its job in mexxi. The trailing {…} is a
+// VitePress attribute that styles the paragraph; the plain .md copies drop it.
+export function dictionaryEntry(entry, { id = false } = {}) {
+  const head = [`**${entry.name}**`, entry.respelling ? `*${entry.respelling}*` : null, entry.partOfSpeech, `“${entry.meaning.join(", ")}”`].filter(Boolean).join(" · ");
+  return `${head}  \n${entry.job} {${id ? `#${entry.name} ` : ""}.dictionary}\n`;
 }
+
+// The old name moves to a small note at the bottom of the page.
+function oldNameNote(entry) {
+  if (!entry?.replaces) return [];
+  const old = entry.kind === "command" ? `/${entry.replaces}` : entry.replaces;
+  return [`*Old name: \`${old}\`${entry.kind === "command" ? ", which still works for one release" : ""}.*`, ""];
+}
+
+// How the respellings work, from the transcriptions they come from.
+export const RESPELLING_KEY = "The respellings come from the dictionary's phonetic transcriptions. Doubled letters are held, as in \"book-keeper\", and ’ is a glottal stop, the catch in \"uh-oh\".";
 
 function describeHelp(root) {
   // MEXXI_CONFIG points at the shipped example so no machine-local value can
@@ -197,11 +200,23 @@ export async function generatePages({ root, files }) {
     const { body } = parseFrontmatter(get(file));
     add({ route, title: titleOf(body, route), nav: titleOf(body, route), section: HANDWRITTEN_SECTIONS[route] ?? "Start here", markdown: rewriteLinks(body, context(file, route)) });
   }
+  // The names page is a small dictionary: one entry per name, each with the
+  // page where you meet it and the dictionary entry it comes from.
   const nameLink = (entry) => {
     const target = { command: `commands/${entry.name}`, skill: `skills/${entry.name}`, cli: "cli/index", repo: "index" }[entry.kind];
-    return `[${entry.kind === "command" ? "/" : ""}${entry.name}](${pageLink("names", target)})`;
+    const label = { command: `the /${entry.name} command`, skill: `the ${entry.name} skill`, cli: "the ibni CLI", repo: "the overview" }[entry.kind];
+    return `[${label}](${pageLink("names", target)})`;
   };
-  const nameRows = names.map((entry) => `| ${nameLink(entry)} | ${entry.job} | ${entry.meaning} | ${entry.does} |`);
+  const sourceLinks = (entry) => entry.sources.map((source) => `[${source.dictionary}, *${source.entry}*](${source.url})`).join(", ");
+  const nameEntries = names.flatMap((entry) => [
+    dictionaryEntry(entry, { id: true }),
+    `Read more: ${nameLink(entry)}. Source: ${sourceLinks(entry)}.${entry.note ? ` ${entry.note}` : ""}`,
+    "",
+  ]);
+  // Only the old command names still work, as aliases; the others are history.
+  const renamed = (kind) => names.filter((entry) => entry.replaces && (kind === "command") === (entry.kind === "command"));
+  const oldCommands = renamed("command").map((entry) => `\`/${entry.name}\` was \`/${entry.replaces}\``);
+  const oldOthers = renamed("other").map((entry) => `\`${entry.name}\` was \`${entry.replaces}\``);
   add({
     route: "names",
     title: "The names",
@@ -210,15 +225,22 @@ export async function generatePages({ root, files }) {
     markdown: [
       "# The names",
       "",
-      "The tools are named in Maltese, the author's native language, as [Verifika](https://github.com/alexportelli12/verifika) is. Only names are Maltese: the docs, skills, subcommands and flags are English.",
+      "mexxi's tools are named in Maltese, the author's native language, as [Verifika](https://github.com/alexportelli12/verifika) is. Each name is an everyday Maltese word for what the tool does, so once you know the word, you know the job. Only the names are Maltese: the docs, skills, subcommands and flags are in English.",
       "",
-      "The README, the landing page and the guides pair a name with its job where it first appears, as in \"`/wettaq` (build it)\". This table is the full list.",
+      "## The dictionary",
       "",
-      "| Name | Job | Literal meaning | What it does |",
-      "| --- | --- | --- | --- |",
-      ...nameRows,
+      RESPELLING_KEY,
       "",
-      "The old command names stay as aliases for one release.",
+      ...nameEntries,
+      "## Where the meanings come from",
+      "",
+      "Every part of speech, meaning and pronunciation above comes from [Ġabra](https://mlrs.research.um.edu.mt/resources/gabra/), the University of Malta's lexicon of Maltese, and each entry links to its source. The live Ġabra site now redirects to the University's home page, so the entries were checked on 22 October 2026 against [Ġabra's own data export of 1 August 2021](https://web.archive.org/web/20211209195107/https://mlrs.research.um.edu.mt/resources/gabra-api/data/gabra_data_2021-08-01.tar.gz), as archived. [Dizzjunarju.mt](https://dizzjunarju.mt/), the National Dictionary of Maltese, was checked first; its first entries do not yet include these words.",
+      "",
+      "Where the dictionary does not list the exact form a tool uses, the entry gives the headword's meaning and leaves the pronunciation out rather than guess it.",
+      "",
+      "## Old names",
+      "",
+      `Some tools had English names before. The old command names still work for one release: ${oldCommands.join("; ")}. The repository and the CLI were renamed too: ${oldOthers.join("; ")}.`,
       "",
     ].join("\n"),
   });
@@ -268,9 +290,10 @@ export async function generatePages({ root, files }) {
     // `metadata.optional` marks a skill the core workflow never needs, with
     // the reason someone would want it (Agent Skills allows a metadata map).
     const optional = typeof data.metadata === "object" ? data.metadata.optional?.trim() : undefined;
-    const parts = [`# ${dir}`, "", sentence(data.description), ""];
+    const parts = [`# ${dir}`, ""];
+    if (byName.has(dir)) parts.push(dictionaryEntry(byName.get(dir)));
+    parts.push(sentence(data.description), "");
     if (optional) parts.push("::: info Optional skill", `A run uses this skill only in one situation. **When you need it:** ${optional}`, ":::", "");
-    if (byName.has(dir)) parts.push(nameDetails(byName.get(dir)));
     parts.push(rewriteLinks(stripTitle(body), context(file, route)).trim(), "");
     const children = references.map((reference) => {
       const referenceRoute = routeFor(reference, aliasTargets);
@@ -280,6 +303,7 @@ export async function generatePages({ root, files }) {
       return { route: referenceRoute, nav: title };
     });
     if (children.length) parts.push("## References", "", ...children.map((child) => `- [${child.nav}](${pageLink(route, child.route)})`), "");
+    parts.push(...oldNameNote(byName.get(dir)));
     const nav = route === "principles/workflow" ? "Workflow governance" : optional ? `${dir} (optional)` : dir;
     add({ route, title: dir, nav, section: route === "principles/workflow" ? "Principles" : "Skills", markdown: parts.join("\n") });
     const link = `[${dir}](${pageLink("skills/index", route)})`;
@@ -326,8 +350,9 @@ export async function generatePages({ root, files }) {
     // long, so they sit collapsed below it.
     if (!data.summary?.trim()) throw new DocsError(`${file} has no \`summary\`: add a short one to its frontmatter saying when to use it, what you get and what it needs from you`);
     const entry = byName.get(name);
-    const parts = [`# /${name}${entry ? ` (${entry.job})` : ""}`, "", data.summary.trim(), ""];
-    if (entry) parts.push(nameDetails(entry));
+    const parts = [`# /${name}`, ""];
+    if (entry) parts.push(dictionaryEntry(entry));
+    parts.push(data.summary.trim(), "");
     parts.push(
       "## Agent instructions",
       "",
@@ -339,6 +364,7 @@ export async function generatePages({ root, files }) {
       "",
       ":::",
       "",
+      ...oldNameNote(entry),
     );
     // The outline would list the headings folded inside the details block,
     // which go nowhere while it is closed, so command pages have none.
@@ -392,7 +418,7 @@ export async function generatePages({ root, files }) {
     markdown: [
       "# CLI reference",
       "",
-      ibni ? nameDetails(ibni) : "",
+      ibni ? dictionaryEntry(ibni) : "",
       "Every subcommand prints JSON. The text below is each subcommand's own `--help`.",
       "",
       "```text",
@@ -400,6 +426,7 @@ export async function generatePages({ root, files }) {
       "```",
       "",
       ...help.commands.flatMap(({ name, help: text }) => [`## ibni ${name}`, "", "```text", text, "```", ""]),
+      ...oldNameNote(ibni),
     ].join("\n"),
   });
 

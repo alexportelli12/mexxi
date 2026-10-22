@@ -31,22 +31,26 @@ export function checkConsistency(files) {
   for (const [key, prompt] of Object.entries(prompts)) {
     if (!gettingStarted.includes(prompt.text)) problems.push(`README.md: the "${key}" prompt belongs in Getting started`);
   }
-  // The full names table lives on one page, the generated names page. The
-  // README and the landing page link to it, and pair every command and the CLI
-  // with its job at least once, as in "/wettaq (build it)", so a reader learns
-  // what a Maltese name does where they meet it.
-  const readme = flat(files.get("README.md") ?? "");
-  const readmeText = readme.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/`/g, "");
-  const pages = [
-    { file: "README.md", text: readmeText, linksNames: /\]\(https:\/\/alexportelli12\.github\.io\/mexxi\/docs\/names\.html\)/.test(readme) },
-    { file: "site/index.html", text: landingText, linksNames: /href="docs\/names\.html"/.test(landing) },
-  ];
-  for (const page of pages) {
-    if (!page.linksNames) problems.push(`${page.file}: link to the names page (docs/names.html), which holds the full names table`);
-    for (const entry of names.filter((item) => item.kind === "command" || item.kind === "cli")) {
-      const shown = entry.kind === "command" ? `/${entry.name}` : entry.name;
-      if (!page.text.includes(`${shown} (${entry.job})`)) problems.push(`${page.file}: pair ${shown} with its job at least once, as "${shown} (${entry.job})" from names.json`);
+  // The full dictionary lives on one page, the generated names page, and the
+  // README and the landing page link to it.
+  const readme = files.get("README.md") ?? "";
+  if (!/\]\(https:\/\/alexportelli12\.github\.io\/mexxi\/docs\/names\.html\)/.test(readme)) problems.push("README.md: link to the names page (docs/names.html), which holds the dictionary");
+  if (!/href="docs\/names\.html"/.test(landing)) problems.push("site/index.html: link to the names page (docs/names.html), which holds the dictionary");
+  // The landing page's dictionary section is static HTML, so each entry, marked
+  // data-name="<name>", must say what names.json says, word for word.
+  for (const entry of names) {
+    const block = landing.match(new RegExp(`<li[^>]*data-name="${entry.name}"[^>]*>([\\s\\S]*?)</li>`))?.[1];
+    if (!block) {
+      problems.push(`site/index.html: the names section needs an entry with data-name="${entry.name}"`);
+      continue;
+    }
+    const text = visibleText(block);
+    for (const [field, value] of [["respelling", entry.respelling], ["partOfSpeech", entry.partOfSpeech], ["meaning", entry.meaning.join(", ")], ["job", entry.job]]) {
+      if (value && !text.includes(value)) problems.push(`site/index.html: the ${entry.name} entry must show its ${field} from names.json: "${value}"`);
     }
   }
+  // The hero or footer says how to pronounce mexxi and what it means.
+  const mexxi = names.find((entry) => entry.name === "mexxi");
+  if (mexxi && !landingText.includes(`mexxi (${mexxi.respelling}): Maltese for “${mexxi.meaning.join(", ")}”`)) problems.push(`site/index.html: give mexxi's pronunciation and meaning as "mexxi (${mexxi.respelling}): Maltese for “${mexxi.meaning.join(", ")}”" from names.json`);
   return problems;
 }

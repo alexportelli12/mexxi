@@ -8,12 +8,17 @@
   --muted: #9aa2ad;
   --accent: #f4b860; /* mexxi's amber */
   --string: #ecd0a4;
+  --paper: #f1e9da; /* the dictionary's page */
+  --ink: #1d1a16;
+  --ink-muted: #5d554a;
 
   --font-sans:
     -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto, "Helvetica Neue", Arial,
     sans-serif;
   --font-mono:
     ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  /* Dictionary entries set the word in a book face, as a printed dictionary would. */
+  --font-book: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
 
   --radius: 10px;
   --gutter: 24px;
@@ -169,6 +174,24 @@ pre {
   padding-bottom: 44px;
 }
 
+.hero__word {
+  margin-bottom: 20px;
+  font-family: var(--font-book);
+  font-size: 15px;
+  font-style: italic;
+}
+
+.hero__word a {
+  color: var(--string);
+  text-decoration: underline;
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 4px;
+}
+
+.hero__word a:hover {
+  text-decoration-color: var(--accent);
+}
+
 .hero h1 {
   max-width: 14em;
   font-size: clamp(2.25rem, 1.4rem + 3.4vw, 3.5rem);
@@ -191,18 +214,6 @@ pre {
   color: var(--text);
 }
 
-.hero__needs {
-  max-width: 44em;
-  margin-top: 28px;
-  color: var(--muted);
-  font-size: 15px;
-}
-
-.hero__needs strong,
-.hero__needs code,
-.hero__meta code {
-  color: var(--text);
-}
 
 .prompts {
   display: grid;
@@ -239,6 +250,25 @@ pre {
   font-size: 13px;
   line-height: 1.65;
   overflow-wrap: anywhere;
+}
+
+.prompt__note {
+  margin-top: auto;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.prompt__step {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  margin-right: 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: 50%;
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-size: 11px;
 }
 
 .hero__links {
@@ -280,9 +310,9 @@ pre {
 }
 
 .hero__meta {
-  margin-top: 16px;
+  margin-top: 20px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .copy {
@@ -345,6 +375,10 @@ h3 {
   grid-template-columns: repeat(3, 1fr);
 }
 
+.steps--four {
+  grid-template-columns: repeat(4, 1fr);
+}
+
 .features {
   grid-template-columns: repeat(3, 1fr);
 }
@@ -386,78 +420,174 @@ h3 {
   font-size: 12px;
 }
 
-/* Code blocks */
-
-.code-block {
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
+.section__more {
+  margin-top: 20px;
+  font-size: 15px;
 }
 
-.steps + .code-block {
-  margin-top: 24px;
+/* The shift: three short statements, the last one mexxi's answer. */
+
+.shift {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  padding: 0;
+  list-style: none;
 }
 
-.code-block__bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: 44px;
-  padding-inline: 16px 6px;
-  border-bottom: 1px solid var(--border);
+.shift__item {
+  padding: 20px 0 0;
+  border-top: 2px solid var(--border-strong);
+  font-size: 17px;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+
+.shift__item--mexxi {
+  border-top-color: var(--accent);
+}
+
+.shift__label {
+  margin-bottom: 8px;
   color: var(--muted);
   font-family: var(--font-mono);
   font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
 }
 
-.code-block pre {
-  padding: 20px;
-  overflow-x: auto;
-  font-size: 13px;
-  line-height: 1.7;
-  tab-size: 2;
-}
-
-.t-k {
-  color: var(--text);
-}
-
-.t-s {
-  color: var(--string);
-}
-
-.t-n {
+.shift__item--mexxi .shift__label {
   color: var(--accent);
 }
 
-.t-p,
-.t-c {
+/* Names: a page from a small dictionary, the one light surface on the page. */
+
+.names__intro {
+  max-width: 40em;
+  margin-bottom: 32px;
   color: var(--muted);
+  font-size: 16px;
 }
 
-/* Names */
+.names__intro .section__title {
+  margin-bottom: 12px;
+  color: var(--text);
+}
 
-.names__why {
-  margin-top: 16px;
-  color: var(--muted);
-  font-size: 15px;
+.names__key {
+  margin-top: 8px;
+  font-size: 14px;
+}
+
+.dictionary {
+  columns: 2 22em;
+  column-gap: 48px;
+  margin: 0;
+  padding: 32px 36px;
+  border-radius: var(--radius);
+  background: var(--paper);
+  color: var(--ink);
+  list-style: none;
+}
+
+.entry {
+  break-inside: avoid;
+  padding-block: 12px;
+  border-bottom: 1px solid rgb(29 26 22 / 0.12);
+  font-family: var(--font-book);
+  line-height: 1.45;
+}
+
+.entry:last-child {
+  border-bottom: none;
+}
+
+.entry__head {
+  color: var(--ink-muted);
+}
+
+.entry__word {
+  color: var(--ink);
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.entry__say {
+  font-variant: small-caps;
+  letter-spacing: 0.03em;
+}
+
+.entry__pos {
+  font-style: italic;
+}
+
+.entry__meaning {
+  margin-top: 2px;
+  font-size: 17px;
+}
+
+.entry__meaning::before {
+  content: "“";
+}
+
+.entry__meaning::after {
+  content: "”";
+}
+
+.entry__job {
+  margin-top: 4px;
+  color: var(--ink-muted);
+  font-family: var(--font-sans);
+  font-size: 14px;
+}
+
+.entry__job code {
+  margin-right: 4px;
+  color: var(--ink);
+  font-weight: 600;
 }
 
 /* Get started */
 
 .start {
   display: grid;
-  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
-  gap: 32px;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  gap: 40px;
   align-items: start;
 }
 
-.start__notes {
+.start__needs h3 + .needs {
+  margin-top: 8px;
+}
+
+.needs + h3 {
+  margin-top: 24px;
+}
+
+.needs {
   display: grid;
-  gap: 16px;
+  gap: 8px;
+  padding-left: 18px;
   color: var(--muted);
   font-size: 15px;
+}
+
+.needs strong,
+.needs code,
+.start__then code {
+  color: var(--text);
+}
+
+.start__steps .prompts {
+  grid-template-columns: 1fr;
+  margin-top: 0;
+}
+
+.start__then {
+  margin-top: 16px;
+  color: var(--muted);
+  font-size: 15px;
+  overflow-wrap: anywhere;
 }
 
 .text-link {
@@ -511,8 +641,16 @@ h3 {
 
 /* Responsive */
 
+@media (max-width: 960px) {
+  .steps--four {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
 @media (max-width: 860px) {
-  .steps {
+  .steps,
+  .steps--four,
+  .shift {
     grid-template-columns: 1fr;
   }
 
@@ -557,6 +695,10 @@ h3 {
 
   .step,
   .feature {
+    padding: 20px;
+  }
+
+  .dictionary {
     padding: 20px;
   }
 }
