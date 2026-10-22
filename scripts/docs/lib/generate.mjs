@@ -145,7 +145,9 @@ function requireWhy(where, value, field) {
   if (typeof value !== "string" || !value.trim()) throw new DocsError(`${where} has no ${field}: add one plain sentence saying what problem it solves`);
   return sentence(value);
 }
-const whyLine = (why) => `**The problem it solves:** ${why}`;
+// The why opens the entry as its lead sentence, unlabelled: the sentence
+// names the problem itself, so a label would only repeat itself on every page.
+const whyLine = (why) => `${why} {.why}`;
 
 // The agent's own instructions are long, so the page leads with the human
 // summary and folds them below it.
@@ -379,6 +381,11 @@ export async function generatePages({ root, files }) {
     });
     if (children.length) parts.push("**References**, loaded only when a task needs them:", "", ...children.map((child) => `- [${child.nav}](${pageLink(route, child.route)})`), "");
     parts.push(...foldedInstructions({ file, body, kind: "skill", links: context(file, route) }), ...oldNameNote(byName.get(dir)));
+    // A skill adapted from another project credits it at the bottom.
+    if (metadata.credit) {
+      if (!/^https:\/\//.test(metadata.upstream ?? "")) throw new DocsError(`${file}: a skill with \`metadata.credit\` needs \`metadata.upstream\`, the original's URL`);
+      parts.push(`*${metadata.credit} [The original](${metadata.upstream}) · [its licence](${REPO_URL}/blob/main/skills/${dir}/LICENSE.txt).*`, "");
+    }
     const nav = route === "principles/workflow" ? "Workflow governance" : optional ? `${dir} (optional)` : dir;
     add({ route, title: dir, nav, section: route === "principles/workflow" ? "Principles" : "Skills", frontmatter: { outline: false }, markdown: parts.join("\n") });
     const link = `[${dir}](${pageLink("skills/index", route)})${optional ? ` (optional: ${optional.replace(/\.$/, "")})` : ""}`;
@@ -394,7 +401,7 @@ export async function generatePages({ root, files }) {
       "",
       "A coding agent cannot hold every piece of specialist know-how in its standing instructions; they would grow too long to follow. A skill is know-how it loads only when a task needs it, by matching the skill's name and description. A run that changes no UI never loads the UI skills.",
       "",
-      ...Object.entries(SKILL_GROUPS).flatMap(([group, { title, text }]) => [`## ${title}`, "", text, "", "| Skill | The problem it solves | What it does |", "| --- | --- | --- |", ...skillRows[group], ""]),
+      ...Object.entries(SKILL_GROUPS).flatMap(([group, { title, text }]) => [`## ${title}`, "", text, "", "| Skill | Why | What it does |", "| --- | --- | --- |", ...skillRows[group], ""]),
     ].join("\n"),
   });
 
@@ -433,7 +440,7 @@ export async function generatePages({ root, files }) {
       "",
       "They are listed by how often you will use them: `/wettaq` for every change, then the ones you use once per repository or now and then.",
       "",
-      "| Command | The problem it solves | When to use it |",
+      "| Command | Why | When to use it |",
       "| --- | --- | --- |",
       ...commandRows,
       "",
@@ -467,9 +474,9 @@ export async function generatePages({ root, files }) {
       markdown: [
         `# ${name}`,
         "",
-        sentence(claude[name]?.description ?? ""),
-        "",
         whyLine(why),
+        "",
+        sentence(claude[name]?.description ?? ""),
         "",
         `**When it runs:** ${facts.runs.trim()}`,
         "",
@@ -498,7 +505,7 @@ export async function generatePages({ root, files }) {
       "",
       "Here an agent is a specialist role that the main coding agent hands part of a task to. A separate agent can have fewer powers than the main one, or another model, and that is the point: the reviewer cannot edit code, so it can only judge.",
       "",
-      "| Agent | The problem it solves | When it runs |",
+      "| Agent | Why | When it runs |",
       "| --- | --- | --- |",
       ...agentRows,
       "",
