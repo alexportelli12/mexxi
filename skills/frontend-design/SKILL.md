@@ -5,6 +5,8 @@ license: Complete terms in LICENSE.txt
 metadata:
   why: "Generated interfaces tend to look the same, templated and generic."
   group: ui
+  credit: "Adapted from Anthropic's frontend-design skill, under the Apache License 2.0, and changed for mexxi."
+  upstream: "https://github.com/anthropics/skills/tree/main/skills/frontend-design"
 ---
 
 # Frontend Design

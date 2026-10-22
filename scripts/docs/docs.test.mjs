@@ -217,6 +217,8 @@ test("a command page leads with its summary and folds the agent instructions; a 
   const skills = await readFile(path.join(built.out, "skills/index.md"), "utf8");
   assert.match(skills.split("## UI work")[1].split("## Setup")[0], /\[angular\]\(angular\.md\) \(optional: Angular repositories only\)/);
   assert.match(skills.split("## Setup")[1], /\[ibda\]/);
+  // A skill adapted from another project credits it and links its licence.
+  assert.match(await readFile(path.join(built.out, "public/skills/frontend-design.md"), "utf8"), /\*Adapted from Anthropic's frontend-design skill.+\[its licence\]\(https:\/\/github\.com\/alexportelli12\/mexxi\/blob\/main\/skills\/frontend-design\/LICENSE\.txt\)\.\*\n*$/);
   const wettaqWhy = parseFrontmatter(await readFile(path.join(root, "commands/wettaq.md"), "utf8")).data.why;
   assert.ok(wettaq.includes(`\n${wettaqWhy}\n\nUse it for any change`), "the why is the unlabelled lead sentence");
   assert.ok((await readFile(path.join(built.out, "commands/wettaq.md"), "utf8")).includes(`${wettaqWhy} {.why}\n`), "the built page styles the why");

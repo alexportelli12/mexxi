@@ -61,3 +61,4 @@ OpenCodeReview
 [Ll]inters?
 [Ss]ubcommands?(?:'s)?
 [Ff]rontmatter
+Anthropic(?:'s)?
