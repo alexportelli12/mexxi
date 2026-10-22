@@ -1,10 +1,13 @@
 ---
 name: skill-creator
 description: Create new skills, modify and improve existing skills, and measure skill performance. Use when users want to create a skill from scratch, edit, or optimize an existing skill, run evals to test a skill, benchmark skill performance with variance analysis, or optimize a skill's description for better triggering accuracy.
+license: Complete terms in LICENSE.txt
 metadata:
   optional: "Writing and testing your own skills."
   why: "A skill that never loads, or loads at the wrong time, is worse than none."
   group: mexxi
+  credit: "Adapted from Anthropic's skill-creator skill, under the Apache License 2.0, and changed for mexxi."
+  upstream: "https://github.com/anthropics/skills/tree/main/skills/skill-creator"
 ---
 
 # Skill Creator

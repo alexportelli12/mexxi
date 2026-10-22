@@ -379,6 +379,11 @@ export async function generatePages({ root, files }) {
     });
     if (children.length) parts.push("**References**, loaded only when a task needs them:", "", ...children.map((child) => `- [${child.nav}](${pageLink(route, child.route)})`), "");
     parts.push(...foldedInstructions({ file, body, kind: "skill", links: context(file, route) }), ...oldNameNote(byName.get(dir)));
+    // A skill adapted from another project credits it at the bottom.
+    if (metadata.credit) {
+      if (!/^https:\/\//.test(metadata.upstream ?? "")) throw new DocsError(`${file}: a skill with \`metadata.credit\` needs \`metadata.upstream\`, the original's URL`);
+      parts.push(`*${metadata.credit} [The original](${metadata.upstream}) · [its licence](${REPO_URL}/blob/main/skills/${dir}/LICENSE.txt).*`, "");
+    }
     const nav = route === "principles/workflow" ? "Workflow governance" : optional ? `${dir} (optional)` : dir;
     add({ route, title: dir, nav, section: route === "principles/workflow" ? "Principles" : "Skills", frontmatter: { outline: false }, markdown: parts.join("\n") });
     const link = `[${dir}](${pageLink("skills/index", route)})${optional ? ` (optional: ${optional.replace(/\.$/, "")})` : ""}`;

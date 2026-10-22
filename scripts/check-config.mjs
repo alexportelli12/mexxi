@@ -203,6 +203,12 @@ export async function check(base = root) {
       throw error;
     });
     if (text) {
+      // A skill adapted from someone else's ships its licence and says whose
+      // it was, so the two always go together.
+      const licensed = await access(path.join(base, "skills", name, "LICENSE.txt")).then(() => true, () => false);
+      const frontmatter = text.split(/^---$/m)[1] ?? "";
+      const credited = /^\s+credit: \S/m.test(frontmatter) && /^\s+upstream: "?https:\/\//m.test(frontmatter);
+      assert.equal(credited, licensed, `skills/${name}: an adapted skill needs both LICENSE.txt and metadata.credit with metadata.upstream; an original one needs neither`);
       assert.doesNotMatch(text, /opencode\/autoinvoke/);
       assert.doesNotMatch(text, /(?:openai|opencode-go)\/[a-z0-9.-]+/i);
     }
