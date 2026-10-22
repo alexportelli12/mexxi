@@ -1,5 +1,10 @@
 ---
 description: Open one pull request that makes this repository mexxi-ready, fixing whatever it lacks and any checks that already fail
+summary: >-
+  Use it once per repository, before your first /wettaq run. You get one pull request that
+  adds an `npm run verify` gate, short agent docs and review settings, and fixes the checks
+  that already fail. It needs nothing from you up front; where tests are missing it records a
+  gap for you instead of inventing them.
 ---
 
 # Lesti: $ARGUMENTS

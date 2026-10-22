@@ -1,5 +1,11 @@
 ---
 description: Investigate and implement a request through verified pull request creation
+summary: >-
+  Use it for any change you would hand to a developer: a feature, a fix, or a follow-up on
+  an open pull request. You get one pull request that is tested, checked in a browser when the
+  UI changes, and reviewed, with the decisions it took listed for you. It needs a request in
+  plain words, a repository whose `npm run verify` passes, and your answers to the product
+  questions the code cannot settle.
 ---
 
 # Implement: $ARGUMENTS

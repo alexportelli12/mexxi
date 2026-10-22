@@ -1,7 +1,7 @@
 {
   "README.md": {
     "sources": ["names.json", "prompts.json", "scripts/install.mjs"],
-    "reviewed": "2026-10-21"
+    "reviewed": "2026-10-22"
   },
   "site/index.html": {
     "sources": ["commands/wettaq.md", "names.json", "prompts.json", "scripts/install.mjs", "claude/mods/*/.claude-plugin/plugin.json", "scripts/lib/host-hooks.mjs"],

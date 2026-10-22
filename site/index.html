@@ -3,10 +3,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>mexxi: agent tasks that arrive as reviewable pull requests</title>
+    <title>mexxi: approve your coding agent’s pull requests without reading every line</title>
     <meta
       name="description"
-      content="mexxi is a workflow around the coding agent you already use. Each task gets a fresh worktree, a green verify, rendered QA and an independent review, and ends as a pull request you can review in a minute."
+      content="mexxi is a workflow for the coding agent you already use. Each task comes back as a pull request that is tested, checked in a real browser and reviewed, so you can approve it without reading every line."
     />
     <link rel="canonical" href="https://alexportelli12.github.io/mexxi/" />
     <meta name="theme-color" content="#0a0b0d" />
@@ -14,10 +14,10 @@
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
 
     <meta property="og:type" content="website" />
-    <meta property="og:title" content="mexxi: agent tasks that arrive as reviewable pull requests" />
+    <meta property="og:title" content="mexxi: approve your coding agent’s pull requests without reading every line" />
     <meta
       property="og:description"
-      content="A workflow around OpenCode, Claude Code and Codex that ends in a pull request you can review in a minute."
+      content="Pull requests from Claude Code, Codex or OpenCode that arrive tested, checked in a real browser and reviewed."
     />
     <meta property="og:url" content="https://alexportelli12.github.io/mexxi/" />
     <meta name="twitter:card" content="summary" />
@@ -46,11 +46,18 @@
 
     <main id="main">
       <section class="hero container" aria-labelledby="hero-title">
-        <h1 id="hero-title">Hand an agent a task. Review the pull request in a&nbsp;minute.</h1>
+        <h1 id="hero-title">Approve your agent’s pull requests without reading every&nbsp;line.</h1>
         <p class="hero__lead">
-          mexxi is a workflow around the coding agent you already use. Every task gets a fresh
-          worktree, a green <code>verify</code> before and after, rendered QA and an independent
-          review. You get a pull request that shows its proof, and you decide whether to merge.
+          mexxi is a workflow for the coding agent you already use. Each task comes back as one pull
+          request that is tested, checked in a real browser and reviewed by a second agent. Its first
+          screen says whether it is safe to merge and what is left for you to decide.
+        </p>
+
+        <p class="hero__needs">
+          <strong>What you need:</strong> Node.js 22.13 or newer, Git, the GitHub CLI
+          (<code>gh</code>) and one of Claude Code, Codex or OpenCode. Optional: the review tool
+          (OpenCodeReview, <code>ocr</code>), Playwright MCP for browser checks, and
+          <code>ffmpeg</code> for GIFs.
         </p>
 
         <div class="prompts">
@@ -89,73 +96,170 @@
             </p>
           </div>
         </div>
+        <p class="hero__meta">Paste a prompt into your agent. The second one runs <code>/lesti</code> (get a repo ready).</p>
 
         <div class="hero__links">
+          <a class="link-button link-button--primary" href="docs/reviewing-a-pull-request.html">
+            How to review a mexxi pull request <span aria-hidden="true">→</span>
+          </a>
           <a class="link-button" href="docs/">Docs</a>
           <a class="link-button" href="https://github.com/alexportelli12/mexxi">GitHub</a>
         </div>
-        <p class="hero__meta">Paste a prompt into Claude Code, Codex or OpenCode</p>
+      </section>
+
+      <section class="section container" aria-labelledby="problems-title">
+        <h2 id="problems-title" class="section__title">What goes wrong when you hand an agent a task</h2>
+        <ul class="features features--two">
+          <li class="feature">
+            <h3>It skips tests</h3>
+            <p>One run is careful; the next ships without proof.</p>
+          </li>
+          <li class="feature">
+            <h3>It never looks at the UI</h3>
+            <p>The code compiles, and nobody has opened the page.</p>
+          </li>
+          <li class="feature">
+            <h3>It fights its environment</h3>
+            <p>It retries the same failing command and loses time to shell quoting.</p>
+          </li>
+          <li class="feature">
+            <h3>You must reverse-engineer its pull request</h3>
+            <p>You read the whole diff to learn what it did and why.</p>
+          </li>
+        </ul>
       </section>
 
       <section class="section container" aria-labelledby="flow-title">
-        <h2 id="flow-title" class="section__title">What <code>/wettaq</code> does with a request</h2>
+        <h2 id="flow-title" class="section__title">What <code>/wettaq</code> (build it) does with a request</h2>
         <ol class="steps">
           <li class="step">
             <span class="step__number" aria-hidden="true">1</span>
-            <h3>Fresh worktree</h3>
+            <h3>Its own copy</h3>
             <p>
-              <code>ibni prepare</code> makes a locked worktree and branch, and sweeps ones whose
-              pull requests have merged.
+              The agent works in a fresh Git worktree on a new branch, so your checkout and other
+              tasks stay untouched.
             </p>
           </li>
           <li class="step">
             <span class="step__number" aria-hidden="true">2</span>
             <h3>Agree what done means</h3>
-            <p>The agent reads the repository and writes the contract. It asks only about product decisions.</p>
+            <p>It reads the repository and writes down what done means. It asks you only about product decisions.</p>
           </li>
           <li class="step">
             <span class="step__number" aria-hidden="true">3</span>
-            <h3>Green before work</h3>
-            <p>The repository's verify command must pass first. If it does not, the run stops and reports.</p>
+            <h3>Start from green</h3>
+            <p>Your repository’s own checks, <code>npm run verify</code> by default, must pass first. If they fail, it stops and tells you.</p>
           </li>
           <li class="step">
             <span class="step__number" aria-hidden="true">4</span>
-            <h3>Implement</h3>
-            <p>The change lands with tests at the cheapest level that proves it.</p>
+            <h3>Build it</h3>
+            <p>It makes the change, with tests at the cheapest level that proves it.</p>
           </li>
           <li class="step">
             <span class="step__number" aria-hidden="true">5</span>
-            <h3>Verify and look</h3>
+            <h3>Check and look</h3>
             <p>
-              A full <code>verify</code>, then rendered QA at three viewports, including motion and
-              keyboard use.
+              The checks run again. For UI changes it opens the app in a real browser at phone, tablet
+              and desktop sizes.
             </p>
           </li>
           <li class="step">
             <span class="step__number" aria-hidden="true">6</span>
-            <h3>Independent review</h3>
-            <p>A read-only reviewer judges substantial changes and calls how risky the merge is.</p>
+            <h3>A second opinion</h3>
+            <p>A reviewer agent that cannot edit code judges larger changes and says how risky the merge is.</p>
           </li>
           <li class="step">
             <span class="step__number" aria-hidden="true">7</span>
             <h3>Pull request</h3>
-            <p>The branch is pushed without force, with screenshots, GIFs and the evidence.</p>
+            <p>It pushes the branch, never by force, and opens a pull request with screenshots and what was tested.</p>
           </li>
           <li class="step">
             <span class="step__number" aria-hidden="true">8</span>
             <h3>You review</h3>
-            <p>Product decisions and the merge stay with you.</p>
+            <p>
+              You read the first screen, make the product calls and merge.
+              <a class="text-link" href="docs/reviewing-a-pull-request.html">What to check</a>.
+            </p>
           </li>
           <li class="step">
             <span class="step__number" aria-hidden="true">9</span>
             <h3>Follow-ups</h3>
-            <p><code>ibni adopt</code> reopens the worktree of an open pull request in a new session.</p>
+            <p>Ask for changes with <code>/wettaq</code> on the same pull request. It picks up the same worktree.</p>
           </li>
         </ol>
       </section>
 
+      <section class="section container" aria-labelledby="demo-title">
+        <h2 id="demo-title" class="section__title">Same request, two pull requests</h2>
+        <p class="demo__intro">
+          One request, “show the last sync time on the settings page”, given to the same agent twice
+          in a small demo app. Here is what each pull request tells you about the questions a reviewer asks.
+        </p>
+        <figure class="demo__card">
+          <div class="demo__card-shots">
+            <div>
+              <p class="demo__card-label">Before</p>
+              <img src="demo/sync-card-before.png" width="374" height="208" loading="lazy" alt="The Cloud sync card with only a Sync now button." />
+            </div>
+            <div>
+              <p class="demo__card-label">After</p>
+              <img src="demo/sync-card-after.png" width="374" height="208" loading="lazy" alt="The Cloud sync card reading Last synced just now beside the Sync now button." />
+            </div>
+          </div>
+          <figcaption>The demo app’s Cloud sync card, before and after the change.</figcaption>
+        </figure>
+        <table class="compare">
+          <thead>
+            <tr>
+              <th scope="col">Without mexxi</th>
+              <th scope="col">With mexxi</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><th colspan="2" scope="colgroup">What changed for the user?</th></tr>
+            <tr>
+              <td>The Cloud sync card shows when notes last synced, and a failed sync says so.</td>
+              <td>The same, worded as “Last synced 5 minutes ago” or “Not synced yet”.</td>
+            </tr>
+          </tbody>
+          <tbody>
+            <tr><th colspan="2" scope="colgroup">Does it work?</th></tr>
+            <tr>
+              <td><code>npm run verify</code> passes; no new tests.</td>
+              <td>Verify passes with 4 new tests, checked in a browser at 3 sizes, reviewed twice.</td>
+            </tr>
+          </tbody>
+          <tbody>
+            <tr><th colspan="2" scope="colgroup">What does it look like?</th></tr>
+            <tr>
+              <td>Described in words; no screenshots.</td>
+              <td>Before and after shots, plus the never-synced and failed states.</td>
+            </tr>
+          </tbody>
+          <tbody>
+            <tr><th colspan="2" scope="colgroup">Is it safe to merge?</th></tr>
+            <tr>
+              <td>No call made; it notes there are no API or store changes.</td>
+              <td>Safe to merge and easy to undo: a page-only change.</td>
+            </tr>
+          </tbody>
+          <tbody>
+            <tr><th colspan="2" scope="colgroup">What’s left for me?</th></tr>
+            <tr>
+              <td>Not stated.</td>
+              <td>Press <strong>Sync now</strong> on Settings and check it reads “Last synced just now”.</td>
+            </tr>
+          </tbody>
+        </table>
+        <p class="demo__links">
+          Read both in full:
+          <a class="text-link" href="https://github.com/alexportelli12/mexxi-demo/pull/1">without mexxi</a> and
+          <a class="text-link" href="https://github.com/alexportelli12/mexxi-demo/pull/2">with mexxi</a>.
+        </p>
+      </section>
+
       <section class="section container" aria-labelledby="hosts-title">
-        <h2 id="hosts-title" class="section__title">Three hosts, one set of files</h2>
+        <h2 id="hosts-title" class="section__title">Three agents, one set of files</h2>
         <ul class="features">
           <li class="feature">
             <h3>OpenCode</h3>
@@ -163,11 +267,11 @@
           </li>
           <li class="feature">
             <h3>Claude Code</h3>
-            <p>Adds mods: a run pane showing where the run stands, its progress and Jev's triage, and a fixer for risky commands.</p>
+            <p>Adds a pane beside the chat that shows where the run stands, and quotes risky shell commands before they run.</p>
           </li>
           <li class="feature">
             <h3>Codex CLI</h3>
-            <p>Runs commands as <code>$mexxi-…</code> skills, with a read-only reviewer sandbox.</p>
+            <p>Runs commands as <code>$mexxi-…</code> skills, with a reviewer that can only read.</p>
           </li>
         </ul>
       </section>
@@ -178,8 +282,10 @@
           <li class="feature">
             <h3>Commands</h3>
             <p>
-              <code>/wettaq</code> delivers a request, <code>/ittestja</code> tests a UI,
-              <code>/lesti</code> prepares a repository, and three more look after the workflow.
+              <code>/wettaq</code> (build it), <code>/ittestja</code> (test the UI) and
+              <code>/lesti</code> (get a repo ready). Three more look after the workflow:
+              <code>/fassal</code> (write UX principles), <code>/sewwi</code> (change the workflow)
+              and <code>/irrifletti</code> (look back at sessions).
             </p>
           </li>
           <li class="feature">
@@ -188,15 +294,15 @@
           </li>
           <li class="feature">
             <h3>Skills</h3>
-            <p>Rendered QA, repository mapping, commit and pull request writing, and the review gate.</p>
+            <p>Browser checks, repository mapping, commit and pull request writing, and the review gate.</p>
           </li>
           <li class="feature">
-            <h3>The ibni CLI</h3>
-            <p>Worktree lifecycle from <code>prepare</code> to <code>publish</code>, with step timings.</p>
+            <h3>The worktree CLI</h3>
+            <p><code>ibni</code> (the worktree CLI) takes each task’s worktree from <code>prepare</code> to <code>publish</code>, with step timings.</p>
           </li>
           <li class="feature">
             <h3>Guardrails</h3>
-            <p>Rules forbid force pushes and merges, and a guard backs them up. A loop breaker stops a third identical failure.</p>
+            <p>Rules forbid force pushes and merges, and a guard backs them up. When one command fails a third time, the agent must stop and rethink.</p>
           </li>
           <li class="feature">
             <h3>Retrospectives</h3>
@@ -247,57 +353,11 @@ node scripts/install.mjs --check   <span class="t-c"># fails on any drift</span>
 
       <section class="section container" aria-labelledby="names-title">
         <h2 id="names-title" class="section__title">The names</h2>
-        <dl class="names">
-          <div class="names__row">
-            <dt>mexxi</dt>
-            <dd>steer, lead</dd>
-            <dd>the repository and the workflow as a whole</dd>
-          </div>
-          <div class="names__row">
-            <dt>ibni</dt>
-            <dd>build</dd>
-            <dd>the worktree CLI: a fresh, isolated worktree per task, through to a published PR</dd>
-          </div>
-          <div class="names__row">
-            <dt>/wettaq</dt>
-            <dd>carry out</dd>
-            <dd>takes a request to a reviewable PR</dd>
-          </div>
-          <div class="names__row">
-            <dt>/ittestja</dt>
-            <dd>test</dd>
-            <dd>hands-on rendered QA; reports, never edits</dd>
-          </div>
-          <div class="names__row">
-            <dt>/sewwi</dt>
-            <dd>put right</dd>
-            <dd>audits or changes the workflow itself</dd>
-          </div>
-          <div class="names__row">
-            <dt>/fassal</dt>
-            <dd>design, sketch out</dd>
-            <dd>writes a product's UX principles</dd>
-          </div>
-          <div class="names__row">
-            <dt>/irrifletti</dt>
-            <dd>reflect</dd>
-            <dd>the session retrospective</dd>
-          </div>
-          <div class="names__row">
-            <dt>/lesti</dt>
-            <dd>get ready</dd>
-            <dd>opens a PR that makes a repository mexxi-ready, whatever it lacks</dd>
-          </div>
-          <div class="names__row">
-            <dt>ibda</dt>
-            <dd>begin</dd>
-            <dd>the setup skill a pasted prompt points to: installs or repairs mexxi</dd>
-          </div>
-        </dl>
         <p class="names__why">
           The tools are named in Maltese, the author’s native language, like
           <a class="text-link" href="https://alexportelli12.github.io/verifika/">Verifika</a>.
-          <a class="text-link" href="docs/names.html">All the names</a>.
+          This page gives each name’s job in brackets.
+          <a class="text-link" href="docs/names.html">All the names and what they mean</a>.
         </p>
       </section>
     </main>

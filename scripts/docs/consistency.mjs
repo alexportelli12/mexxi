@@ -31,14 +31,22 @@ export function checkConsistency(files) {
   for (const [key, prompt] of Object.entries(prompts)) {
     if (!gettingStarted.includes(prompt.text)) problems.push(`README.md: the "${key}" prompt belongs in Getting started`);
   }
-  // Every name is explained on the README's and the landing page's name lists.
-  for (const entry of names) {
-    const shown = entry.kind === "command" ? `/${entry.name}` : entry.name;
-    if (![shown, entry.meaning, entry.does].every((part) => landingText.includes(part))) {
-      problems.push(`site/index.html: the names list must give ${shown}, "${entry.meaning}" and what it does, as in names.json`);
+  // The full names table lives on one page, the generated names page. The
+  // README and the landing page link to it, and pair every command and the CLI
+  // with its job at least once, as in "/wettaq (build it)", so a reader learns
+  // what a Maltese name does where they meet it.
+  const readme = flat(files.get("README.md") ?? "");
+  const readmeText = readme.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/`/g, "");
+  const pages = [
+    { file: "README.md", text: readmeText, linksNames: /\]\(https:\/\/alexportelli12\.github\.io\/mexxi\/docs\/names\.html\)/.test(readme) },
+    { file: "site/index.html", text: landingText, linksNames: /href="docs\/names\.html"/.test(landing) },
+  ];
+  for (const page of pages) {
+    if (!page.linksNames) problems.push(`${page.file}: link to the names page (docs/names.html), which holds the full names table`);
+    for (const entry of names.filter((item) => item.kind === "command" || item.kind === "cli")) {
+      const shown = entry.kind === "command" ? `/${entry.name}` : entry.name;
+      if (!page.text.includes(`${shown} (${entry.job})`)) problems.push(`${page.file}: pair ${shown} with its job at least once, as "${shown} (${entry.job})" from names.json`);
     }
-    const readme = flat(files.get("README.md") ?? "");
-    if (!readme.includes(shown) || !readme.includes(entry.meaning)) problems.push(`README.md: the names section must give ${shown} and "${entry.meaning}", as in names.json`);
   }
   return problems;
 }

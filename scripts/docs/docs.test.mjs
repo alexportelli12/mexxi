@@ -8,6 +8,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import MiniSearch from "minisearch";
 import { buildDocs } from "./build.mjs";
+import { buildSidebar } from "./lib/generate.mjs";
 import { checkConsistency } from "./consistency.mjs";
 import { parseFrontmatter } from "./lib/frontmatter.mjs";
 import { globToRegExp } from "./lib/glob.mjs";
@@ -55,8 +56,8 @@ async function listFiles(directory) {
 }
 
 test("the frontmatter reader handles folded blocks, lists and quotes", () => {
-  const { data, body } = parseFrontmatter("---\nname: x\ndescription: >-\n  one\n  two\nsources:\n  - a/**\n  - b.md\nlist: [c, 'd']\nreviewed: 2026-10-21\n---\nbody\n");
-  assert.deepEqual(data, { name: "x", description: "one two", sources: ["a/**", "b.md"], list: ["c", "d"], reviewed: "2026-10-21" });
+  const { data, body } = parseFrontmatter("---\nname: x\ndescription: >-\n  one\n  two\nsources:\n  - a/**\n  - b.md\nlist: [c, 'd']\nmetadata:\n  optional: \"For x.\"\nreviewed: 2026-10-21\n---\nbody\n");
+  assert.deepEqual(data, { name: "x", description: "one two", sources: ["a/**", "b.md"], list: ["c", "d"], metadata: { optional: "For x." }, reviewed: "2026-10-21" });
   assert.equal(body, "body\n");
 });
 
@@ -72,6 +73,18 @@ test("the landing page and README copies match prompts.json and names.json", asy
   const files = await readAllowed(root);
   files.set("site/index.html", files.get("site/index.html").replace("run /lesti here", "run /lesti there"));
   assert.match(checkConsistency(files).join("\n"), /prepare/);
+});
+
+test("the README and the landing page pair each command and the CLI with its job, and link the names page", async () => {
+  const files = await readAllowed(root);
+  const landing = files.get("site/index.html");
+  const readme = files.get("README.md");
+  files.set("site/index.html", landing.replaceAll("(build it)", "").replaceAll('href="docs/names.html"', 'href="docs/"'));
+  files.set("README.md", readme.replaceAll("(the worktree CLI)", ""));
+  const problems = checkConsistency(files).join("\n");
+  assert.match(problems, /site\/index\.html: pair \/wettaq with its job/);
+  assert.match(problems, /site\/index\.html: link to the names page/);
+  assert.match(problems, /README\.md: pair ibni with its job/);
 });
 
 test("the README runs problems, solutions, getting started with the prompts, then links", async () => {
@@ -166,4 +179,31 @@ test("decision records are published with an index, and a record without a statu
   const bad = await copyRepo({ edit: { "docs/decisions/0001-shared-workflow-host-adapters.md": (text) => text.replace(/^status: .*\n/m, "") } });
   const { out, site } = outputs(bad);
   await assert.rejects(buildDocs({ root: bad, out, site, render: false }), /0001-shared-workflow-host-adapters\.md: state the decision's `status`/);
+});
+
+test("a command page leads with its summary and folds the agent instructions; a command without a summary fails the build", async () => {
+  const good = await copyRepo();
+  const built = outputs(good);
+  const { pages } = await buildDocs({ root: good, ...built, render: false });
+  const wettaq = await readFile(path.join(built.out, "public/commands/wettaq.md"), "utf8");
+  const summary = parseFrontmatter(await readFile(path.join(root, "commands/wettaq.md"), "utf8")).data.summary;
+  assert.ok(wettaq.indexOf(summary) < wettaq.indexOf("::: details Full agent instructions"), "the summary comes before the folded instructions");
+  assert.match(wettaq, /^# \/wettaq \(build it\)/);
+  // The headings folded in the instructions stay out of the built page's outline.
+  assert.match(await readFile(path.join(built.out, "commands/wettaq.md"), "utf8"), /^---\noutline: false\n---\n\n# \/wettaq/);
+
+  // Start here leads, and Principles and Decisions sit together under the hood.
+  const sidebar = buildSidebar(pages);
+  assert.deepEqual(sidebar.map((section) => section.text), ["Start here", "Commands", "Agents", "Skills", "CLI reference", "Configuration", "Under the hood"]);
+  assert.deepEqual(sidebar.at(-1).items.map((group) => group.text), ["Principles", "Decisions"]);
+  assert.equal(sidebar[0].items[2].link, "/reviewing-a-pull-request");
+
+  // Optional skills are listed apart from the core ones.
+  const skills = await readFile(path.join(built.out, "skills/index.md"), "utf8");
+  assert.match(skills.split("## Optional skills")[1], /\[angular\]/);
+  assert.doesNotMatch(skills.split("## Optional skills")[0], /\[angular\]/);
+
+  const bad = await copyRepo({ edit: { "commands/lesti.md": (text) => text.replace(/^summary: >-\n(?: {2}.+\n)+/m, "") } });
+  const { out, site } = outputs(bad);
+  await assert.rejects(buildDocs({ root: bad, out, site, render: false }), /commands\/lesti\.md has no `summary`/);
 });

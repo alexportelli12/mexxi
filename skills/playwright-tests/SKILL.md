@@ -1,6 +1,8 @@
 ---
 name: playwright-tests
 description: Write and maintain Playwright UI tests with resilient selectors, reusable helpers, and AAA structure. Use when creating or updating Playwright tests, configuring test id attributes, adding test utilities, or enforcing UI automation standards.
+metadata:
+  optional: "Repositories that keep Playwright UI tests."
 ---
 
 # Playwright Tests

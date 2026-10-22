@@ -138,7 +138,9 @@ export async function check(base = root) {
   for (const name of await readdir(path.join(base, "commands"))) {
     if (!name.endsWith(".md")) continue;
     const text = await readFile(path.join(base, "commands", name), "utf8");
-    assert.match(text, /^---\ndescription: [^\n]+\n---\n/);
+    // An optional folded `summary` for the docs site follows the description;
+    // the Codex renderer strips it, so its shape is fixed here.
+    assert.match(text, /^---\ndescription: [^\n]+\n(?:summary: >-\n(?: {2}[^\n]+\n)+)?---\n/, `command ${name} must start with a description line and at most a folded summary`);
     assert.match(text, /\$ARGUMENTS/, `command ${name} lost argument substitution`);
     assert.doesNotMatch(text, /(?:openai|opencode-go)\/[a-z0-9.-]+/i);
   }
@@ -158,9 +160,9 @@ export async function check(base = root) {
   const byName = new Map(names.map((entry) => [entry.name, entry]));
   assert.equal(byName.size, names.length, "names.json has a duplicate name");
   for (const entry of names) {
-    assert.deepEqual(Object.keys(entry), ["name", "kind", "meaning", "replaces", "does"], `names.json: ${entry.name} has the wrong fields`);
+    assert.deepEqual(Object.keys(entry), ["name", "kind", "meaning", "job", "replaces", "does"], `names.json: ${entry.name} has the wrong fields`);
     assert.ok(["repo", "cli", "command", "skill"].includes(entry.kind), `names.json: ${entry.name} has an unknown kind`);
-    for (const field of ["meaning", "does"]) assert.ok(typeof entry[field] === "string" && entry[field].trim(), `names.json: ${entry.name} has no ${field}`);
+    for (const field of ["meaning", "job", "does"]) assert.ok(typeof entry[field] === "string" && entry[field].trim(), `names.json: ${entry.name} has no ${field}`);
     assert.ok(entry.replaces === null || typeof entry.replaces === "string", `names.json: ${entry.name}.replaces is a name or null`);
   }
   const commandFiles = (await readdir(path.join(base, "commands"))).filter((name) => name.endsWith(".md") && !(name in commandAliases));
