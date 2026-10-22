@@ -1,5 +1,9 @@
 ---
 description: Audit or coherently update Alex's global coding-agent workflow configuration
+summary: >-
+  Use it to audit or change the workflow itself: the commands, skills, agents and rules in your
+  mexxi clone. You get one coherent change, with stale duplicates removed and the docs pages it
+  affects updated. It needs the problem you saw, or nothing for a general audit.
 ---
 
 # Update My Workflow: $ARGUMENTS

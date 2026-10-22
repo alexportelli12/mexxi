@@ -1,6 +1,8 @@
 ---
 name: workflow-for-alex
 description: Design and evolve Alex's global coding-agent workflow configuration. Use when auditing or changing AGENTS.md, agents, commands, skills, implementation orchestration, validation ownership, or workflow governance.
+metadata:
+  optional: "Changing the workflow itself with /sewwi."
 ---
 
 # Workflow Governance

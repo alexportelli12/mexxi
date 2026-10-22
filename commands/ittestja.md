@@ -1,5 +1,9 @@
 ---
 description: Run hands-on rendered QA of a route, flow, pull request, or implementation session and report findings without changing code
+summary: >-
+  Use it to see how a page, a flow or a pull request really behaves before you merge. You get
+  a findings report with a severity, a screenshot and steps to reproduce for each problem; it
+  never changes code. It needs the app to run locally and the Playwright MCP server.
 ---
 
 # QA: $ARGUMENTS

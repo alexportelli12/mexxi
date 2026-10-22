@@ -34,6 +34,7 @@ export default defineConfig({
     logo: "/favicon.svg",
     nav: [
       { text: "Start here", link: "/" },
+      { text: "Reviewing a PR", link: "/reviewing-a-pull-request" },
       { text: "Commands", link: "/commands/" },
       { text: "Skills", link: "/skills/" },
       { text: "CLI", link: "/cli/" },

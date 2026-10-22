@@ -692,8 +692,8 @@ test("--migrate-from on a clone still in place stops and names the move-aside se
   await install({ home, checkout, check: true });
 });
 
-// The move from ~/.config/opencode as getting-started.md documents it, run
-// verbatim by bash in a throwaway home: the pre-move layout (the old clone in
+// The move from ~/.config/opencode as docs/migrating-from-coding-agent-config.md
+// documents it, run verbatim by bash in a throwaway home: the pre-move layout (the old clone in
 // place, hosts linked into it) and a new clone, on main, at the default path.
 async function preMoveHome(t) {
   const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-documented-move-"));
@@ -730,8 +730,8 @@ function documentedShell(home, script) {
 }
 
 async function documentedMigration() {
-  const page = await readFile(path.join(checkout, "docs/getting-started.md"), "utf8");
-  const section = page.slice(page.indexOf("If you are moving from the old clone"), page.indexOf("To roll back a completed move"));
+  const page = await readFile(path.join(checkout, "docs/migrating-from-coding-agent-config.md"), "utf8");
+  const section = page.slice(page.indexOf("## Move to the new clone"), page.indexOf("## Roll back"));
   return {
     // Every block of the move, run together as one paste.
     sequence: [...section.matchAll(/```bash\n([\s\S]*?)```/g)].map((block) => block[1]).join(""),
@@ -769,11 +769,11 @@ test("the documented move from ~/.config/opencode stops before moving anything o
   assert.equal(await readFile(settingsFile, "utf8"), JSON.stringify({ env: { BASH_MAX_TIMEOUT_MS: "600000" } }));
 
   // Had it stopped after the move, the recovery line puts the old clone back.
-  assert.ok(recovery, "getting-started.md gives the recovery line");
+  assert.ok(recovery, "migrating-from-coding-agent-config.md gives the recovery line");
   const moved = await documentedShell(home, "mv ~/.config/opencode ~/.config/opencode.pre-move && mkdir ~/.config/opencode");
   assert.equal(moved.code, 0, moved.output);
   await assert.rejects(readFile(path.join(home, ".claude/CLAUDE.md")), /ENOENT/);
-  assert.ok(movedOnceUnder, "getting-started.md says when not to restore");
+  assert.ok(movedOnceUnder, "migrating-from-coding-agent-config.md says when not to restore");
   assert.equal(await documentedRecovery(home, movedOnceUnder), "restore");
   const recovered = await documentedShell(home, recovery);
   assert.equal(recovered.code, 0, recovered.output);
@@ -807,7 +807,7 @@ test("the documented move that stops after the links moved says to fix the cause
   const stopped = await documentedShell(home, `export PATH="${offline}:$PATH"\n${sequence}`);
   assert.notEqual(stopped.code, 0);
   assert.match(stopped.output, /network unreachable\nFix the cause and rerun the install/);
-  assert.ok(movedOnceUnder && rerun, "getting-started.md gives the rule and the rerun command");
+  assert.ok(movedOnceUnder && rerun, "migrating-from-coding-agent-config.md gives the rule and the rerun command");
   assert.equal(await documentedRecovery(home, movedOnceUnder), "rerun");
 
   const rerunResult = await documentedShell(home, `cd ~/workspace/mexxi && ${rerun}`);
@@ -844,7 +844,7 @@ test("ibda's pre-move sequence moves only after a passing dry run, carries over 
   }
   assert.ok(chains.indexOf(moveChain) < chains.indexOf(installChain), "the move comes before the install");
   assert.ok(skill.includes("`rmdir ~/.config/opencode && mv ~/.config/opencode.pre-move ~/.config/opencode`"));
-  // The same rule as getting-started.md for a stop after the links moved.
+  // The same rule as migrating-from-coding-agent-config.md for a stop after the links moved.
   assert.match(section, /`readlink ~\/\.claude\/CLAUDE\.md`[^`]*`~\/\.local\/share\/mexxi\/generated`/);
 });
 

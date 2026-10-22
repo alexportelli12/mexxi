@@ -1,5 +1,9 @@
 ---
 description: Measure how recent agent sessions went against the last retrospective, privately
+summary: >-
+  Use it a couple of weeks after you change the workflow, to see whether runs got better. You
+  get a private report comparing recent sessions with the last retrospective. It needs only a
+  `retro.output` folder outside any public repository; the report never leaves your machine.
 ---
 
 # Retrospective: $ARGUMENTS

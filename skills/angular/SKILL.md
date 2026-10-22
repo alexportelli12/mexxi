@@ -7,6 +7,8 @@ description: >-
   and affected feature first, then load only the relevant specialist reference.
   Do not load specialist references for trivial, local edits that do not need
   Angular design judgement.
+metadata:
+  optional: "Angular repositories only."
 ---
 
 # Angular Engineering

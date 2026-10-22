@@ -390,7 +390,8 @@ export async function install(options = {}) {
   if (codexHooksPlan) await writeCodexHooks(codexHooksFiles, codexHooksPlan);
   for (const link of stale) await unlink(link);
   // Relinks go first, in links() order, so in the pre-move layout
-  // ~/.claude/CLAUDE.md is the first link moved: getting-started.md tells
+  // ~/.claude/CLAUDE.md is the first link moved:
+  // docs/migrating-from-coding-agent-config.md tells
   // someone whose install stopped after the move to restore the old clone only
   // while that link does not yet point into the generated directory.
   for (const [destination, source] of [...relinks, ...pending]) {
