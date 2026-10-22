@@ -84,9 +84,9 @@ most reasonable reading from repository evidence and product principles, note
 it as an assumption, and carry on. Still stop and report for a one-way door: a
 destructive or irreversible data change, a security or privacy decision, a
 public API or schema break, or anything the pull request cannot undo. List
-every assumption under **Assumptions** in the pull request, worded so the
-reviewer can reverse it cheaply; a question that would have changed the design
-becomes a review item there instead of a stall.
+every assumption under **Decisions and assumptions** in the pull request,
+worded so the reviewer can reverse it cheaply; a question that would have
+changed the design becomes a decision under **Your part** instead of a stall.
 
 ## Preflight: Green Before Work
 
@@ -184,7 +184,8 @@ that gate leave no unresolved blockers.
    the returned URLs. Republish on follow-up delivery so the media stays
    current. If media cannot be published, deliver anyway and say why in
    Evidence.
-7. Use `commit-pr-writing` for the pull-request title and description. For
+7. Use `commit-pr-writing` for the pull-request title and description, whose
+   first screen gives the merge call, the reviewer's part and the evidence. For
    initial delivery, create the pull request with `gh` against `defaultBranch`.
    For follow-up delivery, update the existing pull request instead of
    creating another.

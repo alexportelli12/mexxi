@@ -40,6 +40,11 @@ through `ibni cross-review` (its overlay says how). Codex has only one model
 family, so its review is always same-family. Whenever the reviewer shares the
 implementer's family, the pull request's Evidence says so.
 
+The reviewer's latest door and blast-radius call becomes the pull request's
+**Merge call**, in plain words (`commit-pr-writing` says how). A pull request
+whose review is still blocked is not delivered, so the description never
+carries a verdict that only the review comments explain.
+
 ## Review Remediation
 
 Investigate every finding with repository evidence; resolve it with a bounded
@@ -94,4 +99,5 @@ refresh the contract for the new request, and establish a green baseline by
 running `npm run verify` (`prepare`'s baseline citation applies only to a fresh
 workspace). Then follow the normal gates of `/wettaq` through delivery;
 publication updates the existing branch and `mark-pr` records the same URL
-again.
+again. Rewrite the description for the whole pull request as it now stands,
+with a current merge call, rather than appending a follow-up section.
