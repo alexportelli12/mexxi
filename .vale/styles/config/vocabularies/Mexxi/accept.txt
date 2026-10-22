@@ -75,3 +75,4 @@ Anthropic(?:'s)?
 [Ww]ordmark
 gzip
 [Uu]ntrusted
+Wiktionary

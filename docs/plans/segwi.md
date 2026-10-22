@@ -4,17 +4,75 @@ This is the working plan for segwi, an opt-in mexxi feature. It lives here only 
 
 **Why segwi exists.** A mexxi run takes minutes to an hour, and it stops when it needs a reply or a permission. Today you have to be at the terminal for that. segwi lets you start, follow, answer and stop a run from your phone or from any MCP client. It runs on a machine you own and keeps every mexxi rule.
 
-**Status.** Proposed. Sections 0 to 12 are the specification. The spike in phase 1 replaces the "Spike results" section below with what it finds, and corrects any section the findings contradict.
+**Status.** Proposed. Sections 0 to 12 are the specification. The spike has run: its results are below, and the sections they contradicted are corrected.
 
 ## Spike results
 
-Pending. The spike fills in:
+Measured on 2026-10-23 with Claude Code 2.1.309 on the build host. The sections below already include the corrections these findings call for.
 
-- the confirmed Claude Code flags and their documentation links;
-- which permission mode sends calls outside the allow list to `--permission-prompt-tool`, or proof that the fallback is needed;
-- the allow list derived from at least 20 real `/wettaq` and `/lesti` transcripts, with counts per tool call;
-- the current `npm run verify` time on the host;
-- the Maltese words for the interface, each verified against dizzjunarju.mt, then Ġabra.
+**Flags.** Every flag in §2 exists in the [CLI reference](https://code.claude.com/docs/en/cli-reference). Two caveats:
+
+- `--permission-prompt-tool` and `--max-turns` are documented and work, but `claude --help` no longer lists them. The canary covers both.
+- `--input-format stream-json` documents no message shape. The working shape is one `{"type":"user","message":{"role":"user","content":"…"}}` per line. The process stays alive after a `result` and takes the next message in the same session; closing its input ends it.
+
+Other facts the adapter relies on, all observed:
+
+- The prompt tool receives `{tool_name, input, tool_use_id}`. It answers with a text block holding `{"behavior":"allow","updatedInput":…}` or `{"behavior":"deny","message":"…"}`. The agent sees the deny message and carries on.
+- `result` carries `subtype`, `session_id`, `total_cost_usd` and `permission_denials`.
+- `--setting-sources user` still loads mexxi's guard and loop-breaker hooks.
+
+**Permission mode.** A throwaway repository, a dummy prompt tool and `--model haiku` gave this. The allow list held `echo`; the deny list held `touch`.
+
+| Mode | Allowed call | Unlisted call (`node -e`, `curl`, a Write outside the allowed path) | Denied call |
+|---|---|---|---|
+| `default` (alias `manual`) | runs | **sent to the prompt tool** | refused, no prompt |
+| `acceptEdits` | runs | sent to the prompt tool | refused, no prompt |
+| `dontAsk` | runs | refused | refused |
+| `auto` | runs | the classifier decides; the prompt tool is never called | refused |
+
+segwi uses **`--permission-mode default`**, so the fallback isn't needed. `acceptEdits` would allow edits in the launch directory, which is the control checkout, without asking. Built-in read-only commands (`ls`, `cat`, `grep`, `uname`) never prompt in any mode. A deny-list command never reaches the prompt tool, as §11.7 requires.
+
+**Allow list.** Derived from the 25 most recent `/wettaq` (and its old name `/implement`) and `/lesti` sessions, with the 87 transcripts of the agents they delegated to: 9,330 tool calls from 2026-10-12 to 2026-10-22.
+
+| Tool | Calls |
+|---|---|
+| Bash | 7,566 |
+| Read | 778 |
+| Write, Edit | 419 |
+| Agent, Skill | 124 |
+| Playwright MCP | 60 |
+| WebFetch, WebSearch | 53 |
+
+| Bash command, counted per segment of a compound command | Count |
+|---|---|
+| Read-only: `grep`, `head`, `sed`, `cat`, `tail`, `ls`, `wc` | 18,112 |
+| `npx` build tools: `prettier`, `vitest`, `playwright`, `tsc`, `eslint`, `ng` | 1,534 |
+| `python3` scripts and one-liners | 1,861 |
+| `git` diff, status, log, add, commit, grep, show | 1,305 |
+| `echo`, `printf` | 1,155 |
+| `npm run` scripts, `npm ci`, `npm test` | about 640 |
+| `rm`, `cp`, `mv`, `mkdir` | 423 |
+| `ibni` and its old name | 334 |
+| `gh pr` create, view, edit, checks; `gh run`; `gh api` | 240 |
+| `curl` | 183 |
+| `node -e` | 158 |
+| `ocr delegate` | 134 |
+| `pkill`, `kill` | 102 |
+| `ffmpeg` | 14 |
+
+The 27 refusals in those sessions were harness blocks on `sleep`, auto-mode classifier denials and Playwright writes outside its output directory. Almost all writes landed in worktrees. The rendered rules are in §2.
+
+**The sandbox decides how strict the list can be.** The interpreters agents lean on (`python3`, `node -e`) can do anything, so the list can't include them unless the Claude Code sandbox confines what they reach. On Linux the sandbox needs `bubblewrap` and `socat`. Without them Claude Code runs commands outside the sandbox and says nothing, and the build host lacks both. So segwi enables the sandbox in its rendered settings, and `detect()` and `/health` warn when it can't start. Interpreters, `curl`, `rm`, `cp`, `mv`, `kill` and `gh api` stay off the list. Without the sandbox they raise approvals. With it, Bash runs inside the sandbox without prompts, and only a new network host or a write outside the worktree root needs a person.
+
+**Verify time.** `npm run verify` on the plan branch: 3 min 29 s for 14 checks, run one at a time. `workspace` (74 s), `hooks` (55 s) and `docs-tests` (38 s) take most of it. The `segwi` and `segwi-web` budget in §9 stays at 60 s on top.
+
+**Maltese words.** None could be confirmed. dizzjunarju.mt's search returns no entries even for everyday words such as `kiteb` and `bena`, and every Ġabra address redirects to the University of Malta home page. Wiktionary has entries, but it isn't one of the two sources. So every screen title is English-only, as §7 says for an unconfirmed word. `segwi` stays the product's name, and `/wettaq` and `/lesti` appear only as the names of the commands a run executes.
+
+| Word | Use | dizzjunarju.mt | Ġabra | Result |
+|---|---|---|---|---|
+| segwi | product name, Runs title | no entry returned | unreachable | name only |
+| wettaq | New run title, Build action | no entry returned | unreachable | command name only |
+| lesti | Get ready action | no entry returned | unreachable | command name only |
 
 ## 0. What mexxi already gives us (read-only findings)
 
@@ -82,23 +140,28 @@ The task text is the only free input. The run is linked to its ibni workspace on
 
 Adapters spawn with argument arrays only and receive no caller-supplied flags, paths or environment. They emit normalised `RunEvent {seq, at, kind: text|step|needs-input|approval|result|error, step?: {type: edit|command|test|read|message, title, detail}}`. **One shared contract test suite** runs every adapter against a recorded fake host. The recordings are refreshed by the canary (§9).
 
-**claude-code adapter (v1).** Flags to confirm in the spike (§10, step 1):
+**claude-code adapter (v1).** Flags, confirmed by the spike:
 ```
 claude -p --input-format stream-json --output-format stream-json --verbose
-  --session-id <uuid> --setting-sources user
+  --session-id <uuid> --setting-sources user --permission-mode default (plan for ask)
   --settings <rendered segwi-claude-settings.json> --max-turns <n> [--model <m>]
-  --permission-prompt-tool mcp__segwi__approve --mcp-config <segwi approver only> --strict-mcp-config
+  --add-dir <paths.worktreeRoot>
+  --permission-prompt-tool mcp__segwi__approve --mcp-config <rendered> --strict-mcp-config
 ```
-- **Permissions (D4).** The rendered settings hold the allow list (below), mexxi's deny list, `disableBypassPermissionsMode`, and the Claude Code sandbox. Allowed calls run, denied calls are refused, and **anything else goes to `mcp__segwi__approve`**, which creates an approval and waits. The spike confirms which permission mode passes unlisted calls to the prompt tool. If none does, the fallback is: catch the refusal in the stream, raise an approval, and on approve resume that turn with `--allowedTools <that exact rule>`.
-- **The allow list is derived, not guessed.** The spike replays the last 20 or more real `/wettaq` and `/lesti` transcripts on the host and lists every tool call. Expect at least:
-  - `ibni *` and the repo's verify command;
-  - `git` add/commit/status/diff/log;
-  - `gh pr create|view|edit` (the agent opens the PR itself);
-  - package install (`npm ci`), the development server, `ocr`, `codex exec` for cross-review, `ffmpeg`;
-  - the Playwright MCP tools;
-  - common read-only shell commands.
+- **Permissions (D4).** The rendered settings hold the allow list (below), mexxi's deny list, `disableBypassPermissionsMode`, and the Claude Code sandbox. Allowed calls run, denied calls are refused, and **anything else goes to `mcp__segwi__approve`**, which creates an approval and waits. `--permission-mode default` is the mode that does this (see Spike results), so no fallback is built.
+- **The MCP config** holds the approval tool and mexxi's Playwright server, described by `scripts/lib/browser.mjs` from `browser` in config. `--strict-mcp-config` keeps every other server out, including claude.ai connectors such as mail.
+- **The sandbox** is on, with `allowUnsandboxedCommands: false`, writes limited to `paths.worktreeRoot` and the temp directory, and network limited to GitHub and the npm registry. When `bubblewrap` or `socat` is missing, Claude Code runs commands outside the sandbox, so `detect()` reports it as a problem and the UI shows it.
+- **The allow list is derived, not guessed** (counts in Spike results). Rules use the deny list's `Bash(<prefix>:*)` form:
+  - `ibni`, the repo's verify command, `vfk` and `verifika`;
+  - `git` with `status`, `diff`, `log`, `show`, `add`, `commit`, `grep`, `ls-files`, `rev-parse`, `fetch`, `check-ignore`, `rm` and `mv`;
+  - `gh pr` create, view, edit, checks and diff, and `gh run` view and list (the agent opens the PR itself);
+  - `npm ci`, `npm install` with no package, `npm run`, `npm test`, `npm audit`, `npm view`;
+  - `npx` with `prettier`, `vitest`, `playwright`, `tsc`, `eslint`, `ng` and `oxlint`; `node --test`; `ocr delegate`; `ffmpeg`; `mkdir`;
+  - `mcp__playwright__*`;
+  - Read, Edit and Write under `paths.worktreeRoot` and the per-user temp directory, as `//absolute/**` rules.
 
-  Edit and Write are allowed under `paths.worktreeRoot`, where the run actually works, **not** the control checkout's working directory. The rendered list is generated from config and the derived set, so it stays in one place.
+  Edit and Write are allowed where the run actually works, **not** in the control checkout. Interpreters, network clients, `rm`, `cp`, `mv`, `kill`, `git push` and `gh api` are left off on purpose. The rendered list is generated from config and this derived set, so it stays in one place.
+- **Steering.** `--append-system-prompt` adds two sentences: a person answers any call outside the allow list from a phone, so prefer the file tools and the listed commands. This keeps approvals for the genuinely unusual without loosening a rule.
 - **The target:** a recorded real `/wettaq` run on a typical repo completes with **zero approvals**. Approvals are for the genuinely unusual (a `curl` to the internet, a write outside the worktree).
 - `--setting-sources user` keeps the repo's own hooks, allow rules and `.mcp.json` out while keeping mexxi's user hooks. Never use `--bare`.
 - Stop: SIGINT, then SIGTERM after 10 s. `result` gives the cost and the session ID.
@@ -142,6 +205,12 @@ claude -p --input-format stream-json --output-format stream-json --verbose
 | `failed` | "Failed" + reason |
 | `stopped` | "Stopped by you" |
 | `timed_out` | "Stopped: no activity for 30 min" |
+
+**When a run ends.** The host process stays alive after each `result`, waiting for another message. So on each `result`:
+
+- an error `subtype` means `failed`;
+- an `ask` run, or a run whose ibni workspace has a PR recorded, is `completed`, and segwi closes the host's input;
+- otherwise the agent stopped to ask something, so the run is `needs_input` until you reply or stop it, or the idle timeout passes.
 
 **REST `/api`.** JSON only; writes need a same-origin check.
 
@@ -219,8 +288,8 @@ The audit table is append-only. Approvals, push subscriptions, stops and every A
 
 **Maltese words, kept to what carries the character:**
 - **Wordmark:** "segwi" in mono beside the brand mark, as on the landing page.
-- **Screen titles** pair a Maltese word with its English subtitle: Runs = **segwi** / "Follow your runs"; New run = **wettaq** / "New run". Action labels: **wettaq** Build · **lesti** Get ready · Ask.
-- Every word comes from `names.json` at build time through one `words` module. No Maltese string is hard-coded; the `design` check enforces it. A word ships only if names.json has it verified against dizzjunarju.mt (then Ġabra). Otherwise that title is English-only.
+- **Screen titles** would pair a Maltese word with its English subtitle (Runs = **segwi** / "Follow your runs"; New run = **wettaq** / "New run"). The spike could confirm no word, so the MVP's titles are English-only. Action labels are Build · Get ready · Ask, each showing the command it runs (`/wettaq`, `/lesti`) in mono.
+- Every name comes from `names.json` at build time through one `words` module. No Maltese string is hard-coded; the `design` check enforces it. A Maltese word ships as interface text only if names.json records it as verified against dizzjunarju.mt (then Ġabra). Otherwise that title is English-only.
 - English is always present. Approve, Deny, Stop and every confirm are English-only. Maltese text carries `lang="mt"`; accessible names are English.
 - Backlog: definition cards, Maltese status chips, word of the day, Maltese push titles.
 
