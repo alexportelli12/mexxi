@@ -266,7 +266,7 @@ export async function check(base = root) {
   // A test file no check names would silently drop out of the delivery gate.
   const commands = Object.values(verifika.checks).map((entry) => entry.command);
   const tests = [
-    ...(await readdir(path.join(base, "scripts"), { recursive: true })).filter((name) => name.endsWith(".test.mjs")).map((name) => `scripts/${name.split(path.sep).join("/")}`),
+    ...(await readdir(path.join(base, "scripts"), { recursive: true })).filter((name) => name.endsWith(".test.mjs") && !name.split(path.sep).includes("node_modules")).map((name) => `scripts/${name.split(path.sep).join("/")}`),
     ...(await readdir(path.join(base, "skills"), { recursive: true })).filter((name) => /\/tests\/[^/]+\.test\.m?js$/.test(name)).map((name) => `skills/${name.split(path.sep).join("/")}`),
   ];
   for (const test of tests) {

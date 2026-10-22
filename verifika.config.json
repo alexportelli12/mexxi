@@ -54,6 +54,24 @@
       "command": "npm run --silent prose",
       "paths": ["README.md", "docs/**", "site/index.html", "skills/docs-writing/**", "scripts/docs/vale.mjs", ".vale.ini", ".vale/**"]
     },
+    "segwi": {
+      "command": "node --test scripts/segwi/test/server.test.mjs scripts/segwi/test/config.test.mjs scripts/segwi/test/tokens.test.mjs scripts/segwi/test/check-design.test.mjs scripts/segwi/test/web-check.test.mjs scripts/segwi/test/bundle-size.test.mjs",
+      "paths": ["scripts/segwi/**", "scripts/lib/config.mjs", "config.schema.json", "site/tokens.css"],
+      "exclude": ["scripts/segwi/web/**"]
+    },
+    "segwi-web": {
+      "command": "node scripts/segwi/web-check.mjs",
+      "paths": ["scripts/segwi/web/**", "scripts/segwi/web-check.mjs", "site/tokens.css", "names.json"]
+    },
+    "design": {
+      "command": "node scripts/segwi/check-design.mjs",
+      "paths": ["site/**", "scripts/docs/vitepress/theme/**", "scripts/segwi/web/src/**", "scripts/segwi/check-design.mjs", "names.json"],
+      "exclude": ["site/docs/**"]
+    },
+    "audit": {
+      "command": "node scripts/segwi/audit.mjs",
+      "paths": ["package.json", "package-lock.json", "scripts/segwi/web/package.json", "scripts/segwi/web/package-lock.json", "scripts/segwi/audit.mjs"]
+    },
     "integration": {
       "command": "node --test scripts/integration.test.mjs",
       "dependsOn": ["config"]

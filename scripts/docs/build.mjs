@@ -61,6 +61,7 @@ export async function buildDocs({ root = repoRoot, out = path.join(root, "docs-s
   await writeFile(path.join(out, "public/llms.txt"), llmsText(pages));
   await writeFile(path.join(out, "public/favicon.svg"), files.get("site/favicon.svg"));
   await cp(path.join(here, "vitepress"), path.join(out, ".vitepress"), { recursive: true });
+  await writeFile(path.join(out, ".vitepress/theme/tokens.css"), files.get("site/tokens.css"));
   await writeFile(path.join(out, ".vitepress/site-data.json"), `${JSON.stringify({ sidebar: buildSidebar(pages) }, null, 2)}\n`);
   if (!render) return { pages, out };
 

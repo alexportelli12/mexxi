@@ -1,0 +1,24 @@
+# Weekly dependency updates, as pull requests that Verify checks before you look.
+# Minor and patch updates share one pull request per directory; a major update
+# gets its own, because it can need a migration. Security updates are a
+# repository setting (Settings > Code security), not a file.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      root-minor-and-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: npm
+    directory: /scripts/segwi/web
+    schedule:
+      interval: weekly
+    groups:
+      web-minor-and-patch:
+        update-types: [minor, patch]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

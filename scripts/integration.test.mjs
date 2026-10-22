@@ -1240,3 +1240,45 @@ test("a failing mod step leaves the rest installed, reports the failure and stay
   assert.equal((await install(options)).modsFailed, undefined);
   await install({ ...options, check: true });
 });
+
+// segwi is opt-in. Until a later phase teaches the installer about it, the key
+// must change nothing a default install records or renders, so everyone who
+// leaves it unset (or spells out its defaults) gets exactly what they had.
+async function snapshot(home) {
+  const entries = new Map();
+  const visit = async (directory) => {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const file = path.join(directory, entry.name);
+      const name = path.relative(home, file);
+      // The clone's own path may contain any word, so compare with it masked.
+      const masked = (text) => text.replaceAll(home, "<home>").replaceAll(path.resolve(checkout), "<checkout>");
+      if (entry.isDirectory()) await visit(file);
+      else if (entry.isSymbolicLink()) entries.set(name, `-> ${masked(await readlink(file))}`);
+      else if (name !== ".config/mexxi/config.json" && !name.startsWith(".claude-stub")) entries.set(name, masked(await readFile(file, "utf8")));
+    }
+  };
+  await visit(home);
+  return entries;
+}
+
+test("with segwi unset, or set to its defaults, the install records and renders exactly what it did before", async (t) => {
+  const installed = async (config) => {
+    const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-optin-off-"));
+    t.after(() => rm(home, { recursive: true, force: true }));
+    await configure(home, config);
+    await registerPlaywright(home);
+    const options = { home, checkout, hookDirectory: path.join(home, "git-hooks") };
+    const result = await install(options);
+    await install({ ...options, check: true });
+    assert.equal((await install({ ...options, dryRun: true })).conflicts, 0);
+    return { result, files: await snapshot(home) };
+  };
+  const unset = await installed({});
+  const defaults = await installed({ segwi: JSON.parse(await readFile(path.join(checkout, "config.example.json"), "utf8")).segwi });
+  assert.deepEqual(defaults.files, unset.files);
+  assert.equal(defaults.result.created, unset.result.created);
+  // Nothing of segwi is linked, rendered or recorded.
+  assert.ok(unset.files.size > 0);
+  for (const [name, content] of unset.files) assert.doesNotMatch(`${name}\n${content}`, /segwi/i, name);
+  assert.doesNotMatch(JSON.stringify(unset.result).replaceAll(path.resolve(checkout), "<checkout>"), /segwi/i);
+});

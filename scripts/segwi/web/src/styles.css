@@ -1,0 +1,33 @@
+@import "tailwindcss";
+/* The same tokens the landing page and docs read, so the three never drift. */
+@import "../../../../site/tokens.css";
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+  --color-needs-you: var(--status-needs-you);
+  --color-done: var(--status-done);
+  --color-failed: var(--status-failed);
+  --color-stopped: var(--status-stopped);
+  --font-ui: var(--font-sans);
+  --font-code: var(--font-mono);
+  --radius-card: var(--radius);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}

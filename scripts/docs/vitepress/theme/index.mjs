@@ -11,10 +11,12 @@ async function renderDiagrams() {
   // Labels are sized from the font in use, so wait for fonts or they are clipped.
   await document.fonts?.ready;
   const { default: mermaid } = await import("mermaid");
+  // Diagram colours come from the shared tokens, so they follow the page.
+  const token = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   mermaid.initialize({
     startOnLoad: false,
     theme: "dark",
-    themeVariables: { primaryColor: "#13161a", primaryBorderColor: "#f4b860", primaryTextColor: "#e6e8eb", lineColor: "#9aa2ad", fontFamily: "Inter, system-ui, sans-serif" },
+    themeVariables: { primaryColor: token("--surface-raised"), primaryBorderColor: token("--accent"), primaryTextColor: token("--text"), lineColor: token("--muted"), fontFamily: "Inter, system-ui, sans-serif" },
   });
   await mermaid.run({ nodes });
 }
