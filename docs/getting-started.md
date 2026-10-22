@@ -6,26 +6,33 @@ sources:
   - config.example.json
   - skills/ibda/SKILL.md
   - prompts.json
+  - scripts/ibni/**
+  - skills/rendered-qa/SKILL.md
 reviewed: 2026-10-22
 ---
 
 # Getting started
 
-You can set mexxi up by pasting one prompt into the agent you already use, or by running the installer yourself. Both end at the same check: `install --check` passes.
+Setting up mexxi takes two pastes into the agent you already use: one installs mexxi on your machine, and one prepares a repository. After that, you ask for changes with `/wettaq` and review the pull requests it opens.
 
-## What you need
+## What you need, and what each one is for
 
-mexxi runs inside one of Claude Code, Codex or OpenCode. The pasted prompt below checks everything else for you; to set up by hand, install these first.
+mexxi runs inside the coding agent you already use, so it needs one of Claude Code, Codex or OpenCode, with its own subscription or API key. mexxi adds no cost of its own. The pasted install prompt below checks the rest for you. To set up by hand, install these first:
 
-You need Node.js 22.13 or newer, [`git`](https://git-scm.com/), a signed-in forge CLI, and `~/.local/bin` on your `PATH`. The forge CLI is [`gh`](https://cli.github.com/) for GitHub or [`glab`](https://gitlab.com/gitlab-org/cli) for GitLab; a self-hosted forge also needs its host name in `forge.hosts` ([Configuration](configuration/index.md)). Three more tools are optional or host-specific:
+- **Node.js 22.13 or newer**, which runs mexxi's installer and its tools.
+- **[Git](https://git-scm.com/)**, which gives each task its own copy of the repository.
+- **The forge's CLI, signed in**: [`gh`](https://cli.github.com/) for GitHub or [`glab`](https://gitlab.com/gitlab-org/cli) for GitLab. The agent uses it to open the pull request and to see when it has merged, so finished worktrees can be cleaned up. A self-hosted forge also needs its host name in `forge.hosts` ([Configuration](configuration/index.md)).
+- **`~/.local/bin` on your `PATH`**, so the agent can run [`ibni`](cli/index.md), the command-line tool it uses for each task's worktree.
 
-- the [`ocr`](https://github.com/alibaba/open-code-review) CLI, which the independent review uses unless you set `review.tool` to `none`;
-- the [Playwright MCP](https://github.com/microsoft/playwright-mcp) server, which rendered QA needs; and
-- `ffmpeg`, if you want GIFs of motion.
+Three more are optional or host-specific:
+
+- the [Playwright MCP](https://github.com/microsoft/playwright-mcp) server, which lets the agent drive a real browser to check UI changes. MCP is the standard way to give an agent extra tools. Without this one, the agent cannot click through the app itself, and the pull request's evidence says what did not run;
+- the [`ocr`](https://github.com/alibaba/open-code-review) CLI, which picks the files and rules the independent reviewer looks at. With `review.tool` set to `none`, the reviewer reads the whole diff itself instead; and
+- `ffmpeg`, which turns recordings of motion into GIFs for the pull request.
 
 ## Set up by pasting a prompt
 
-Paste this into Claude Code, Codex or OpenCode. The agent installs mexxi and asks you only what it cannot detect.
+Paste this into Claude Code, Codex or OpenCode. The agent follows mexxi's setup instructions, the `ibda` skill: it checks the prerequisites, asks only what it cannot detect, and shows what it will change before it changes anything. The prompt has your agent follow the instructions in that file, so read it first if you want to know exactly what it will do, or [set up by hand](#set-up-by-hand).
 
 **Install mexxi**
 
@@ -33,7 +40,7 @@ Paste this into Claude Code, Codex or OpenCode. The agent installs mexxi and ask
 Set up mexxi for me. Read https://raw.githubusercontent.com/alexportelli12/mexxi/main/skills/ibda/SKILL.md and follow it.
 ```
 
-When mexxi is installed, open a repository and paste this. [`/lesti`](../commands/lesti.md) (get a repo ready) opens one pull request that adds what the repository lacks and fixes the checks that already fail.
+When mexxi is installed, open a repository and paste this. [`/lesti`](../commands/lesti.md), the command that gets a repository ready, opens one pull request that adds what the repository lacks and fixes the checks that already fail.
 
 **Prepare a repository**
 
@@ -61,19 +68,23 @@ Everything you might want different lives in one file: `~/.config/mexxi/config.j
 
 ### What the installer does
 
+Claude Code, Codex and OpenCode each expect their commands, agents, skills and hooks in their own folders and formats. The installer lets one set of files serve all three, so a change to the workflow reaches every agent, and updates arrive with a `git pull`.
+
 It renders the host files from `config.json` into `~/.local/share/mexxi/generated/`, then links them and the shared files into each host's home. [Configuration](configuration/index.md) lists every link. It never overwrites existing configuration: on a conflict it stops and lists the paths. It also:
 
-- puts [`ibni`](cli/index.md) (the worktree CLI) in `~/.local/bin`;
+- puts `ibni` in `~/.local/bin`;
 - adds a `post-merge` hook, so a later `git pull` on `main` reinstalls automatically; and
 - preserves your personal Codex `config.toml`.
 
 `install --check` renders again and fails on any difference, so a hand-edited host file or a stale render shows up as a failure.
 
-Moving from the old clone in `~/.config/opencode`? Follow [Migrating from coding-agent-config](migrating-from-coding-agent-config.md). [Host details](host-details.md) covers what each agent needs after installing, the Playwright server and the [guard](glossary.md#guard).
+If you used mexxi before it was renamed, from a clone in `~/.config/opencode`, follow [Migrating from coding-agent-config](migrating-from-coding-agent-config.md). [Host details](host-details.md) covers what each agent needs after installing, the Playwright server and the [guard](glossary.md#guard).
 
 ## Prepare your repository
 
-An application repository needs one thing: a verify command that defines "mechanically healthy" for that project. By default it is `npm run verify`. [Verifika](https://github.com/alexportelli12/verifika) is the recommended way: list the checks in `verifika.config.json` and set `"verify": "verifika --all"`. Agents then run only the checks a change affects while they work. The `/lesti` prompt above does this for you.
+An agent will say its work is done whether or not it is. So mexxi needs one command per repository that answers "does it work?" with a pass or a fail: the [verify command](glossary.md#verify). It runs your tests, linters and build, and a run is finished only when it passes. By default it is `npm run verify`.
+
+[Verifika](https://github.com/alexportelli12/verifika), a small check runner installed as a development dependency, is the recommended way to write one. List the checks in `verifika.config.json`, each with the files it covers, and set the `verify` script in `package.json` to `verifika --all`. Agents then run only the checks a change affects while they work, and the full set at the end. The `/lesti` prompt above does this for you.
 
 A repository that already has one reliable command, such as `make check` or `tox`, can keep it instead. Name it in a committed `.mexxi.json`:
 
@@ -81,20 +92,22 @@ A repository that already has one reliable command, such as `make check` or `tox
 { "verify": "make check" }
 ```
 
-To skip a baseline that CI has already proven, add to `.mexxi.json` the name of the CI check that runs your full verify command:
+Every run starts by running verify once, to prove the starting point is green. That first result is the [baseline](glossary.md#baseline). When your CI already runs the full verify command on every commit, that first run repeats work CI has done. Name the CI job that runs it in `.mexxi.json`, such as `verify` on GitHub Actions, and a run cites the CI result instead:
 
 ```json
 { "ciCheck": "verify" }
 ```
 
-When that check succeeded on exactly the commit `ibni prepare` starts from, `prepare` records it as the baseline and `/wettaq` cites it instead of rerunning verify. Anything else, such as no opt-in, a pending or failed run, or a different commit, runs the baseline as before.
+The CI result counts only when that check succeeded on exactly the commit the task starts from. Otherwise, such as when the run is pending, failed or on another commit, the agent runs verify itself as usual.
 
 ## Try it
 
-From the repository's default branch, ask [`/wettaq`](../commands/wettaq.md) (build it) for a change:
+From the repository's default branch, type this in your agent's chat to ask [`/wettaq`](../commands/wettaq.md), the command that builds a change:
 
 ```text
 /wettaq show the last sync time on the settings page
 ```
 
-[How a run works](how-a-run-works.md) walks through what happens next, and [Reviewing a mexxi pull request](reviewing-a-pull-request.md) covers what you check when the pull request arrives. For occasional manual use, `ibni list` shows retained [workspaces](glossary.md#workspace) and `ibni cleanup` shows what it would remove. [CLI reference](cli/index.md) covers the rest.
+The agent works on its own and asks you only about product decisions it cannot settle from the code. [How a run works](how-a-run-works.md) walks through what happens next, and [Reviewing a mexxi pull request](reviewing-a-pull-request.md) covers what you check when the pull request arrives.
+
+You rarely run `ibni` yourself. Each task's worktree is kept after its pull request opens, for follow-up changes. A kept worktree and its record are called a [workspace](glossary.md#workspace). Once the pull request merges, the next task you start removes it. `ibni list` shows the kept workspaces, and `ibni cleanup` shows what it would remove. [CLI reference](cli/index.md) covers the rest.

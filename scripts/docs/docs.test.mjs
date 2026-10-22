@@ -89,14 +89,14 @@ test("the landing page's dictionary entries match names.json, and both pages lin
   assert.match(problems, /give mexxi's pronunciation and meaning/);
 });
 
-test("the README runs problems, solutions, getting started with the prompts, then links", async () => {
+test("the README runs the problem, solutions, getting started with the prompts, then links", async () => {
   const files = await readAllowed(root);
   const readme = files.get("README.md");
-  const problemsSection = readme.match(/^## The problems[\s\S]*?(?=^## )/m)[0];
+  const problemsSection = readme.match(/^## The problem[\s\S]*?(?=^## )/m)[0];
   files.set("README.md", readme.replace(problemsSection, "").replace(/^## Learn more/m, `${problemsSection}## Learn more`));
-  assert.match(checkConsistency(files).join("\n"), /sections must run The problems/);
+  assert.match(checkConsistency(files).join("\n"), /sections must run The problem/);
   const prompts = JSON.parse(files.get("prompts.json"));
-  files.set("README.md", readme.replace(prompts.install.text, "").replace(/^## The problems/m, `${prompts.install.text}\n\n## The problems`));
+  files.set("README.md", readme.replace(prompts.install.text, "").replace(/^## The problem/m, `${prompts.install.text}\n\n## The problem`));
   assert.match(checkConsistency(files).join("\n"), /"install" prompt belongs in Getting started/);
 });
 

@@ -22,7 +22,7 @@
     "meaning": ["to build"],
     "ipa": "ɪbnɪ",
     "respelling": "ib-nee",
-    "job": "The command-line tool the agent runs to give each task its own copy of the repository, and to push only work whose checks passed.",
+    "job": "The command-line tool the agent runs to give each task its own copy of the repository, and to push only the exact code recorded as passing its checks.",
     "replaces": "implementation-workspace",
     "note": null,
     "sources": [{ "dictionary": "Ġabra", "entry": "bena", "url": "https://mlrs.research.um.edu.mt/resources/gabra/lexemes/view/5200a366e36f237975000aff" }]
