@@ -13,9 +13,13 @@ mode it must also supply the finding ledger and remediation summary. If these
 are missing, report the coverage limit; do not clear the review gate. Do not
 rely on implementation transcripts, self-review, or advocacy.
 
-OCR supplies deterministic selection and rules; **you**, using the model
-assigned by the coding-agent host, perform the review. OCR does not need an
-LLM provider or API key. Never invoke `ocr review`, configure/test OCR's LLM,
+The invocation also names the review tool, `review.tool` in mexxi's
+config.json: `ocr` (the default when it names none) or `none`. It decides only
+how you select what to review; everything after selection is the same.
+
+With `ocr`, OCR supplies deterministic selection and rules; **you**, using the
+model assigned by the coding-agent host, perform the review. OCR does not need
+an LLM provider or API key. Never invoke `ocr review`, configure/test OCR's LLM,
 pass `--provider` or `--model`, map the host model to an OCR provider, or fall
 back to OCR-managed review.
 
@@ -35,14 +39,24 @@ back to OCR-managed review.
    repository/task context, resolving generic advice against intentional local
    patterns. If rule resolution fails, report the incomplete gate rather than
    inventing rules. Delegation commands never contact an OCR LLM endpoint.
-3. Account for every `(path, status)` entry; workspace mode can list a staged
-   deletion and untracked recreation at the same path separately. For each,
-   inspect its diff and relevant surrounding code: `git diff HEAD -- <path>`
-   for tracked workspace changes, read untracked additions directly,
-   `git diff <merge_base>..<to> -- <path>` using preview metadata for ranges, or
-   `git show <commit> -- <path>` for a commit. Mark it reviewed or skipped with
-   a concrete reason. Review in bounded batches if large; do not stop after
-   the first finding.
+
+With `none`, there is no OCR step and no OCR command to run. Read the
+background file first, then list the target's changed paths yourself:
+`git status --porcelain --untracked-files=all` plus
+`git diff HEAD --name-status` for workspace changes, `git diff --name-status <base>...<branch>` for a committed range, or
+`git show --name-status <commit>` for a commit. Every changed path is in the
+review set; skip only generated or vendored files, each with its reason. Apply
+the repository's own conventions and agent docs in place of OCR's rules.
+
+With either tool, account for every `(path, status)` entry; workspace mode can
+list a staged deletion and untracked recreation at the same path separately.
+For each, inspect its diff and relevant surrounding code:
+`git diff HEAD -- <path>` for tracked workspace changes, read untracked
+additions directly, `git diff <merge_base>..<to> -- <path>` for ranges using
+preview metadata (with `none`, `git diff <base>...<branch> -- <path>`, which
+diffs from the merge base), or `git show <commit> -- <path>` for a commit.
+Mark it reviewed or skipped with a concrete reason. Review in bounded batches
+if large; do not stop after the first finding.
 
 In `discovery`, judge correctness, regressions, architecture, maintainability,
 security, error handling, performance, tests and repository conventions. For
@@ -54,9 +68,9 @@ guidance only when UI judgement helps. Re-render only to close a gap you name
 in your result, using `rendered-qa` for technique. Do not impose UI analysis
 on unrelated changes.
 
-In `confirmation`, repeat delegation preview and rule resolution on the current
-target. Check each accepted blocking ledger item against the current code and
-relevant rendered behaviour, then inspect the fixes for material consequences.
+In `confirmation`, repeat selection (with `ocr`, delegation preview and rule
+resolution) on the current target. Check each accepted blocking ledger item
+against the current code and relevant rendered behaviour, then inspect the fixes for material consequences.
 This is not a new broad discovery pass. Report a new blocking issue only for a
 serious regression caused or exposed by remediation, a correctness or safety
 issue, or a genuinely blocking requirement failure. Do not promote unchanged
@@ -72,10 +86,11 @@ part with a one-line justification:
 - **Blast radius:** one word for how far a defect could reach (for example
   `isolated`, `feature`, `app-wide`, or `data`) and what could break.
 
-Return to the orchestrator a concise result: mode, target, merge danger, OCR
-selection (`total_files`, `reviewable_count`, `excluded_count` and reasons), selected
-entries reviewed or skipped with reasons, material coverage limits, each
-blocking ledger item's confirmation status when applicable, and
+Return to the orchestrator a concise result: mode, target, review tool, merge
+danger, selection (with `ocr`, its `total_files`, `reviewable_count`,
+`excluded_count` and reasons; with `none`, the changed paths and any skipped
+with reasons), selected entries reviewed or skipped with reasons, material
+coverage limits, each blocking ledger item's confirmation status when applicable, and
 evidence-based findings with severity (`critical`, `high`, `medium`, `low`),
 category, path/line or rendered evidence, impact, and bounded recommendation.
 The orchestrator alone triages applicability and owns remediation and the

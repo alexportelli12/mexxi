@@ -9,7 +9,7 @@
       }
     },
     "code-reviewer": {
-      "description": "Independently review completed changes using OCR Delegation Mode, including UI/UX when relevant",
+      "description": "Independently review completed changes, including UI/UX when relevant",
       "mode": "subagent",
       "permission": {
         "read": "allow",

@@ -72,8 +72,10 @@ test("--help documents every option", () => {
 async function browserAvailable() {
   const { config } = await loadConfig();
   try {
-    await access(config.browser.executablePath);
-    await locatePlaywright({ mcpVersion: config.browser.playwrightMcpVersion });
+    const entry = await locatePlaywright({ mcpVersion: config.browser.playwrightMcpVersion });
+    // With no executablePath the sweep launches Playwright's own Chromium.
+    const playwright = await import(pathToFileURL(entry).href);
+    await access(config.browser.executablePath ?? (playwright.chromium ?? playwright.default.chromium).executablePath());
     return config;
   } catch {
     return null;

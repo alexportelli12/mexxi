@@ -30,7 +30,7 @@ Write the gap list to `evidenceDir` before the first edit.
 | Verify command | One command that exists, passes when the repository is healthy, and covers the checks the repository really has: package scripts, CI workflows, tool configs. Verifika behind `npm run verify` (`verifika --all`, version pinned exactly) is recommended; another reliable command is accepted (see below) |
 | Tests | A test runner is set up and runs. Where there are none, invent none: record it as a gap for a human |
 | Agent docs | A short `AGENTS.md`: how to install, run, test and seed the app |
-| Review coverage | `.opencodereview/rule.json` includes the repository's test paths |
+| Review coverage | With `review.tool` `ocr` (the default), `.opencodereview/rule.json` includes the repository's test paths; with `none`, nothing to set up |
 | Rendered QA (UI repositories) | A documented dev-server command and port (`PORT` honoured); whether a preview deploy exists |
 | Baseline reuse | Which CI check runs the full verify, if any |
 | UX principles (UI repositories) | `UX_PRINCIPLES.md` exists. If not, suggest `/fassal` afterwards; never invent principles |

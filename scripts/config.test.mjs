@@ -27,8 +27,13 @@ test("a missing config.json means every default, with ~ expanded", async (t) => 
   assert.equal(config.paths.worktreeRoot, path.join(home, ".local/share/mexxi/worktrees"));
   assert.equal(config.browser.outputDir, config.paths.worktreeRoot);
   assert.deepEqual(config.hosts, { opencode: true, claude: true, codex: true });
-  assert.equal(config.models.opencode.explore, "openai/gpt-5.6-luna");
+  // Portable defaults: every role inherits the host's model, Playwright picks
+  // its own browser, and only publishing, merges and force pushes are denied.
+  assert.deepEqual(config.models.opencode, { general: null, explore: null, uiDesigner: null, reviewer: null, crossFamilyReviewer: null });
   assert.equal(config.models.claude.reviewer, null);
+  assert.equal(config.browser.executablePath, null);
+  assert.equal(config.review.tool, "ocr");
+  assert.deepEqual(config.guard.deny, ["npm publish", "gh pr merge", "gh release create", "git push --force", "git push -f"]);
   assert.equal(config.workflow.branchPrefix, "agent/");
   assert.deepEqual(config.workflow.viewports, [1440, 768, 390]);
   assert.equal(config.jev.enabled, false);
@@ -38,14 +43,17 @@ test("a missing config.json means every default, with ~ expanded", async (t) => 
 test("a user sets only what differs: objects merge, arrays and null replace", async () => {
   const config = await resolveConfig({
     paths: { worktreeRoot: "/srv/worktrees" },
-    models: { opencode: { explore: null } },
+    models: { opencode: { explore: "openai/gpt-5.6-luna" } },
     workflow: { viewports: [1280] },
-    browser: { outputDir: "~/evidence" },
+    browser: { outputDir: "~/evidence", executablePath: "~/bin/chromium" },
+    review: { tool: "none" },
   }, { home });
   assert.equal(config.paths.checkout, path.join(home, "workspace/mexxi"));
   assert.equal(config.paths.worktreeRoot, "/srv/worktrees");
-  assert.equal(config.models.opencode.explore, null);
-  assert.equal(config.models.opencode.general, "openai/gpt-5.6-luna");
+  assert.equal(config.models.opencode.explore, "openai/gpt-5.6-luna");
+  assert.equal(config.models.opencode.general, null);
+  assert.equal(config.browser.executablePath, path.join(home, "bin/chromium"));
+  assert.equal(config.review.tool, "none");
   assert.deepEqual(config.workflow.viewports, [1280]);
   assert.equal(config.workflow.branchPrefix, "agent/");
   assert.equal(config.browser.outputDir, path.join(home, "evidence"));
@@ -59,6 +67,8 @@ test("validation names every invalid key", async () => {
     workflow: { branchPrefix: "agent", viewports: [100], ports: { last: 70000 } },
     jev: { maxPayloadBytes: 1.5 },
     mods: ["unknown"],
+    review: { tool: "codex" },
+    browser: { executablePath: "chromium" },
     extra: true,
   }, { home, source: "test config" }), (error) => {
     assert.ok(error instanceof ConfigError);
@@ -72,6 +82,8 @@ test("validation names every invalid key", async () => {
       /config\.workflow\.ports\.last: above 65535/,
       /config\.jev\.maxPayloadBytes: expected integer, got number/,
       /config\.mods\[0\]: expected one of run-pane, command-fixer/,
+      /config\.review\.tool: expected one of ocr, none/,
+      /config\.browser\.executablePath: does not match/,
       /config\.extra: unknown key/,
     ]) assert.match(error.message, expected);
     return true;

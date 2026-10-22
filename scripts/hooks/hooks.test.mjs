@@ -19,7 +19,13 @@ const home = path.join(base, "home");
 const configFile = path.join(base, "config.json");
 process.env.HOME = home;
 process.env.MEXXI_CONFIG = configFile;
-await writeFile(configFile, JSON.stringify({ guard: { protectedBranches: ["release"] } }));
+// Production deploys are personal, so the default deny list leaves them out;
+// this config adds the common ones, as config.schema.json suggests, so the
+// guard's prefix matching is tested against real deploy commands.
+const personalDeny = ["firebase deploy", "npm run deploy", "gcloud functions deploy", "gcloud run deploy", "vercel --prod", "netlify deploy --prod"];
+const defaultDeny = JSON.parse(await readFile(new URL("../../config.schema.json", import.meta.url), "utf8")).properties.guard.properties.deny.default;
+const baseConfig = JSON.stringify({ guard: { protectedBranches: ["release"], deny: [...defaultDeny, ...personalDeny] } });
+await writeFile(configFile, baseConfig);
 const { default: opencodePlugin } = await import("../../opencode/plugins/mexxi-guard.js");
 const { exitCode } = await import("./loop-breaker.mjs");
 const { resolveConfig } = await import("../lib/config.mjs");
@@ -449,10 +455,10 @@ test("Shopify CLI commands that change a live store are blocked", async () => {
   }
 });
 
-test("every starter deny prefix is blocked even when sidestepped with cd x && ...", async () => {
+test("every default and configured deny prefix is blocked even when sidestepped with cd x && ...", async () => {
   const { guard } = await resolveConfig({});
-  assert.equal(guard.deny.length, 11);
-  for (const prefix of guard.deny) {
+  assert.deepEqual(guard.deny, ["npm publish", "gh pr merge", "gh release create", "git push --force", "git push -f"]);
+  for (const prefix of [...guard.deny, ...personalDeny]) {
     for (const command of [`${prefix} --example`, `cd x && ${prefix}`, `cd x; FOO=1 ${prefix} --yes`, `bash -c "cd x && ${prefix}"`, `true && $(${prefix})`]) {
       await assertBlocked(command, /force|guard\.deny|merge decisions/);
     }
@@ -564,7 +570,7 @@ test("look-alikes are allowed: feature pushes, quoted text and other commands", 
 
 test("unquoted --include=* globs are blocked only when guard.blockUnquotedGlobs is on", async (t) => {
   await writeFile(configFile, JSON.stringify({ guard: { blockUnquotedGlobs: true } }));
-  t.after(() => writeFile(configFile, JSON.stringify({ guard: { protectedBranches: ["release"] } })));
+  t.after(() => writeFile(configFile, baseConfig));
   await assertBlocked("grep -rn x --include=*.ts .", /quote it: --include='\*\.ts'/);
   await assertBlocked("rg x && grep -r y --exclude-dir=node_* .", /--exclude-dir='node_\*'/);
   await assertAllowed("grep -rn x --include='*.ts' .");
@@ -740,7 +746,7 @@ test("OpenCode's plugin runs the loop breaker on the bash tool's exit status", a
 
 test("the limit comes from guard.repeatedFailureLimit, and state stays under the home's mexxi state", async (t) => {
   await writeFile(configFile, JSON.stringify({ guard: { repeatedFailureLimit: 2 } }));
-  t.after(() => writeFile(configFile, JSON.stringify({ guard: { protectedBranches: ["release"] } })));
+  t.after(() => writeFile(configFile, baseConfig));
   assert.equal(runHook("loop-breaker.mjs", failure("s4", "make")).code, 0);
   assert.equal(runHook("loop-breaker.mjs", failure("s4", "make")).code, 2);
   const directory = path.join(home, ".local/share/mexxi/state/loop-breaker");

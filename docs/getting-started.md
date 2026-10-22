@@ -7,7 +7,7 @@ sources:
   - config.example.json
   - skills/ibda/SKILL.md
   - prompts.json
-reviewed: 2026-10-21
+reviewed: 2026-10-22
 ---
 
 # Getting started
@@ -36,7 +36,7 @@ Make this repository ready for mexxi: run /lesti here.
 
 You need Node.js 22.13 or newer, [`git`](https://git-scm.com/), the [`gh`](https://cli.github.com/) CLI (signed in), and `~/.local/bin` on your `PATH`. Three more tools are optional or host-specific:
 
-- the [`ocr`](https://github.com/alibaba/open-code-review) CLI, which the independent review needs;
+- the [`ocr`](https://github.com/alibaba/open-code-review) CLI, which the independent review uses unless you set `review.tool` to `none`;
 - the [Playwright MCP](https://github.com/microsoft/playwright-mcp) server, which rendered QA needs; and
 - `ffmpeg`, if you want GIFs of motion.
 
@@ -110,11 +110,11 @@ cd ~/.config/opencode && node scripts/install.mjs
 **Playwright MCP.** The pin, browser path and output directory come from the `browser` group in `config.json`. Claude Code and Codex keep MCP servers in files that are yours, so the installer prints the registration lines and never runs them:
 
 ```bash
-claude mcp add --scope user playwright -- npx -y @playwright/mcp@0.0.83 --headless --isolated --executable-path=/usr/bin/chromium --output-dir=<worktree root>
-codex mcp add playwright -- npx -y @playwright/mcp@0.0.83 --headless --isolated --executable-path=/usr/bin/chromium --output-dir=<worktree root>
+claude mcp add --scope user playwright -- npx -y @playwright/mcp@0.0.83 --headless --isolated --browser=chromium --output-dir=<worktree root>
+codex mcp add playwright -- npx -y @playwright/mcp@0.0.83 --headless --isolated --browser=chromium --output-dir=<worktree root>
 ```
 
-`install --check` reads those files back and fails when a server is missing or has another version, another output directory, or `--allow-unrestricted-file-access`. To change the pin, edit `config.json`, rerun the installer, remove the old server and register it again with the new lines.
+These lines use Playwright's own Chromium: install it once with `npx -y @playwright/mcp@0.0.83 install-browser chromium`. With `browser.executablePath` set, they pass `--executable-path` instead. `install --check` reads those files back and fails when a server is missing or has another version, browser, output directory, or `--allow-unrestricted-file-access`. To change the pin, edit `config.json`, rerun the installer, remove the old server and register it again with the new lines.
 
 **The guard.** Claude Code and Codex run `scripts/hooks/guard.mjs` before every shell command, and OpenCode runs the same code through a plugin. Codex runs it only once you trust it in `/hooks`. The rules in `AGENTS.md` are what bind the agent; the guard is a backup for some of them, not a substitute. A command it lets through is not thereby allowed. A refusal reaches the agent as the tool's error, with the reason.
 
