@@ -52,10 +52,12 @@ export const COMMANDS = {
       "Run from the repository's clean primary checkout on its default branch. Fast-forwards it,",
       "sweeps retained workspaces whose pull requests are proven merged, then creates a locked",
       "worktree, its evidenceDir and a free PORT (from workflow.ports in config.json).",
-      "If the repository's .mexxi.json names a ciCheck (the CI run of its full verify) and that",
+      "verifyCommand is the repository's verify command: verify in its committed .mexxi.json,",
+      "or npm run verify when that names none.",
+      "If .mexxi.json names a ciCheck (the CI run of its full verify command) and that",
       "check succeeded on exactly the base commit, baseline.reused is true and baseline cites the",
       "run, so the local baseline verify can be skipped; otherwise baseline says why it runs.",
-      "Prints sessionId, worktreePath, branch, evidenceDir, port, baseline, provisionedEnv and cleanup.",
+      "Prints sessionId, worktreePath, branch, evidenceDir, port, verifyCommand, baseline, provisionedEnv and cleanup.",
     ],
     options: {
       slug: "Short task name for the branch and worktree folder.",
@@ -171,7 +173,7 @@ export const COMMANDS = {
   },
   info: {
     usage: "ibni info --session <id>",
-    summary: "Print one session's workspace: paths, branch, port, PR and state.",
+    summary: "Print one session's workspace: paths, branch, port, verify command, PR and state.",
     details: [SESSION_LOOKUP],
     options: { session: "The sessionId from prepare or adopt." },
     run: (options) => workspaceInfo({ sessionId: options.session }),
@@ -189,7 +191,7 @@ export const COMMANDS = {
     details: ["One result per call; stats reports them and compares the gates with Jev's triage.", SESSION_LOOKUP],
     options: {
       session: "The sessionId from prepare or adopt.",
-      verify: "Outcome of a full npm run verify: pass or fail.",
+      verify: "Outcome of a full run of the repository's verify command: pass or fail.",
       review: "Number of findings an independent review pass returned.",
       accepted: "With --review: how many of those findings you accepted (fixed).",
       reviewer: "With --review: same if the reviewer shares your model family, cross if it does not (cross-review delegated).",

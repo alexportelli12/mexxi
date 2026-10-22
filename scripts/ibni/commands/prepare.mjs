@@ -3,7 +3,7 @@ import { copyFile, mkdir, readdir, rm } from "node:fs/promises";
 import path from "node:path";
 import { workspaceConfig, workspaceRoot, sanitizePrefix, sanitizeSegment } from "../lib/config.mjs";
 import { WorkspaceError } from "../lib/errors.mjs";
-import { provenBaseline } from "../lib/baseline.mjs";
+import { provenBaseline, repositorySettings, verifyCommandFrom } from "../lib/baseline.mjs";
 import { pathExists } from "../lib/fs.mjs";
 import {
   assertClean,
@@ -174,7 +174,9 @@ export async function prepareWorkspace({ cwd = process.cwd(), slug, prefix }) {
 
     const cleanup = await sweepConsumedWorkspaces(repository);
     const baseSha = cleanOutput(await git(repository.root, ["rev-parse", "HEAD"]));
-    const baseline = await provenBaseline(repository.root, baseSha);
+    const settings = await repositorySettings(repository.root, baseSha);
+    const verifyCommand = verifyCommandFrom(settings);
+    const baseline = await provenBaseline(repository.root, baseSha, settings);
     const allocation = await allocateWorkspace(
       repository,
       repository.root,
@@ -224,6 +226,7 @@ export async function prepareWorkspace({ cwd = process.cwd(), slug, prefix }) {
         publishedSha: null,
         prUrl: null,
         port,
+        verifyCommand,
         baseline,
         evidenceTreeSha: null,
         evidenceRecordedAt: null,
@@ -242,6 +245,7 @@ export async function prepareWorkspace({ cwd = process.cwd(), slug, prefix }) {
         baseSha: metadata.baseSha,
         evidenceDir,
         port,
+        verifyCommand,
         baseline,
         provisionedEnv,
         cleanup,

@@ -120,9 +120,15 @@ codex mcp add playwright -- npx -y @playwright/mcp@0.0.83 --headless --isolated 
 
 ## Prepare your repository
 
-An application repository needs one thing: an `npm run verify` script that defines "mechanically healthy" for that project. [Verifika](https://github.com/alexportelli12/verifika) is the recommended way: list the checks in `verifika.config.json` and set `"verify": "verifika --all"`. Agents then run only the checks a change affects while they work. The `/lesti` prompt above does this for you.
+An application repository needs one thing: a verify command that defines "mechanically healthy" for that project. By default it is `npm run verify`. [Verifika](https://github.com/alexportelli12/verifika) is the recommended way: list the checks in `verifika.config.json` and set `"verify": "verifika --all"`. Agents then run only the checks a change affects while they work. The `/lesti` prompt above does this for you.
 
-To skip a baseline that CI has already proven, commit a `.mexxi.json` that names the CI check running your full `verify`:
+A repository that already has one reliable command, such as `make check` or `tox`, can keep it instead. Name it in a committed `.mexxi.json`:
+
+```json
+{ "verify": "make check" }
+```
+
+To skip a baseline that CI has already proven, add to `.mexxi.json` the name of the CI check that runs your full verify command:
 
 ```json
 { "ciCheck": "verify" }
