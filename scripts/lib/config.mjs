@@ -9,8 +9,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const schemaFile = fileURLToPath(new URL("../../config.schema.json", import.meta.url));
+// `why` and `scope` are annotations for the docs, like `description`: the
+// problem a group solves, and who it applies to.
 export const supportedKeywords = new Set([
-  "$schema", "title", "description", "type", "properties", "additionalProperties",
+  "$schema", "title", "description", "why", "scope", "type", "properties", "additionalProperties",
   "items", "enum", "pattern", "minimum", "maximum", "minLength", "default",
 ]);
 

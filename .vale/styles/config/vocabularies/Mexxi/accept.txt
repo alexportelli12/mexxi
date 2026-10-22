@@ -66,3 +66,5 @@ beda
 irrifletta
 Ġabra
 [Ll]inters?
+[Ss]ubcommands?(?:'s)?
+[Ff]rontmatter

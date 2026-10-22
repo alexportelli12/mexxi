@@ -139,9 +139,9 @@ export async function check(base = root) {
   for (const name of await readdir(path.join(base, "commands"))) {
     if (!name.endsWith(".md")) continue;
     const text = await readFile(path.join(base, "commands", name), "utf8");
-    // An optional folded `summary` for the docs site follows the description;
-    // the Codex renderer strips it, so its shape is fixed here.
-    assert.match(text, /^---\ndescription: [^\n]+\n(?:summary: >-\n(?: {2}[^\n]+\n)+)?---\n/, `command ${name} must start with a description line and at most a folded summary`);
+    // An optional one-line `why` and folded `summary` for the docs site follow
+    // the description; the Codex renderer strips them, so their shape is fixed here.
+    assert.match(text, /^---\ndescription: [^\n]+\n(?:why: [^\n]+\n)?(?:summary: >-\n(?: {2}[^\n]+\n)+)?---\n/, `command ${name} must start with a description line, then at most a why line and a folded summary`);
     assert.match(text, /\$ARGUMENTS/, `command ${name} lost argument substitution`);
     assert.doesNotMatch(text, /(?:openai|opencode-go)\/[a-z0-9.-]+/i);
   }
@@ -190,6 +190,11 @@ export async function check(base = root) {
   for (const entry of names.filter((item) => item.kind === "command" && item.replaces)) {
     assert.ok(`${entry.replaces}.md` in commandAliases, `names.json: ${entry.name} replaces /${entry.replaces}, which has no alias in commands/`);
   }
+  // mexxi.schema.json documents the keys ibni reads from a repository's
+  // .mexxi.json; each one must be a key the code really reads.
+  const repositoryKeys = Object.keys(JSON.parse(await readFile(path.join(base, "mexxi.schema.json"), "utf8")).properties);
+  const repositoryCode = (await readFile(path.join(base, "scripts/ibni/lib/baseline.mjs"), "utf8")) + (await readFile(path.join(base, "scripts/ibni/lib/forge.mjs"), "utf8"));
+  for (const key of repositoryKeys) assert.ok(new RegExp(`(?:\\.|\\{\\s*)${key}\\b`).test(repositoryCode), `mexxi.schema.json documents .mexxi.json's ${key}, which ibni does not read`);
   // The prompts the README, landing page and docs copy come from prompts.json.
   const prompts = JSON.parse(await readFile(path.join(base, "prompts.json"), "utf8"));
   assert.deepEqual(Object.keys(prompts), ["install", "prepare"]);

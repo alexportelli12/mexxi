@@ -1160,6 +1160,7 @@ test("the tool and every subcommand answer --help and -h with exit 0", async (t)
       assert.equal(result.code, 0);
       assert.equal(result.stderr, "");
       assert.match(result.stdout, new RegExp(`^Usage: ibni ${name}\\b`), `${args.join(" ")}`);
+      assert.match(result.stdout, /^Why: \S.+$/m, `${name} --help says why it exists`);
     }
   }
   const media = await run(process.execPath, [cli, "publish-media", "--help"], { cwd: fixture.root });

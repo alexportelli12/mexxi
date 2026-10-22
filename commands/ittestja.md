@@ -1,5 +1,6 @@
 ---
 description: Run hands-on rendered QA of a route, flow, pull request, or implementation session and report findings without changing code
+why: Tests can pass while the page is still broken, because nobody looked at it in a browser.
 summary: >-
   Use it to see how a page, a flow or a pull request really behaves before you merge. You get
   a findings report with a severity, a screenshot and steps to reproduce for each problem; it

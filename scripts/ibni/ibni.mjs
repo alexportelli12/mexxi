@@ -42,12 +42,14 @@ export {
 const SESSION_LOOKUP = "The session's workspace is found from its metadata, so this runs from any directory, including the session's evidenceDir.";
 
 // The registry is the CLI: dispatch, help and the help test all read it, so a
-// subcommand cannot exist without a usage line. Lifecycle steps (`timed`) are
+// subcommand cannot exist without a usage line or a `why`, the problem it
+// solves, which its help and the docs both show. Lifecycle steps (`timed`) are
 // recorded with start, end and outcome in the session's metadata for `stats`.
 export const COMMANDS = {
   prepare: {
     usage: "ibni prepare --slug <name> [--prefix <prefix>]",
     summary: "Create an isolated worktree and branch for a new task.",
+    why: "An agent working in your checkout trips over your own work and over other tasks, so each task starts in its own worktree.",
     details: [
       "Run from the repository's clean primary checkout on its default branch. Fast-forwards it,",
       "sweeps retained workspaces whose pull requests are proven merged, then creates a locked",
@@ -71,6 +73,7 @@ export const COMMANDS = {
   sync: {
     usage: "ibni sync --session <id>",
     summary: "Integrate the latest default branch into the session's branch.",
+    why: "The default branch moves on while a task runs, so the task's branch has to catch up without losing work; on a conflict it stops and changes nothing.",
     details: ["Rebases unpublished work, merges into published work, and aborts cleanly on conflict.", SESSION_LOOKUP],
     options: { session: "The sessionId from prepare or adopt." },
     timed: true,
@@ -79,6 +82,7 @@ export const COMMANDS = {
   "record-evidence": {
     usage: "ibni record-evidence --session <id>",
     summary: "Record that the committed tree passed the gates.",
+    why: "A push should carry only code that passed the checks, so this records exactly which code that was.",
     details: ["Required before publish; any later commit needs it again.", SESSION_LOOKUP],
     options: { session: "The sessionId from prepare or adopt." },
     timed: true,
@@ -87,6 +91,7 @@ export const COMMANDS = {
   publish: {
     usage: "ibni publish --session <id>",
     summary: "Sync, then push the evidenced branch without force.",
+    why: "Pushing is where an agent can do the most damage, so it happens one safe way: never forced, and only the recorded code.",
     details: [
       "Returns published: false with a nextAction when evidence is missing or stale.",
       "A push failing with an HTTP 5xx from the Git host is retried once.",
@@ -99,6 +104,7 @@ export const COMMANDS = {
   "publish-media": {
     usage: "ibni publish-media --session <id> [--files <a.png,b.gif>]",
     summary: "Publish screenshots and recordings from evidenceDir to the pr-media branch.",
+    why: "Screenshots belong in the pull request, not in the code, so they go to a separate pr-media branch in the same repository.",
     details: [
       `Allowed file types: ${[...MEDIA_EXTENSIONS].join(", ")}.`,
       "Files must be inside the session's evidenceDir; returns embeddable GitHub or GitLab URLs.",
@@ -117,6 +123,7 @@ export const COMMANDS = {
   "mark-pr": {
     usage: "ibni mark-pr --session <id> --url <pull-request-url>",
     summary: "Record the pull request for a published session.",
+    why: "Cleanup must never remove a worktree whose pull request is still open, so this records which pull request a worktree belongs to.",
     details: ["Cleanup only removes a workspace once its recorded pull request is merged.", SESSION_LOOKUP],
     options: { session: "The sessionId from prepare or adopt.", url: "The pull request's URL." },
     timed: true,
@@ -125,6 +132,7 @@ export const COMMANDS = {
   "file-qa-checks": {
     usage: "ibni file-qa-checks --session <id> --from <file>",
     summary: "File rendered QA's suggested checks as qa-check issues, skipping duplicates.",
+    why: "A browser check that keeps finding the same kind of problem should become an automated test, not be repeated by hand.",
     details: [
       "The file lists one check per line (a leading list marker is dropped); each is an issue title.",
       "Creates the qa-check label if the repository lacks it, then an issue per check whose title",
@@ -142,6 +150,7 @@ export const COMMANDS = {
   "cross-review": {
     usage: "ibni cross-review --session <id> --mode <discovery|confirmation> --background <file> --target <text>",
     summary: "Run the code-reviewer through codex exec in a read-only sandbox (Claude Code only).",
+    why: "A reviewer from the builder's own model family shares its blind spots.",
     details: [
       "For Claude Code, whose implementer and reviewer would otherwise share a model family. Runs the",
       "shared code-reviewer instructions with models.claude.crossFamilyReviewer as the Codex model,",
@@ -162,6 +171,7 @@ export const COMMANDS = {
   adopt: {
     usage: "ibni adopt --pr <pull-request-url>",
     summary: "Take over the retained workspace of an open pull request from a new session.",
+    why: "When you continue a pull request from a new session, /wettaq runs this to pick up its worktree, and only when the worktree provably belongs to that pull request.",
     details: [
       "Finds the workspace that recorded this pull request, then proves the PR is open, its head",
       "branch is the workspace's branch, and its head commit equals the recorded publication, the",
@@ -176,6 +186,7 @@ export const COMMANDS = {
   info: {
     usage: "ibni info --session <id>",
     summary: "Print one session's workspace: paths, branch, port, verify command, PR, state and forge, plus the review tool config.json sets.",
+    why: "A later step, or you, needs a session's paths, port and pull request without guessing them.",
     details: [SESSION_LOOKUP],
     options: { session: "The sessionId from prepare or adopt." },
     run: (options) => workspaceInfo({ sessionId: options.session }),
@@ -183,6 +194,7 @@ export const COMMANDS = {
   list: {
     usage: "ibni list",
     summary: "List the retained workspaces of the current repository.",
+    why: "Worktrees are kept for follow-up changes, so you need to see which ones exist and why.",
     details: [],
     options: {},
     run: () => listWorkspaces({}),
@@ -190,6 +202,7 @@ export const COMMANDS = {
   record: {
     usage: "ibni record --session <id> (--verify <pass|fail> | --review <count> [--accepted <count> --reviewer <same|cross>] | --qa <count> | --before-shots <taken|skipped>)",
     summary: "Record a verify run, the finding count of a review or QA pass, or the before-shots decision.",
+    why: "The agent records each verify run, browser check and review as it finishes, so ibni stats and /irrifletti can show how runs went.",
     details: ["One result per call; stats reports them and compares the gates with Jev's triage.", SESSION_LOOKUP],
     options: {
       session: "The sessionId from prepare or adopt.",
@@ -213,6 +226,7 @@ export const COMMANDS = {
   triage: {
     usage: "ibni triage --session <id> --request-file <file> --contract-file <file>",
     summary: "Ask Jev which gates the change needs, and record the answers (shadow: nothing changes).",
+    why: "Experimental: it tests whether an outside decision model would choose a task's checks better than the agent, without letting it change anything.",
     details: [
       "Sends one batched request to OpenRouter (jev.endpoint, jev.model) with the request text, the",
       "task contract, the changed paths and diff stats against baseSha; never file contents, diffs,",
@@ -236,14 +250,16 @@ export const COMMANDS = {
   stats: {
     usage: "ibni stats --session <id>",
     summary: "Print the session's step timings, verify attempts, finding counts and Jev triage as JSON.",
+    why: "You need to see where a run spent its time and how often its checks failed.",
     details: [SESSION_LOOKUP],
     options: { session: "The sessionId from prepare or adopt." },
     run: (options) => workspaceStats({ sessionId: options.session }),
   },
   cleanup: {
     usage: "ibni cleanup [--dry-run false]",
-    summary: "Remove workspaces whose pull requests are merged and consumed.",
-    details: ["A dry run by default; protects open, dirty, unrecorded and unproven workspaces."],
+    summary: "Remove workspaces whose pull requests have merged into the default branch.",
+    why: "Kept worktrees take disk space once their pull requests have merged.",
+    details: ["A dry run by default. Keeps a workspace whose pull request is still open, whose worktree has uncommitted changes, that has no recorded pull request, or whose merge it cannot confirm."],
     options: { "dry-run": "false to remove; anything else only reports." },
     run: (options) => cleanupWorkspaces({ dryRun: options["dry-run"] !== "false" }),
   },
@@ -273,6 +289,7 @@ export function commandHelp(name) {
     `Usage: ${command.usage}`,
     "",
     command.summary,
+    ...(command.why ? ["", `Why: ${command.why}`] : []),
     ...(command.details.length ? ["", ...command.details] : []),
     ...(options.length ? ["", "Options:", ...options.map(([option, text]) => `  ${`--${option}`.padEnd(width)}  ${text}`)] : []),
   ].join("\n");

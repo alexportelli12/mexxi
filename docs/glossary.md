@@ -49,7 +49,7 @@ The service that hosts your repository and its pull requests, such as GitHub or 
 
 ## gate
 
-A check a run must pass before it moves on, such as verify, rendered QA or review. Gates are why a pull request arrives with proof rather than a claim.
+A check a run must pass before it moves on, such as verify, rendered QA or review. Gates are why a pull request arrives with proof rather than a claim. Its evidence line lists the gates that ran, and the ones that did not.
 
 ## guard
 

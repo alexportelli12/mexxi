@@ -1,0 +1,12 @@
+{
+  "code-reviewer": {
+    "why": "An agent that reviews its own work tends to approve it, so a separate reviewer judges the finished change.",
+    "runs": "During /wettaq, after the final checks and the browser pass, for substantial changes: once to find problems, and at most once more to confirm the fixes.",
+    "cannot": "It cannot edit code, and it does not run the repository's full checks. It reports findings with a severity; the agent that built the change fixes them."
+  },
+  "ui-designer": {
+    "why": "Interface work needs design judgement that general coding instructions do not carry, such as hierarchy, spacing and states.",
+    "runs": "When a run, or you, hands it UI work: designing a new screen or reshaping an existing one.",
+    "cannot": "It does not review its own work or run the repository's full checks; the main agent keeps the final verify and the independent review."
+  }
+}

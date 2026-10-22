@@ -1,5 +1,6 @@
 ---
 description: Investigate and implement a request through verified pull request creation
+why: An agent saying it is done is only a claim, and checking its work yourself takes as long as writing it, so this brings back a pull request that has already been checked.
 summary: >-
   Use it for any change you would hand to a developer: a feature, a fix, or a follow-up on
   an open pull request. You get one pull request that is tested, checked in a browser when the

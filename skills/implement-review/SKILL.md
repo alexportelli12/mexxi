@@ -1,6 +1,9 @@
 ---
 name: implement-review
 description: The independent review gate, review remediation and the follow-up path of /wettaq. Load it when a wettaq run reaches a code-reviewer pass, or when a request continues an existing pull request. Do not load it for runs that skip review.
+metadata:
+  why: "A review only helps if its findings are fixed and confirmed once, not argued over in an endless loop."
+  group: run
 ---
 
 # Implementation Review And Follow-Up

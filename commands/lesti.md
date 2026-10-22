@@ -1,5 +1,6 @@
 ---
 description: Open one pull request that makes this repository mexxi-ready, fixing whatever it lacks and any checks that already fail
+why: mexxi needs one pass/fail command to know when work is done, and most repositories do not have one ready, or have checks that already fail.
 summary: >-
   Use it once per repository, before your first /wettaq run. You get one pull request that
   adds an `npm run verify` gate, short agent docs and review settings, and fixes the checks

@@ -1,6 +1,9 @@
 ---
 name: ui-designer
 description: Practical UI design reasoning for creating, implementing, improving, or refactoring application interfaces and flows. Use whenever UI implementation requires decisions about usability, hierarchy, layout, spacing, colour, typography, copy, actions, forms, accessibility, responsive behaviour, interaction states, or rendered validation. Apply alongside framework-specific skills. Do not use for defining product-level UX principles or for purely aesthetic art direction without an interface task.
+metadata:
+  why: "Interface code written without design judgement works, but is hard to use."
+  group: ui
 ---
 
 # UI Designer

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": ".mexxi.json",
+  "why": "Some settings belong to a repository rather than to whoever runs the task, so they are committed with it.",
+  "description": "Optional settings a repository commits in .mexxi.json at its root. mexxi reads them from the default branch, so a task branch cannot change the rules it is checked by.",
+  "type": "object",
+  "properties": {
+    "verify": {
+      "description": "The command that says whether the repository works, with a pass or a fail. A repository with one reliable command already, such as make check, names it here instead of adding an npm script.",
+      "type": "string",
+      "default": "npm run verify"
+    },
+    "ciCheck": {
+      "description": "The CI job that runs the full verify command, such as verify on GitHub Actions. When it succeeded on exactly the commit a task starts from, the task cites it instead of running verify again.",
+      "type": ["string", "null"],
+      "default": null
+    },
+    "forge": {
+      "description": "github or gitlab, for a repository whose remote mexxi cannot place, such as one on a self-hosted forge. It wins over forge.hosts in config.json.",
+      "type": ["string", "null"],
+      "enum": ["github", "gitlab", null],
+      "default": null
+    }
+  }
+}
