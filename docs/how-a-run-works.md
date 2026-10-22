@@ -32,10 +32,10 @@ Not every change needs every step. A one-line fix skips the independent review; 
 
 1. **A fresh worktree.** `ibni prepare`, from [`ibni`](cli/index.md) (the worktree CLI), creates a locked worktree and branch for the task, picks a free port, and sweeps worktrees whose pull requests have merged. Every later command runs there, never in your checkout.
 2. **A task contract.** The agent reads the repository, its closest analogues and its tests, then writes down what done means. It asks you only about product decisions it cannot infer. If you turned on [Jev triage](glossary.md#jev-triage), it records a second opinion on which gates the task needs, and changes nothing.
-3. **A green baseline.** [`npm run verify`](glossary.md#verify) must pass before work starts. If CI has already proven the base commit, the agent cites that run instead.
+3. **A green baseline.** The repository's [verify command](glossary.md#verify) (`npm run verify` unless its `.mexxi.json` names another) must pass before work starts. If CI has already proven the base commit, the agent cites that run instead.
 4. **Before-shots.** When the change alters existing UI, the agent captures it first, so reviewers see before and after.
 5. **Implementation.** The agent changes the code and adds proof at the cheapest level that proves the behaviour.
-6. **Final verification.** `npm run verify` runs again. It is the one authoritative gate, and a failure means the work is unfinished.
+6. **Final verification.** The verify command runs again. It is the one authoritative gate, and a failure means the work is unfinished.
 7. **[Rendered QA](glossary.md#rendered-qa).** For user-facing work, the agent drives the running UI at three viewports and checks motion, keyboard use, touch targets and console errors. See [rendered-qa](../skills/rendered-qa/SKILL.md).
 8. **Independent review.** The [code-reviewer](../agent/code-reviewer.md) judges the change in a read-only sandbox. See [implement-review](../skills/implement-review/SKILL.md).
 9. **Delivery.** `ibni record-evidence` and `ibni publish` push the branch without force. The agent opens the pull request, with screenshots and a [merge call](glossary.md#merge-call).

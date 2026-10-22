@@ -18,7 +18,7 @@ Handing an agent a task and hoping for the best goes wrong in four ways.
 ## How mexxi solves each one
 
 - **Each task gets its own copy of the repository.** `ibni` (the worktree CLI) creates a Git worktree and branch per task, so parallel tasks never collide and your checkout stays untouched.
-- **Your checks pass before and after.** The work starts from a passing `npm run verify` and ends with one. `ibni publish` refuses to push a branch without a recorded passing run.
+- **Your checks pass before and after.** The work starts from a passing run of your repository's verify command (`npm run verify` by default) and ends with one. `ibni publish` refuses to push a branch without a recorded passing run.
 - **The agent looks at what it built.** For UI changes it drives the running app in a real browser at phone, tablet and desktop sizes. The pull request shows before and after.
 - **A second agent reviews it.** A reviewer that cannot edit code judges substantial changes and says how risky the merge is.
 - **Guardrails in code as well as in the rules.** A hook backs up the rules against force pushes, merges and pushes to the default branch. Another makes the agent stop and rethink when the same command fails a third time.

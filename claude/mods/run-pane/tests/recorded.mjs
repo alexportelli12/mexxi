@@ -12,13 +12,15 @@ export const info = {
   "state": "pr-open",
   "prUrl": "https://github.com/alexportelli12/example/pull/42",
   "port": 4300,
+  "verifyCommand": "npm run verify",
   "defaultBranch": "trunk",
   "baseSha": "0f0d0cb4d62a1627b2939e8705f0d8958b7959b9",
   "publishedSha": "dbbaed3077fe4576974b32f8e7f29db3f7cb3761",
   "evidenceTreeSha": "cc76f2831b4e0a213491dee367f201f30f6a7678",
   "evidenceRecordedAt": "2026-10-21T02:30:35.087Z",
   "createdAt": "2026-10-21T02:30:32.257Z",
-  "updatedAt": "2026-10-21T02:30:36.105Z"
+  "updatedAt": "2026-10-21T02:30:36.105Z",
+  "reviewTool": "ocr"
 }
 
 export const stats = {

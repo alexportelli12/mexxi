@@ -28,8 +28,11 @@ Use `--prefix` only when an already-known repository instruction requires a
 different branch prefix. `prepare` checks the launch checkout, sweeps merged
 workspaces and creates the feature branch in a dedicated locked worktree. Record
 its JSON result in session context, especially `worktreePath`, `sessionId`,
-`branch`, `defaultBranch`, `baseSha`, `evidenceDir`, `port`, `baseline` and
-`cleanup`.
+`branch`, `defaultBranch`, `baseSha`, `evidenceDir`, `port`, `verifyCommand`,
+`baseline` and `cleanup`. `verifyCommand` is the repository's verify command:
+the `verify` its committed `.mexxi.json` names, or `npm run verify` by default.
+Wherever this command says "the verify command", run exactly `verifyCommand`
+from the worktree root.
 
 From this point on, run every repository inspection, command, delegated task,
 edit, verification, render, review, remediation, and delivery operation against
@@ -55,9 +58,11 @@ dependency directories between worktrees.
 
 Before changing code:
 
-1. Confirm that `npm run verify` is available from the repository root. If it
-   is not, stop and report that the repository does not satisfy the
-   implementation workflow contract; do not add it as incidental feature work.
+1. Confirm that the verify command (`prepare`'s `verifyCommand`) exists in the
+   repository: for the default `npm run verify`, a `verify` script in
+   `package.json`; otherwise the tool or target it names. If it does not, stop
+   and report that the repository does not satisfy the implementation workflow
+   contract (`/lesti` prepares it); do not add it as incidental feature work.
 2. Load `repo-context` when the session lacks a reliable map of the
    repository, its agent docs are thin, or the change spans several areas.
    Skip it for a local change in a well-documented repository.
@@ -90,17 +95,17 @@ most reasonable reading from repository evidence and product principles, note
 it as an assumption, and carry on. Still stop and report for a one-way door: a
 destructive or irreversible data change, a security or privacy decision, a
 public API or schema break, or anything the pull request cannot undo. List
-every assumption under **Assumptions** in the pull request, worded so the
-reviewer can reverse it cheaply; a question that would have changed the design
-becomes a review item there instead of a stall.
+every assumption under **Decisions and assumptions** in the pull request,
+worded so the reviewer can reverse it cheaply; a question that would have
+changed the design becomes a decision under **Your part** instead of a stall.
 
 ## Preflight: Green Before Work
 
 When `prepare` returned `baseline.reused: true`, the repository's CI already
 passed its full verify on exactly `baseSha`: skip the local run and cite
 `baseline` (check, commit, `url`) as the baseline evidence, including in the
-pull request's Evidence. For any other `baseline`, run `npm run verify` in the
-worktree. If it fails, stop and report the failure; do not begin implementation
+pull request's Evidence. For any other `baseline`, run the verify command in
+the worktree. If it fails, stop and report the failure; do not begin implementation
 or classify failures as pre-existing. The worktree is retained for diagnosis,
 and cleanup protects it because no pull request was recorded.
 
@@ -129,16 +134,17 @@ Delegated agents may run targeted checks (a focused test, typecheck, rendered
 check, or the repository's selective verification) but never the full
 repository gauntlet; a selective pass is feedback, not the final gate. Where the
 repository uses Verifika, they run `vfk --changed` or `vfk --check <name>`; the
-`verifika` skill's full run is the orchestrator's final `npm run verify`.
+`verifika` skill's full run is the orchestrator's final run of the verify
+command.
 
 ## Final Verification
 
 When implementation is settled, use the repository's intentional auto-fix
-mechanism if one exists, then run `npm run verify`, the authoritative final
+mechanism if one exists, then run the verify command, the authoritative final
 gate. A failure means the implementation is incomplete: diagnose it from the
 failing checks' output and logs (the `verifika` skill covers this), remediate,
 and rerun it. Never weaken repository safeguards to pass. Any later code
-remediation requires another full `npm run verify`. Record each full run with `ibni record --session
+remediation requires another full run of the verify command. Record each full run with `ibni record --session
 "<sessionId>" --verify pass` (or `fail`), and each rendered QA or reviewer pass
 with `--qa <finding-count>` or `--review <finding-count> --accepted <count>
 --reviewer same|cross` (`cross` whenever the reviewer's model is from another
@@ -154,8 +160,8 @@ run's requirements re-read; later stages rely on it.
 For meaningful user-facing work, after final verification load `rendered-qa`
 and run a proportional pass on the affected routes and states. That one pass
 produces the evidence the reviewer and the pull request use. Resolve its
-`critical`, `high`, and `medium` findings before review, rerunning
-`npm run verify` and refreshing the affected evidence when code changes. Do not
+`critical`, `high`, and `medium` findings before review, rerunning the verify
+command and refreshing the affected evidence when code changes. Do not
 commit screenshots or pixel baselines, and do not present subjective
 judgement as deterministic verification.
 
@@ -166,7 +172,7 @@ confidence: substantial behavioural, architectural, integration, security,
 maintainability, or meaningful user-facing changes. Small mechanical changes
 need no review merely because the agent exists. When a review runs, load
 `implement-review` first: it owns the protocol, remediation and the review gate.
-Delivery enters only when final `npm run verify`, applicable rendered QA, and
+Delivery enters only when the final verify command, applicable rendered QA, and
 that gate leave no unresolved blockers.
 
 ## Delivery
@@ -180,8 +186,8 @@ that gate leave no unresolved blockers.
 4. Run `ibni publish --session "<sessionId>"`. It fetches the default branch,
    integrates it safely, and pushes only the owned feature branch without force.
 5. If `publish` returns `requiresEvidence: true`, follow its `nextAction`. When
-   `requiresRevalidation` is also true, prior evidence is stale: rerun
-   `npm run verify`, inspect the integration diff, and refresh rendered
+   `requiresRevalidation` is also true, prior evidence is stale: rerun the
+   verify command, inspect the integration diff, and refresh rendered
    evidence only where the upstream change could materially affect it (a
    review refresh follows `implement-review`). Commit any remediation, record
    evidence, and publish again.
@@ -190,10 +196,12 @@ that gate leave no unresolved blockers.
    the returned URLs. Republish on follow-up delivery so the media stays
    current. If media cannot be published, deliver anyway and say why in
    Evidence.
-7. Use `commit-pr-writing` for the pull-request title and description. For
+7. Use `commit-pr-writing` for the pull-request title and description, whose
+   first screen gives the merge call, the reviewer's part and the evidence. For
    initial delivery, create the pull request with `gh` against `defaultBranch`.
    For follow-up delivery, update the existing pull request instead of
-   creating another.
+   creating another. A change to `verify` or `ciCheck` in `.mexxi.json` changes
+   the gate itself: call it out in the description's merge call.
 8. Run `ibni mark-pr --session "<sessionId>" --url "<pr-url>"`.
 9. When rendered QA ended with **Could become executable checks**, write them
    one per line to a file in `evidenceDir` and run `ibni file-qa-checks

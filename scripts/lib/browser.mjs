@@ -3,24 +3,36 @@
 // directory. OpenCode's entry is rendered into its opencode.json; Claude Code
 // and Codex keep MCP servers in files that belong to the user, so the installer
 // prints the exact registration commands, never runs them, and `install --check`
-// reads those files back to catch a version or output directory that drifted.
+// reads those files back to catch a version, browser or output directory that
+// drifted.
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
 // --output-max-size is deliberately absent: it makes Playwright evict old files
 // from the output directory, which is the worktree root by default.
+// With no executablePath, the server would default to the Google Chrome
+// channel; --browser=chromium (accepted, though --help omits it) selects
+// Playwright's own Chromium instead, the same one the rendered-QA sweep
+// launches, so one `install-browser chromium` serves both.
 export function playwrightArguments(browser) {
   return [
     `@playwright/mcp@${browser.playwrightMcpVersion}`,
     "--headless",
     "--isolated",
-    `--executable-path=${browser.executablePath}`,
+    ...(browser.executablePath === null ? ["--browser=chromium"] : [`--executable-path=${browser.executablePath}`]),
     `--output-dir=${browser.outputDir}`,
   ];
 }
 
 export function opencodePlaywright(browser) {
   return { type: "local", command: ["npx", "-y", ...playwrightArguments(browser)], enabled: true };
+}
+
+// The value of a --flag=value or --flag value argument, undefined when absent.
+function flagValue(args, flag) {
+  const index = args.findIndex((arg) => arg === flag || arg.startsWith(`${flag}=`));
+  if (index === -1) return undefined;
+  return args[index].includes("=") ? args[index].slice(flag.length + 1) : args[index + 1];
 }
 
 function shellQuote(word) {
@@ -44,11 +56,18 @@ export function playwrightMismatches(args, browser) {
   if (version !== browser.playwrightMcpVersion) {
     problems.push(`runs @playwright/mcp@${version ?? "(unpinned)"}, config.json pins ${browser.playwrightMcpVersion}`);
   }
-  const index = args.findIndex((arg) => arg === "--output-dir" || arg.startsWith("--output-dir="));
-  const outputDir = index === -1 ? undefined
-    : args[index].includes("=") ? args[index].slice("--output-dir=".length) : args[index + 1];
+  const outputDir = flagValue(args, "--output-dir");
   if (outputDir === undefined || path.resolve(outputDir) !== browser.outputDir) {
     problems.push(`writes to ${outputDir ?? "(no --output-dir)"}, config.json expects ${browser.outputDir}`);
+  }
+  const executablePath = flagValue(args, "--executable-path");
+  if ((executablePath === undefined ? null : path.resolve(executablePath)) !== browser.executablePath) {
+    problems.push(`drives ${executablePath ?? "no --executable-path"}, config.json expects ${browser.executablePath ?? "none"}`);
+  }
+  const browserName = flagValue(args, "--browser");
+  const expectedBrowser = browser.executablePath === null ? "chromium" : undefined;
+  if (browserName !== expectedBrowser) {
+    problems.push(`passes ${browserName === undefined ? "no --browser" : `--browser ${browserName}`}, config.json expects ${expectedBrowser === undefined ? "none" : `--browser ${expectedBrowser}`}`);
   }
   // It would also let the browser open any file:// path on the machine.
   if (args.includes("--allow-unrestricted-file-access")) problems.push("passes --allow-unrestricted-file-access");

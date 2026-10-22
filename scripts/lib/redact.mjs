@@ -1,6 +1,6 @@
 // Secret redaction shared with the retro script: both read
 // secret-patterns.json, so a pattern added there protects every text that
-// leaves atlas or lands in a report.
+// leaves this machine or lands in a report.
 import { readFileSync } from "node:fs";
 
 const SOURCE = JSON.parse(readFileSync(new URL("./secret-patterns.json", import.meta.url), "utf8"));

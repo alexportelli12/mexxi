@@ -35,7 +35,8 @@ Options:
   --phase <phase>      before or after; default after. Names are <phase>-<name>-<width>.png.
   --viewports <list>   Comma-separated widths, overriding workflow.viewports.
   --wait-for <css>     Selector that signals the page is ready (otherwise load + fonts).
-  --executable <path>  Browser executable; default browser.executablePath.
+  --executable <path>  Browser executable; default browser.executablePath, or Playwright's own
+                       Chromium when that is null.
   --timeout <ms>       Navigation and readiness timeout; default 15000.
   --help               Show this help.
 
@@ -156,7 +157,10 @@ export function measurePage({ minimum, recommended }) {
 }
 
 export async function sweep({ url, out, name, phase = "after", viewports, waitFor, executable, timeout = 15000, playwright }) {
-  const browser = await playwright.chromium.launch({ executablePath: executable, headless: true });
+  // With no executable, channel chromium is Playwright's own full Chromium,
+  // the browser the MCP server's --browser=chromium runs, not the separate
+  // headless shell a bare launch would pick.
+  const browser = await playwright.chromium.launch(executable ? { executablePath: executable, headless: true } : { channel: "chromium", headless: true });
   const results = [];
   try {
     await mkdir(out, { recursive: true });

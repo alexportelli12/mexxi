@@ -19,7 +19,7 @@ mexxi runs inside one of Claude Code, Codex or OpenCode. The pasted prompt below
 
 You need Node.js 22.13 or newer, [`git`](https://git-scm.com/), the [`gh`](https://cli.github.com/) CLI (signed in), and `~/.local/bin` on your `PATH`. Three more tools are optional or host-specific:
 
-- the [`ocr`](https://github.com/alibaba/open-code-review) CLI, which the independent review needs;
+- the [`ocr`](https://github.com/alibaba/open-code-review) CLI, which the independent review uses unless you set `review.tool` to `none`;
 - the [Playwright MCP](https://github.com/microsoft/playwright-mcp) server, which rendered QA needs; and
 - `ffmpeg`, if you want GIFs of motion.
 
@@ -73,9 +73,15 @@ Moving from the old clone in `~/.config/opencode`? Follow [Migrating from coding
 
 ## Prepare your repository
 
-An application repository needs one thing: an `npm run verify` script that defines "mechanically healthy" for that project. [Verifika](https://github.com/alexportelli12/verifika) is the recommended way: list the checks in `verifika.config.json` and set `"verify": "verifika --all"`. Agents then run only the checks a change affects while they work. The `/lesti` prompt above does this for you.
+An application repository needs one thing: a verify command that defines "mechanically healthy" for that project. By default it is `npm run verify`. [Verifika](https://github.com/alexportelli12/verifika) is the recommended way: list the checks in `verifika.config.json` and set `"verify": "verifika --all"`. Agents then run only the checks a change affects while they work. The `/lesti` prompt above does this for you.
 
-To skip a baseline that CI has already proven, commit a `.mexxi.json` that names the CI check running your full `verify`:
+A repository that already has one reliable command, such as `make check` or `tox`, can keep it instead. Name it in a committed `.mexxi.json`:
+
+```json
+{ "verify": "make check" }
+```
+
+To skip a baseline that CI has already proven, add to `.mexxi.json` the name of the CI check that runs your full verify command:
 
 ```json
 { "ciCheck": "verify" }

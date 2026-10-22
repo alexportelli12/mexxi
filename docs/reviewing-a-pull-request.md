@@ -42,7 +42,7 @@ These are product calls the agent could not settle from the code, and the one ch
 
 Each mark is a gate:
 
-- **verify**: your repository's own checks, `npm run verify`, passed on the final code. See [verify](glossary.md#verify).
+- **verify**: your repository's own checks, `npm run verify` by default, passed on the final code. See [verify](glossary.md#verify).
 - **rendered QA**: the agent opened the running app in a real browser and checked it. See [rendered QA](glossary.md#rendered-qa).
 - **review**: a separate reviewer agent, which cannot edit code, judged the change.
 

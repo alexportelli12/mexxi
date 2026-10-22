@@ -17,7 +17,7 @@ A specialist role such as the code-reviewer, defined once in `agent/` and render
 
 ## baseline
 
-The result of `npm run verify` on the base commit, run or cited before work starts.
+The result of the verify command on the base commit, run or cited before work starts.
 
 ## command
 
@@ -77,7 +77,7 @@ Specialist expertise an agent loads by matching its name and description.
 
 ## verify
 
-The repository's own `npm run verify`, which defines "mechanically healthy" for that project.
+The repository's own verify command, which defines "mechanically healthy" for that project: `npm run verify`, or the `verify` its `.mexxi.json` names.
 
 ## workspace
 

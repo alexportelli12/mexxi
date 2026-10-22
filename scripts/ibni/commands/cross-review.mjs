@@ -21,7 +21,8 @@ export async function crossReview({ cwd = process.cwd(), sessionId, mode, backgr
   if (!MODES.has(mode)) throw new WorkspaceError("cross-review requires --mode discovery or confirmation");
   if (!background || !target) throw new WorkspaceError("cross-review requires --background <file> and --target <review target>");
   const { entry: { worktreePath } } = await sessionWorkspace(cwd, sessionId);
-  const model = (await workspaceConfig()).models.claude.crossFamilyReviewer;
+  const config = await workspaceConfig();
+  const model = config.models.claude.crossFamilyReviewer;
   const fallback = (reason) => ({ operation: "cross-review", sessionId, delegated: false, reason });
   if (!model) return fallback("models.claude.crossFamilyReviewer is not set, so the reviewer shares the implementer's model");
   try {
@@ -41,6 +42,7 @@ export async function crossReview({ cwd = process.cwd(), sessionId, mode, backgr
     `- Mode: ${mode}`,
     `- Worktree: ${worktreePath}`,
     `- Review target: ${target}`,
+    `- Review tool: ${config.review.tool}`,
     `- Background file (read it first): ${path.resolve(background)}`,
     "",
   ].join("\n");

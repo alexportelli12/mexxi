@@ -1,7 +1,7 @@
 import { WorkspaceError } from "../lib/errors.mjs";
 import { assertClean, cleanOutput, git, push, remoteBranchSha } from "../lib/git.mjs";
 import { withRepositoryLock } from "../lib/lock.mjs";
-import { updateMetadata } from "../lib/metadata.mjs";
+import { sessionVerifyCommand, updateMetadata } from "../lib/metadata.mjs";
 import { ownedSession } from "../lib/session.mjs";
 import { synchronizeUnlocked } from "./sync.mjs";
 
@@ -16,7 +16,7 @@ export async function publishWorkspace({ cwd = process.cwd(), sessionId }) {
         published: false,
         requiresEvidence: true,
         reason: "the remote default branch was integrated and changed the tree; prior evidence is stale",
-        nextAction: "Rerun npm run verify and any gate the integration could affect, commit remediation if needed, run record-evidence, then publish again.",
+        nextAction: `Rerun the repository's verify command (${sessionVerifyCommand(initial.metadata)}) and any gate the integration could affect, commit remediation if needed, run record-evidence, then publish again.`,
       };
     }
 
