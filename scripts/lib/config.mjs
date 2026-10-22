@@ -65,6 +65,8 @@ export function validate(value, schema, at = "config") {
       const property = schema.properties?.[key];
       if (property) errors.push(...validate(item, property, `${at}.${key}`));
       else if (schema.additionalProperties === false) errors.push(`${at}.${key}: unknown key`);
+      // A map of free-form keys (forge.hosts) gives each value one schema.
+      else if (typeof schema.additionalProperties === "object") errors.push(...validate(item, schema.additionalProperties, `${at}.${key}`));
     }
   }
   return errors;

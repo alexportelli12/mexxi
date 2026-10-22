@@ -3,7 +3,7 @@ sources:
   - AGENTS.md
   - skills/workflow-for-alex/SKILL.md
   - scripts/ibni/ibni.mjs
-reviewed: 2026-10-21
+reviewed: 2026-10-22
 ---
 
 # Glossary

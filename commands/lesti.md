@@ -40,7 +40,8 @@ Apply the smallest change that meets each requirement, in the repository's own
 conventions. Use the `verifika` skill to wire the gate. A repository without
 `package.json` gets a minimal one holding Verifika and the `verify` script. If
 a CI check runs the full verify, commit `.mexxi.json` as
-`{"ciCheck": "<that check's name as GitHub reports it>"}` so `ibni prepare` can
+`{"ciCheck": "<that check's name as the forge reports it>"}` (a GitHub check
+run or a GitLab job) so `ibni prepare` can
 reuse CI's result; with no such check, write nothing.
 
 Commit in two kinds, setup first: Verifika, `verify`, agent docs and config

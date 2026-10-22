@@ -22,6 +22,7 @@ function checkSchema(schema, at = "config") {
     checkSchema(property, `${at}.${key}`);
   }
   if (schema.items) checkSchema(schema.items, `${at}[]`);
+  if (typeof schema.additionalProperties === "object") checkSchema(schema.additionalProperties, `${at}.*`);
 }
 
 const sentences = (text) => text.replace(/\s+/g, " ").split(/(?<=[.;:!?])\s+/);

@@ -107,3 +107,15 @@ test("workflow.ports must not be empty, counting the defaults", async () => {
   await assert.rejects(resolveConfig({ workflow: { ports: { first: 5000 } } }, { home }), /first \(5000\) is above last \(4999\)/);
   assert.deepEqual((await resolveConfig({ workflow: { ports: { first: 4000, last: 4000 } } }, { home })).workflow.ports, { first: 4000, last: 4000 });
 });
+
+test("forge.hosts maps any hostname to github or gitlab, and nothing else", async () => {
+  const hosts = { "git.example.com": "gitlab", "github.example.com": "github" };
+  assert.deepEqual((await resolveConfig({ forge: { hosts } }, { home })).forge.hosts, hosts);
+  assert.deepEqual((await resolveConfig({}, { home })).forge.hosts, {});
+  await assert.rejects(resolveConfig({ forge: { hosts: { "git.example.com": "bitbucket" }, extra: 1 } }, { home }), (error) => {
+    assert.match(error.message, /config\.forge\.hosts\.git\.example\.com: expected one of github, gitlab/);
+    assert.match(error.message, /config\.forge\.extra: unknown key/);
+    return true;
+  });
+  await assert.rejects(resolveConfig({ forge: { hosts: { "git.example.com": 1 } } }, { home }), /config\.forge\.hosts\.git\.example\.com: expected string, got integer/);
+});

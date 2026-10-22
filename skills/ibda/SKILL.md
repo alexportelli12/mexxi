@@ -35,7 +35,7 @@ Check each and report the results in one table before going on:
 | --- | --- | --- |
 | Node 22.13 or newer, with npm | `node --version` | Install from https://nodejs.org or the system package manager |
 | git | `git --version` | Install with the system package manager |
-| `gh`, signed in | `gh auth status` | Install from https://cli.github.com, then `gh auth login` |
+| `gh` for GitHub or `glab` for GitLab, signed in | `gh auth status` or `glab auth status` | Install from https://cli.github.com or https://gitlab.com/gitlab-org/cli, then `gh auth login` or `glab auth login`; a self-hosted forge also needs `forge.hosts` in config.json |
 | `ocr` (OpenCodeReview) | `ocr --version` | The independent review gate needs it; install per https://github.com/alibaba/open-code-review |
 | `ffmpeg` (optional) | `ffmpeg -version` | Only for turning rendered-QA recordings into GIFs; skip if unwanted |
 | `~/.local/bin` on `PATH` | `echo $PATH` | The installer links `ibni` there; offer to add it to the shell profile and wait for a yes |

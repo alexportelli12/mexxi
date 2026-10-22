@@ -67,6 +67,9 @@
     "bashMaxTimeoutMs": 900000,
     "contextNudgePercent": 70
   },
+  "forge": {
+    "hosts": {}
+  },
   "jev": {
     "enabled": false,
     "stage": "shadow",

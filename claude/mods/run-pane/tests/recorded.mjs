@@ -18,7 +18,9 @@ export const info = {
   "evidenceTreeSha": "cc76f2831b4e0a213491dee367f201f30f6a7678",
   "evidenceRecordedAt": "2026-10-21T02:30:35.087Z",
   "createdAt": "2026-10-21T02:30:32.257Z",
-  "updatedAt": "2026-10-21T02:30:36.105Z"
+  "updatedAt": "2026-10-21T02:30:36.105Z",
+  "forge": "github",
+  "forgeReason": null
 }
 
 export const stats = {

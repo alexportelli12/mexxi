@@ -7,7 +7,7 @@ sources:
   - config.example.json
   - skills/ibda/SKILL.md
   - prompts.json
-reviewed: 2026-10-21
+reviewed: 2026-10-22
 ---
 
 # Getting started
@@ -34,7 +34,7 @@ Make this repository ready for mexxi: run /lesti here.
 
 ## Set up by hand
 
-You need Node.js 22.13 or newer, [`git`](https://git-scm.com/), the [`gh`](https://cli.github.com/) CLI (signed in), and `~/.local/bin` on your `PATH`. Three more tools are optional or host-specific:
+You need Node.js 22.13 or newer, [`git`](https://git-scm.com/), a signed-in forge CLI, and `~/.local/bin` on your `PATH`. The forge CLI is [`gh`](https://cli.github.com/) for GitHub or [`glab`](https://gitlab.com/gitlab-org/cli) for GitLab; a self-hosted forge also needs its host name in `forge.hosts` ([Configuration](configuration/index.md)). Three more tools are optional or host-specific:
 
 - the [`ocr`](https://github.com/alibaba/open-code-review) CLI, which the independent review needs;
 - the [Playwright MCP](https://github.com/microsoft/playwright-mcp) server, which rendered QA needs; and

@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { WorkspaceError } from "../lib/errors.mjs";
-import { cleanOutput, configuredGithubRepository, run } from "../lib/git.mjs";
+import { workspaceConfig } from "../lib/config.mjs";
+import { detectForge } from "../lib/forge.mjs";
 import { sessionWorkspace } from "../lib/session.mjs";
 
 export const QA_LABEL = "qa-check";
@@ -22,9 +23,9 @@ const normal = (title) => title.toLowerCase().replace(/\s+/g, " ");
 // Files each rendered-QA suggestion ("could become executable checks") as an
 // issue labelled qa-check in the session's repository, so they turn into tests
 // over time. Titles already open or closed under the label are skipped, which
-// makes a repeat delivery safe. Every gh call names the repository with --repo,
-// taken from the session remote's configured URL, so gh never guesses it from
-// another remote (a fork's upstream, say).
+// makes a repeat delivery safe. Every forge call names the repository, taken
+// from the session remote's configured URL, so the forge CLI never guesses it
+// from another remote (a fork's upstream, say).
 export async function fileQaChecks({ cwd = process.cwd(), sessionId, from }) {
   if (!from) throw new WorkspaceError("file-qa-checks requires --from <file>");
   const { entry: { metadata, worktreePath } } = await sessionWorkspace(cwd, sessionId);
@@ -33,21 +34,15 @@ export async function fileQaChecks({ cwd = process.cwd(), sessionId, from }) {
   });
   const checks = parseChecks(text);
   if (checks.length === 0) return { operation: "file-qa-checks", sessionId, created: [], skipped: [] };
-  const github = await configuredGithubRepository(worktreePath, metadata.remote);
-  if (!github) {
+  const forge = await detectForge({ root: worktreePath, remote: metadata.remote, baseSha: metadata.baseSha, config: await workspaceConfig() });
+  if (!forge.name) {
     throw new WorkspaceError(
-      `file-qa-checks needs remote ${metadata.remote} to be a GitHub repository to file issues in`,
-      "List the suggested checks in the pull request instead.",
+      `file-qa-checks needs remote ${metadata.remote} to be a GitHub or GitLab repository to file issues in`,
+      `${forge.reason}. List the suggested checks in the pull request instead.`,
     );
   }
-  const repository = `${github.owner}/${github.repo}`;
-  const gh = (args) => run("gh", [...args, "--repo", repository], { cwd: worktreePath, timeout: 60_000 });
-  const labels = JSON.parse(cleanOutput(await gh(["label", "list", "--limit", "200", "--json", "name"])));
-  if (!labels.some((label) => label.name === QA_LABEL)) {
-    await gh(["label", "create", QA_LABEL, "--color", "0E8A16", "--description", "A check rendered QA suggested, to become an executable test"]);
-  }
-  const existing = JSON.parse(cleanOutput(await gh(["issue", "list", "--label", QA_LABEL, "--state", "all", "--limit", "500", "--json", "title"])));
-  const seen = new Set(existing.map((issue) => normal(issue.title)));
+  await forge.ensureLabel(worktreePath, { name: QA_LABEL, color: "0E8A16", description: "A check rendered QA suggested, to become an executable test" });
+  const seen = new Set((await forge.issueTitles(worktreePath, QA_LABEL)).map(normal));
 
   const created = [];
   const skipped = [];
@@ -58,10 +53,11 @@ export async function fileQaChecks({ cwd = process.cwd(), sessionId, from }) {
       continue;
     }
     seen.add(normal(title));
-    const url = cleanOutput(await gh([
-      "issue", "create", "--title", title, "--label", QA_LABEL,
-      "--body", `Suggested by rendered QA of ${origin}. Make it an executable check in this repository's tests, or close this issue with the reason it should not be one.`,
-    ]));
+    const url = await forge.createIssue(worktreePath, {
+      title,
+      label: QA_LABEL,
+      body: `Suggested by rendered QA of ${origin}. Make it an executable check in this repository's tests, or close this issue with the reason it should not be one.`,
+    });
     created.push({ title, url });
   }
   return { operation: "file-qa-checks", sessionId, created, skipped };

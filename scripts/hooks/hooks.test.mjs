@@ -355,6 +355,29 @@ test("merging pull requests is the human's: gh pr merge and its API call are blo
   await assertBlocked(`gh api graphql -f query='mutation { mergePullRequest(input: {pullRequestId: "PR_1"}) { clientMutationId } }'`, /merge decisions/);
   await assertBlocked(`gh api graphql -F id=PR_1 -f query=@merge.graphql -f 'query=mutation($id: ID!) { mergePullRequest(input: {pullRequestId: $id}) { clientMutationId } }'`, /merge decisions/);
   await assertAllowed(`gh api graphql -f query='{ viewer { login } }'`);
+  // The full endpoint URL hides the word graphql; the mutation is still a merge.
+  await assertBlocked(`gh api https://api.github.com/graphql -f query='mutation { enablePullRequestAutoMerge(input: {pullRequestId: "PR_1"}) { clientMutationId } }'`, /merge decisions/);
+});
+
+test("merging GitLab merge requests is the human's too: glab mr merge and its API calls are blocked", async () => {
+  await assertBlocked("glab mr merge 12 --squash", /glab mr merge: merge decisions stay with the human/);
+  await assertBlocked("glab mr accept 12", /merge decisions stay with the human/);
+  // Options before the subcommand do not hide it.
+  for (const command of ["glab -R g/r mr merge 12", "glab --repo g/sub/r mr merge 12", "glab --repo=g/r mr merge 12", "glab mr -R g/r merge 12", "cd /tmp && glab mr merge --auto-merge"]) {
+    await assertBlocked(command, /merge decisions stay with the human/);
+  }
+  await assertAllowed("glab -R g/r mr view 12");
+  await assertAllowed("glab mr create --fill --target-branch main");
+  await assertBlocked("glab api -X PUT projects/g%2Fr/merge_requests/12/merge", /glab api \.\.\.\/merge: merge decisions/);
+  await assertBlocked("glab api --hostname git.example.com --method PUT 'projects/42/merge_requests/7/merge?squash=true'", /merge decisions/);
+  await assertAllowed("glab api projects/g%2Fr/merge_requests/12");
+  await assertAllowed("glab api projects/g%2Fr/merge_requests/12/merge_ref");
+  await assertBlocked(`glab api graphql -f query='mutation { mergeRequestAccept(input: {projectPath: "g/r", iid: "12", sha: "abc"}) { errors } }'`, /merge decisions/);
+  await assertAllowed(`glab api graphql -f query='{ currentUser { username } }'`);
+  await assertBlocked(`glab api https://gitlab.example.com/api/graphql -f query='mutation { mergeRequestAccept(input: {projectPath: "g/r", iid: "12", sha: "abc"}) { errors } }'`, /merge decisions/);
+  await assertBlocked("glab api -X POST projects/g%2Fr/merge_trains/merge_requests/12", /merge decisions/);
+  // A command name only known at run time could be glab.
+  await assertBlocked('tool=glab; "$tool" mr merge 12', /could be glab/);
 });
 
 test("git stash, reset --hard and clean are blocked outside an owned ibni worktree and allowed inside one", async () => {
