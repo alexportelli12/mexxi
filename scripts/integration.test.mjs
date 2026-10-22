@@ -67,10 +67,15 @@ async function configure(home, config = {}, clone = checkout) {
   return file;
 }
 
+// Installed dependencies and build output are not sources, and the web
+// package's would fill a small /tmp in a few copies.
+const notSources = new Set(["node_modules", "dist", ".angular"]);
+const sourcesOnly = (source) => !notSources.has(path.basename(source));
+
 // A disposable copy of the clone whose sources a test may change.
 async function copyCheckout(base) {
   for (const directory of [".claude-plugin", "agent", "claude", "codex", "commands", "opencode", "scripts", "skills"]) {
-    await cp(path.join(checkout, directory), path.join(base, directory), { recursive: true });
+    await cp(path.join(checkout, directory), path.join(base, directory), { recursive: true, filter: sourcesOnly });
   }
   await cp(path.join(checkout, "docs"), path.join(base, "docs"), { recursive: true });
   for (const file of ["AGENTS.md", "README.md", "config.example.json", "config.schema.json", "mexxi.schema.json", "names.json", "package.json", "prompts.json", "verifika.config.json"]) {
