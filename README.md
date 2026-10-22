@@ -4,7 +4,7 @@ Coding agents write code fast. mexxi makes them prove it works.
 
 A coding agent is an AI tool that works in your repository: it reads the code, runs commands and makes changes. Give the one you already use, Claude Code, Codex or OpenCode, a task in plain words. You get back one pull request that passes your repository's own checks, with screenshots from a real browser and a plain call on whether it is safe to merge. You still decide: mexxi never merges. It runs on your machine, with the agent and subscription you already have, and needs no service or account of its own.
 
-*mexxi* (*mesh-shee*) is Maltese for "to lead, to manage". [The names](https://alexportelli12.github.io/mexxi/docs/names.html) explains the rest of the Maltese.
+*mexxi* is Maltese for "to lead, to manage". [The names](https://alexportelli12.github.io/mexxi/docs/names.html) explains the rest of the Maltese.
 
 ## The problem
 
@@ -74,7 +74,7 @@ The same files serve Claude Code, Codex and OpenCode; [Host details](https://ale
 
 ## The names
 
-The tools are named in Maltese, the author's native language, like [Verifika](https://github.com/alexportelli12/verifika). Each name is an everyday word for the tool's job: `/wettaq` means "to accomplish", `/lesti` "ready" and `ibni` "to build". [The names](https://alexportelli12.github.io/mexxi/docs/names.html) is a small dictionary of all of them, with how to say each one and its source.
+The tools are named in Maltese, the author's native language, like [Verifika](https://github.com/alexportelli12/verifika). Each name is an everyday word for the tool's job: `/wettaq` means "to carry out", `/lesti` "to get something ready" and `ibni` "to build". [The names](https://alexportelli12.github.io/mexxi/docs/names.html) is a small dictionary of all of them.
 
 ## Learn more
 
