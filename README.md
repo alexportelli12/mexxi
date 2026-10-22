@@ -2,7 +2,7 @@
 
 Your coding agent's pull requests arrive tested, checked in a real browser and reviewed, so you can approve them without reading every line.
 
-You already hand tasks to Claude Code, Codex or OpenCode, and you read less of the code each time. mexxi is a workflow for that agent. Ask for a change with `/wettaq` (build it) and you get back one pull request. Its first screen says what changed, whether it is safe to merge, and what is left for you to decide.
+You already hand tasks to Claude Code, Codex or OpenCode, and you read less of the code each time. mexxi is a workflow for that agent. Ask for a change with `/wettaq`, the command that builds it, and you get back one pull request. Its first screen says what changed, whether it is safe to merge, and what is left for you to decide.
 
 [Reviewing a mexxi pull request](https://alexportelli12.github.io/mexxi/docs/reviewing-a-pull-request.html) explains each part of that pull request and what to check in a minute.
 
@@ -17,7 +17,7 @@ Handing an agent a task and hoping for the best goes wrong in four ways.
 
 ## How mexxi solves each one
 
-- **Each task gets its own copy of the repository.** `ibni` (the worktree CLI) creates a Git worktree and branch per task, so parallel tasks never collide and your checkout stays untouched.
+- **Each task gets its own copy of the repository.** `ibni`, the command-line tool the agent runs, creates a Git worktree and branch per task, so parallel tasks never collide and your checkout stays untouched.
 - **Your checks pass before and after.** The work starts from a passing run of your repository's verify command (`npm run verify` by default) and ends with one. `ibni publish` refuses to push a branch without a recorded passing run.
 - **The agent looks at what it built.** For UI changes it drives the running app in a real browser at phone, tablet and desktop sizes. The pull request shows before and after.
 - **A second agent reviews it.** A reviewer that cannot edit code judges substantial changes and says how risky the merge is.
@@ -38,7 +38,7 @@ Paste this into your agent to install mexxi. It checks the prerequisites, asks w
 Set up mexxi for me. Read https://raw.githubusercontent.com/alexportelli12/mexxi/main/skills/ibda/SKILL.md and follow it.
 ```
 
-Then paste this in a repository to prepare it. `/lesti` (get a repo ready) opens one pull request that adds what mexxi needs and fixes the checks that already fail.
+Then paste this in a repository to prepare it. `/lesti` opens one pull request that adds what mexxi needs and fixes the checks that already fail.
 
 ```text
 Make this repository ready for mexxi: run /lesti here.
@@ -52,9 +52,20 @@ From the repository's default branch, ask for a change:
 
 The [setup guide](https://alexportelli12.github.io/mexxi/docs/getting-started.html) covers installing by hand, and [Host details](https://alexportelli12.github.io/mexxi/docs/host-details.html) covers each agent and the Playwright server.
 
+## What's in the box
+
+- **Commands** you type in your agent: `/wettaq` builds a change, `/ittestja` tests a UI by hand in a browser, and `/lesti` gets a repository ready. Three more look after the workflow itself: `/fassal` writes UX principles, `/sewwi` changes the workflow and `/irrifletti` looks back at sessions.
+- **Agents**: an independent code reviewer and a UI designer, each with the tools it needs and no more.
+- **Skills**: browser checks, repository mapping, commit and pull request writing, and the review gate.
+- **`ibni`**, the command-line tool the agent runs to take each task's worktree from `prepare` to `publish`, with step timings.
+- **Guardrails**: rules forbid force pushes and merging pull requests, and a guard hook backs them up. When one command fails a third time, the agent must stop and rethink.
+- **Retrospectives**: `/irrifletti` measures how recent sessions went, privately, on your machine.
+
+The same files serve Claude Code, Codex and OpenCode; [Host details](https://alexportelli12.github.io/mexxi/docs/host-details.html) says what each one adds.
+
 ## The names
 
-The tools have Maltese names, from the author's native language, like [Verifika](https://github.com/alexportelli12/verifika). Each comes with its job: `/wettaq` (build it), `/ittestja` (test the UI), `/lesti` (get a repo ready), `/fassal` (write UX principles), `/sewwi` (change the workflow), `/irrifletti` (look back at sessions) and `ibni` (the worktree CLI). [The names](https://alexportelli12.github.io/mexxi/docs/names.html) gives each one's meaning.
+The tools are named in Maltese, the author's native language, like [Verifika](https://github.com/alexportelli12/verifika). Each name is an everyday word for the tool's job: mexxi (*mesh-shee*) means "to lead, to manage", `/wettaq` "to accomplish" and `/lesti` "ready". [The names](https://alexportelli12.github.io/mexxi/docs/names.html) is a small dictionary of all of them, with how to say each one and its source.
 
 ## Learn more
 

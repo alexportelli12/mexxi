@@ -58,3 +58,11 @@ zsh
 [Ii]mplementer's
 [Rr]enderer
 OpenCodeReview
+mexxa
+bena
+sewwa
+lest
+beda
+irrifletta
+Ġabra
+[Ll]inters?

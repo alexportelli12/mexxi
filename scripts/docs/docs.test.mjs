@@ -75,16 +75,18 @@ test("the landing page and README copies match prompts.json and names.json", asy
   assert.match(checkConsistency(files).join("\n"), /prepare/);
 });
 
-test("the README and the landing page pair each command and the CLI with its job, and link the names page", async () => {
+test("the landing page's dictionary entries match names.json, and both pages link the names page", async () => {
   const files = await readAllowed(root);
   const landing = files.get("site/index.html");
   const readme = files.get("README.md");
-  files.set("site/index.html", landing.replaceAll("(build it)", "").replaceAll('href="docs/names.html"', 'href="docs/"'));
-  files.set("README.md", readme.replaceAll("(the worktree CLI)", ""));
+  files.set("site/index.html", landing.replace("to accomplish, to complete", "to build").replace('data-name="lesti"', 'data-name="other"').replaceAll('href="docs/names.html"', 'href="docs/"').replace("(mesh-shee)", ""));
+  files.set("README.md", readme.replaceAll("https://alexportelli12.github.io/mexxi/docs/names.html", "https://alexportelli12.github.io/mexxi/docs/"));
   const problems = checkConsistency(files).join("\n");
-  assert.match(problems, /site\/index\.html: pair \/wettaq with its job/);
+  assert.match(problems, /the wettaq entry must show its meaning/);
+  assert.match(problems, /needs an entry with data-name="lesti"/);
   assert.match(problems, /site\/index\.html: link to the names page/);
-  assert.match(problems, /README\.md: pair ibni with its job/);
+  assert.match(problems, /README\.md: link to the names page/);
+  assert.match(problems, /give mexxi's pronunciation and meaning/);
 });
 
 test("the README runs problems, solutions, getting started with the prompts, then links", async () => {
@@ -188,7 +190,16 @@ test("a command page leads with its summary and folds the agent instructions; a 
   const wettaq = await readFile(path.join(built.out, "public/commands/wettaq.md"), "utf8");
   const summary = parseFrontmatter(await readFile(path.join(root, "commands/wettaq.md"), "utf8")).data.summary;
   assert.ok(wettaq.indexOf(summary) < wettaq.indexOf("::: details Full agent instructions"), "the summary comes before the folded instructions");
-  assert.match(wettaq, /^# \/wettaq \(build it\)/);
+  // It opens with its dictionary entry from names.json; the plain copy drops the styling attribute.
+  assert.match(wettaq, /^# \/wettaq\n\n\*\*wettaq\*\* · \*wet-ta’\* · verb, imperative of wettaq · “to accomplish, to complete”  \nTakes a request/);
+  assert.doesNotMatch(wettaq, /\{\.dictionary\}/);
+  assert.match(await readFile(path.join(built.out, "commands/wettaq.md"), "utf8"), /pull request\. \{\.dictionary\}\n/);
+  assert.match(wettaq, /\*Old name: `\/implement`, which still works for one release\.\*\n*$/);
+  // The names page cites the dictionary entry behind every name.
+  const namesPage = await readFile(path.join(built.out, "names.md"), "utf8");
+  for (const entry of JSON.parse(await readFile(path.join(root, "names.json"), "utf8"))) {
+    for (const source of entry.sources) assert.ok(namesPage.includes(`](${source.url})`), `names page cites ${source.url}`);
+  }
   // The headings folded in the instructions stay out of the built page's outline.
   assert.match(await readFile(path.join(built.out, "commands/wettaq.md"), "utf8"), /^---\noutline: false\n---\n\n# \/wettaq/);
 

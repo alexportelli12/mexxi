@@ -10,7 +10,11 @@ reviewed: 2026-10-22
 
 # Host details
 
-The installer sets up Claude Code, Codex and OpenCode from the same shared files. What differs is how each one takes its settings, and the step or two you take after installing.
+mexxi works with the coding agent you already use, so you need not switch tools to get it. The installer sets up Claude Code, Codex and OpenCode from the same shared files, so a change to the workflow reaches all three. What differs is what each one adds, how it takes its settings, and the step or two you take after installing.
+
+- **OpenCode** reads the shared commands, skills and agents. Its config is rendered from yours.
+- **Claude Code** adds a pane beside the chat that shows where the run stands, and fixes shell commands that would otherwise fail, such as unquoted globs.
+- **Codex** runs commands as `$mexxi-…` skills, with a reviewer that can only read.
 
 ## Claude Code
 

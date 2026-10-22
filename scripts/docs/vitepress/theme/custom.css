@@ -29,3 +29,33 @@ pre.mermaid {
   margin-left: -24px;
   text-align: center;
 }
+
+/* A name's dictionary entry (generated from names.json), styled as a page of
+   the small dictionary on the landing page: the word, how to say it, its part
+   of speech and meaning, then its job in mexxi. */
+.vp-doc p.dictionary {
+  margin: 20px 0 24px;
+  padding: 16px 20px;
+  border-radius: 10px;
+  background: #f1e9da;
+  color: #5d554a;
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  font-size: 16px;
+  line-height: 1.6;
+}
+
+.vp-doc p.dictionary strong {
+  color: #1d1a16;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.vp-doc p.dictionary em {
+  font-style: normal;
+  font-variant: small-caps;
+  letter-spacing: 0.03em;
+}
+
+.vp-doc p.dictionary a {
+  color: #1d1a16;
+}

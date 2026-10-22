@@ -13,6 +13,10 @@ import { readAllowed, SITE_URL } from "./lib/source.mjs";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "../..");
 
+// VitePress attributes such as {.dictionary} style the built page only; the
+// plain copies leave them out.
+export const plainMarkdown = (markdown) => markdown.replace(/ \{(?:#[\w-]+ )?\.[\w-]+\}$/gm, "");
+
 // The first prose paragraph after the title, cut to its first sentence.
 const summaryOf = (markdown) => {
   let fenced = false;
@@ -52,7 +56,7 @@ export async function buildDocs({ root = repoRoot, out = path.join(root, "docs-s
     await writeFile(path.join(out, `${page.route}.md`), `${options.length ? `---\n${options.join("\n")}\n---\n\n` : ""}${page.markdown}`);
     // A plain copy of each page, for agents and for reading offline.
     await mkdir(path.dirname(path.join(out, "public", `${page.route}.md`)), { recursive: true });
-    await writeFile(path.join(out, "public", `${page.route}.md`), page.markdown);
+    await writeFile(path.join(out, "public", `${page.route}.md`), plainMarkdown(page.markdown));
   }
   await writeFile(path.join(out, "public/llms.txt"), llmsText(pages));
   await writeFile(path.join(out, "public/favicon.svg"), files.get("site/favicon.svg"));
