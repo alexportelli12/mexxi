@@ -13,7 +13,7 @@ Each concept has one name across the docs. When two words could mean the same th
 | Term | Meaning |
 | --- | --- |
 | **agent** | A specialist role such as the code-reviewer, defined once in `agent/` and rendered for each host. |
-| **baseline** | The result of `npm run verify` on the base commit, run or cited before work starts. |
+| **baseline** | The result of the verify command on the base commit, run or cited before work starts. |
 | **command** | A workflow you start by name, such as `/wettaq`. A command is a Markdown file in `commands/`. |
 | **default branch** | The branch pull requests target, usually `main`. |
 | **evidence directory** | The folder where a run keeps screenshots, recordings and notes. `ibni prepare` reports it as `evidenceDir`. |
@@ -25,7 +25,7 @@ Each concept has one name across the docs. When two words could mean the same th
 | **rendered QA** | Driving the running UI by hand and capturing evidence. It is a gate for user-facing changes. |
 | **session** | One agent conversation. `ibni` finds its workspace from the session ID. |
 | **skill** | Specialist expertise an agent loads by matching its name and description. |
-| **verify** | The repository's own `npm run verify`, which defines "mechanically healthy" for that project. |
+| **verify** | The repository's own verify command, which defines "mechanically healthy" for that project: `npm run verify`, or the `verify` its `.mexxi.json` names. |
 | **workspace** | A retained worktree together with its record: branch, port, evidence directory and pull request. `ibni list` lists them. |
 | **worktree** | A Git worktree created for one task. Do not call it a folder or a working directory. |
 

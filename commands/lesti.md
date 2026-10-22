@@ -7,7 +7,7 @@ description: Open one pull request that makes this repository mexxi-ready, fixin
 Make the current repository ready for mexxi in one pull request: audit it
 against the contract below, fix every gap and every failing check, prove the
 result and deliver. `$ARGUMENTS` may narrow or steer the work; empty means the
-whole audit. Unlike `/wettaq` this cannot demand a green `npm run verify`
+whole audit. Unlike `/wettaq` this cannot demand a green verify command
 first, since establishing one is the job.
 
 `/wettaq` in `commands/wettaq.md` of the mexxi clone (`paths.checkout` in
@@ -21,12 +21,13 @@ not stop on a failing verify.
 
 Gather evidence in the worktree: run `repo-context`'s `scripts/inspect.js` for
 the stack, tests and CI, read the package scripts, CI workflows and tool
-configs, and run `npm run verify` if it exists to learn what already fails.
+configs, and run the verify command (`prepare`'s `verifyCommand`) if it exists
+to learn what already fails.
 Write the gap list to `evidenceDir` before the first edit.
 
 | Requirement | Check |
 | --- | --- |
-| `npm run verify` | Exists, runs Verifika (`verifika --all`, version pinned exactly), and covers the checks the repository really has: package scripts, CI workflows, tool configs |
+| Verify command | One command that exists, passes when the repository is healthy, and covers the checks the repository really has: package scripts, CI workflows, tool configs. Verifika behind `npm run verify` (`verifika --all`, version pinned exactly) is recommended; another reliable command is accepted (see below) |
 | Tests | A test runner is set up and runs. Where there are none, invent none: record it as a gap for a human |
 | Agent docs | A short `AGENTS.md`: how to install, run, test and seed the app |
 | Review coverage | With `review.tool` `ocr` (the default), `.opencodereview/rule.json` includes the repository's test paths; with `none`, nothing to set up |
@@ -37,14 +38,28 @@ Write the gap list to `evidenceDir` before the first edit.
 ## Fix The Gaps
 
 Apply the smallest change that meets each requirement, in the repository's own
-conventions. Use the `verifika` skill to wire the gate. A repository without
-`package.json` gets a minimal one holding Verifika and the `verify` script. If
-a CI check runs the full verify, commit `.mexxi.json` as
-`{"ciCheck": "<that check's name as GitHub reports it>"}` so `ibni prepare` can
-reuse CI's result; with no such check, write nothing.
+conventions.
 
-Commit in two kinds, setup first: Verifika, `verify`, agent docs and config
-come first; then each failing check is fixed in its own commit, so the setup
+Choose the verify command first:
+
+- **A repository with `package.json`:** keep the default. Use the `verifika`
+  skill to wire the gate and back `npm run verify` with `verifika --all`.
+- **A repository that already has one reliable command for its whole gate**
+  (such as `make check`, `cargo test && cargo clippy -- -D warnings` or
+  `tox`): keep it rather than adding npm or Verifika. If it misses checks the
+  repository really has, extend it in the repository's own tooling. Recommend
+  Verifika in the description for selective runs, but do not require it.
+- **Neither:** wire Verifika as above, adding a minimal `package.json` that
+  holds only Verifika and the `verify` script.
+
+Any verify command other than `npm run verify` goes in a committed
+`.mexxi.json` as `"verify": "<command>"`, run from the repository root. If a
+CI check runs that full command, add `"ciCheck": "<that check's name as GitHub
+reports it>"` so `ibni prepare` can reuse CI's result. With neither, write no
+`.mexxi.json`. Keep any keys an existing `.mexxi.json` already holds.
+
+Commit in two kinds, setup first: the verify command (Verifika, the `verify`
+script or `.mexxi.json`), agent docs and config come first; then each failing check is fixed in its own commit, so the setup
 reads separately from the code fixes.
 
 **Fix, never weaken.** Fix a failure at its cause. Disabling a lint rule,
@@ -56,10 +71,14 @@ for a one-way door.
 
 ## Prove It
 
-From a clean `npm ci` in the worktree, `npm run verify` passes on the branch.
-That is what `ibni prepare` followed by `/wettaq`'s preflight would run, so it
-is the proof they would succeed; say in the description that baseline reuse
-only starts once this PR is merged.
+From a clean install of the repository's dependencies in the worktree
+(`npm ci` for an npm project), the chosen verify command passes on the branch.
+That is what `ibni prepare` followed by `/wettaq`'s preflight would run once
+this pull request is merged, so it is the proof they would succeed. `prepare`
+read `.mexxi.json` from the default branch, so its `verifyCommand` does not yet
+show a command this branch adds: run the one you chose. Say in the description
+that baseline reuse, and any `verify` named in `.mexxi.json`, only take effect
+once this PR is merged.
 
 ## Review And Deliver
 

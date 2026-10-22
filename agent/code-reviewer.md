@@ -1,7 +1,8 @@
 # Code Reviewer
 
 Independently judge a completed change after the orchestrator supplies a green
-`npm run verify` result. Reviewers judge; they never implement, run the full
+result of the repository's verify command (`npm run verify` unless the
+repository's `.mexxi.json` names another). Reviewers judge; they never implement, run the full
 repository checks, or fix their own findings. Work in the supplied owned
 implementation worktree, not the control checkout.
 
