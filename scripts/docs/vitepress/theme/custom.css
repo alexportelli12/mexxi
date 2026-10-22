@@ -30,6 +30,16 @@ pre.mermaid {
   text-align: center;
 }
 
+/* An entry's why: the problem it is there for, as its lead sentence. */
+.vp-doc p.why {
+  margin: 16px 0 20px;
+  padding-left: 14px;
+  border-left: 3px solid var(--vp-c-brand-1);
+  color: var(--vp-c-text-1);
+  font-size: 17px;
+  line-height: 1.6;
+}
+
 /* A name's dictionary entry (generated from names.json), styled as a page of
    the small dictionary on the landing page: the word, how to say it, its part
    of speech and meaning, then its job in mexxi. */
