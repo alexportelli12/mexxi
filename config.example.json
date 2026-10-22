@@ -11,9 +11,9 @@
   },
   "models": {
     "opencode": {
-      "general": "openai/gpt-5.6-luna",
-      "explore": "openai/gpt-5.6-luna",
-      "uiDesigner": "opencode-go/kimi-k2.7-code",
+      "general": null,
+      "explore": null,
+      "uiDesigner": null,
       "reviewer": null,
       "crossFamilyReviewer": null
     },
@@ -40,20 +40,17 @@
       "last": 4999
     }
   },
+  "review": {
+    "tool": "ocr"
+  },
   "browser": {
     "playwrightMcpVersion": "0.0.83",
-    "executablePath": "/usr/bin/chromium",
+    "executablePath": null,
     "outputDir": null
   },
   "guard": {
     "deny": [
-      "firebase deploy",
-      "npm run deploy",
       "npm publish",
-      "gcloud functions deploy",
-      "gcloud run deploy",
-      "vercel --prod",
-      "netlify deploy --prod",
       "gh pr merge",
       "gh release create",
       "git push --force",

@@ -649,6 +649,7 @@ test("info and list expose retained workspace summaries", async (t) => {
     { session: second.json.sessionId },
   );
   assert.equal(info.json.operation, "info");
+  assert.equal(info.json.reviewTool, "ocr", "the default review tool");
   assert.equal(info.json.worktreePath, second.json.worktreePath);
   assert.equal(info.json.branch, second.json.branch);
 
@@ -1723,9 +1724,9 @@ fs.writeFileSync(args[args.indexOf("-o") + 1], "Mode: stub review\\nNo findings.
   return { directory, env: { PATH: `${directory}:${process.env.PATH ?? ""}` }, call: async () => JSON.parse(await readFile(path.join(directory, "call.json"), "utf8")) };
 }
 
-async function crossReviewSetup(t, claudeModels) {
+async function crossReviewSetup(t, claudeModels, extraConfig = {}) {
   const fixture = await createFixture(t);
-  await writeFile(fixture.config, JSON.stringify({ paths: { worktreeRoot: fixture.worktrees }, models: { claude: claudeModels } }));
+  await writeFile(fixture.config, JSON.stringify({ paths: { worktreeRoot: fixture.worktrees }, models: { claude: claudeModels }, ...extraConfig }));
   const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "cross review" });
   const background = path.join(prepared.json.evidenceDir, "review-background.md");
   await writeFile(background, "Purpose: demo\n");
@@ -1749,10 +1750,19 @@ test("cross-review runs the shared reviewer through codex exec in a read-only sa
     "-C", prepared.json.worktreePath, "-m", "gpt-5.6-review", "-o", outputFile, "-",
   ]);
   assert.match(stdin, /^# Code Reviewer/);
-  assert.match(stdin, /- Mode: discovery\n- Worktree: .+\n- Review target: workspace changes against HEAD\n- Background file \(read it first\): .+review-background\.md/);
+  assert.match(stdin, /- Mode: discovery\n- Worktree: .+\n- Review target: workspace changes against HEAD\n- Review tool: ocr\n- Background file \(read it first\): .+review-background\.md/);
 
   const badMode = await lifecycle(fixture, prepared.json.worktreePath, "cross-review", { ...options, mode: "polish" }, [2], codex.env);
   assert.match(badMode.stderr, /--mode discovery or confirmation/);
+});
+
+test("cross-review and info pass on review.tool, so the reviewer knows whether to run OCR", async (t) => {
+  const { fixture, prepared, options } = await crossReviewSetup(t, { crossFamilyReviewer: "gpt-5.6-review" }, { review: { tool: "none" } });
+  const info = await lifecycle(fixture, fixture.control, "info", { session: prepared.json.sessionId });
+  assert.equal(info.json.reviewTool, "none");
+  const codex = await codexStub(t);
+  await lifecycle(fixture, prepared.json.evidenceDir, "cross-review", options, [0], codex.env);
+  assert.match((await codex.call()).stdin, /^- Review tool: none$/m);
 });
 
 test("cross-review falls back to the same-model reviewer and says why", async (t) => {

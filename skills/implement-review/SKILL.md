@@ -22,16 +22,17 @@ applicable.
 2. Invoke `code-reviewer` with the worktree, the review target (workspace
    changes against HEAD before the first commit, the branch range once fully
    committed, or only the new changes on follow-up), the background file path,
-   verification status, and rendered QA evidence. The reviewer owns the OCR
-   delegation mechanics.
-3. If the reviewer reports relevant tests or specs excluded from its
-   selection, add narrowly scoped `include` rules to the repository's
+   verification status, rendered QA evidence, and the review tool: the
+   `reviewTool` that `ibni info --session "<sessionId>"` prints (`ocr` or
+   `none`). The reviewer owns the selection mechanics.
+3. With `ocr`, if the reviewer reports relevant tests or specs excluded from
+   its selection, add narrowly scoped `include` rules to the repository's
    `.opencodereview/rule.json`, preserving existing rules, rerun
    `npm run verify`, and invoke the reviewer again. A run halted for coverage
-   is not a review pass.
+   is not a review pass. With `none` there are no OCR rules to change.
 
-If delegation or rule resolution fails, the review gate is not clear; report
-the failure.
+If OCR delegation or rule resolution fails, the review gate is not clear;
+report the failure.
 
 The implementer and reviewer share blind spots when they share a model family,
 so where the host can name a reviewer model from another family it does:

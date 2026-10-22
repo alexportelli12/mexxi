@@ -4,7 +4,7 @@ sources:
   - skills/implement-review/SKILL.md
   - skills/rendered-qa/SKILL.md
   - scripts/ibni/commands/**
-reviewed: 2026-10-21
+reviewed: 2026-10-22
 ---
 
 # How a run works

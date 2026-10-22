@@ -53,9 +53,9 @@
           "additionalProperties": false,
           "default": {},
           "properties": {
-            "general": { "description": "OpenCode's built-in general subagent.", "type": ["string", "null"], "default": "openai/gpt-5.6-luna" },
-            "explore": { "description": "OpenCode's built-in explore subagent.", "type": ["string", "null"], "default": "openai/gpt-5.6-luna" },
-            "uiDesigner": { "description": "The shared ui-designer agent.", "type": ["string", "null"], "default": "opencode-go/kimi-k2.7-code" },
+            "general": { "description": "OpenCode's built-in general subagent.", "type": ["string", "null"], "default": null },
+            "explore": { "description": "OpenCode's built-in explore subagent.", "type": ["string", "null"], "default": null },
+            "uiDesigner": { "description": "The shared ui-designer agent.", "type": ["string", "null"], "default": null },
             "reviewer": { "description": "The shared code-reviewer agent.", "type": ["string", "null"], "default": null },
             "crossFamilyReviewer": { "description": "A reviewer model from a different family to the implementer's, as provider/model; rendered as the code-reviewer's model in place of reviewer. null falls back to the reviewer's model.", "type": ["string", "null"], "default": null }
           }
@@ -114,6 +114,15 @@
         }
       }
     },
+    "review": {
+      "description": "How the independent code-reviewer selects what to review.",
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "tool": { "description": "ocr runs OpenCodeReview's delegation mode (the ocr CLI) to choose the files and rules, and the reviewer judges them; it needs ocr installed. none has the reviewer read the diff itself, read-only, with no extra tool to install.", "type": "string", "enum": ["ocr", "none"], "default": "ocr" }
+      }
+    },
     "browser": {
       "description": "The Playwright MCP server every host uses for rendered QA.",
       "type": "object",
@@ -121,7 +130,7 @@
       "default": {},
       "properties": {
         "playwrightMcpVersion": { "description": "Exact @playwright/mcp version.", "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$", "default": "0.0.83" },
-        "executablePath": { "description": "Browser executable Playwright drives.", "type": "string", "pattern": "^(~/|/)", "default": "/usr/bin/chromium" },
+        "executablePath": { "description": "Browser executable Playwright drives, such as /usr/bin/chromium. null uses Playwright's own Chromium for both the MCP server (--browser=chromium) and the rendered-QA sweep; install it once with npx -y @playwright/mcp@<playwrightMcpVersion> install-browser chromium.", "type": ["string", "null"], "pattern": "^(~/|/)", "default": null },
         "outputDir": { "description": "Where Playwright may write screenshots and recordings; null means paths.worktreeRoot, so evidence directories are writable.", "type": ["string", "null"], "pattern": "^(~/|/)", "default": null }
       }
     },
@@ -132,17 +141,11 @@
       "default": {},
       "properties": {
         "deny": {
-          "description": "Command prefixes refused on every host, such as production deploys. The installer also writes each as a Bash(<prefix>:*) permissions.deny rule in Claude Code's settings.json; the guard hook repeats them as patterns, because a prefix rule is sidestepped by cd x && <command>.",
+          "description": "Command prefixes refused on every host: publishing, merges, releases and force pushes by default. Add your own production deploys, such as firebase deploy, npm run deploy, gcloud run deploy, vercel --prod or netlify deploy --prod; setting the list replaces the default, so keep the default entries you want. The installer also writes each as a Bash(<prefix>:*) permissions.deny rule in Claude Code's settings.json; the guard hook repeats them as patterns, because a prefix rule is sidestepped by cd x && <command>.",
           "type": "array",
           "items": { "type": "string", "minLength": 1 },
           "default": [
-            "firebase deploy",
-            "npm run deploy",
             "npm publish",
-            "gcloud functions deploy",
-            "gcloud run deploy",
-            "vercel --prod",
-            "netlify deploy --prod",
             "gh pr merge",
             "gh release create",
             "git push --force",

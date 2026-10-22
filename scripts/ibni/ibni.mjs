@@ -171,7 +171,7 @@ export const COMMANDS = {
   },
   info: {
     usage: "ibni info --session <id>",
-    summary: "Print one session's workspace: paths, branch, port, PR and state.",
+    summary: "Print one session's workspace: paths, branch, port, PR and state, plus the review tool config.json sets.",
     details: [SESSION_LOOKUP],
     options: { session: "The sessionId from prepare or adopt." },
     run: (options) => workspaceInfo({ sessionId: options.session }),

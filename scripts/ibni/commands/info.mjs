@@ -1,4 +1,5 @@
 import { mkdir } from "node:fs/promises";
+import { workspaceConfig } from "../lib/config.mjs";
 import { workspaceSummary } from "../lib/metadata.mjs";
 import { sessionWorkspace } from "../lib/session.mjs";
 
@@ -10,5 +11,8 @@ export async function workspaceInfo({ cwd = process.cwd(), sessionId }) {
   return {
     operation: "info",
     ...summary,
+    // The code-reviewer's agent text is shared by every host, so the
+    // orchestrator passes it this setting rather than the text being rendered.
+    reviewTool: (await workspaceConfig()).review.tool,
   };
 }
