@@ -4,7 +4,7 @@ sources:
   - skills/implement-review/SKILL.md
   - skills/rendered-qa/SKILL.md
   - scripts/ibni/commands/**
-reviewed: 2026-10-21
+reviewed: 2026-10-22
 ---
 
 # How a run works
@@ -38,7 +38,7 @@ Not every change needs every step. A one-line fix skips the independent review; 
 6. **Final verification.** `npm run verify` runs again. It is the one authoritative gate, and a failure means the work is unfinished.
 7. **Rendered QA.** For user-facing work, the agent drives the running UI at three viewports and checks motion, keyboard use, touch targets and console errors. See [rendered-qa](../skills/rendered-qa/SKILL.md).
 8. **Independent review.** The [code-reviewer](../agent/code-reviewer.md) judges the change in a read-only sandbox. See [implement-review](../skills/implement-review/SKILL.md).
-9. **Delivery.** `ibni record-evidence` and `ibni publish` push the branch without force. The agent opens the pull request, with screenshots and a call on how risky the merge is.
+9. **Delivery.** `ibni record-evidence` and `ibni publish` push the branch without force. The agent opens the pull request. Its first screen says what changed, whether the merge is safe, what you need to do and what proved it, with screenshots for UI changes.
 
 You review the pull request and decide whether to merge. Mexxi never merges for you.
 
