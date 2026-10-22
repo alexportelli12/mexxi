@@ -17,7 +17,7 @@ You can set mexxi up by pasting one prompt into the agent you already use, or by
 
 mexxi runs inside one of Claude Code, Codex or OpenCode. The pasted prompt below checks everything else for you; to set up by hand, install these first.
 
-You need Node.js 22.13 or newer, [`git`](https://git-scm.com/), the [`gh`](https://cli.github.com/) CLI (signed in), and `~/.local/bin` on your `PATH`. Three more tools are optional or host-specific:
+You need Node.js 22.13 or newer, [`git`](https://git-scm.com/), a signed-in forge CLI, and `~/.local/bin` on your `PATH`. The forge CLI is [`gh`](https://cli.github.com/) for GitHub or [`glab`](https://gitlab.com/gitlab-org/cli) for GitLab; a self-hosted forge also needs its host name in `forge.hosts` ([Configuration](configuration/index.md)). Three more tools are optional or host-specific:
 
 - the [`ocr`](https://github.com/alibaba/open-code-review) CLI, which the independent review uses unless you set `review.tool` to `none`;
 - the [Playwright MCP](https://github.com/microsoft/playwright-mcp) server, which rendered QA needs; and

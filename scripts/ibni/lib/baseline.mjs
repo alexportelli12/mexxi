@@ -1,12 +1,13 @@
 import { WorkspaceError } from "./errors.mjs";
-import { cleanOutput, git, run } from "./git.mjs";
+import { git } from "./git.mjs";
 
 // A repository's committed .mexxi.json holds the few settings mexxi reads from
 // it: `verify`, the command that defines "mechanically healthy" (default
-// `npm run verify`), and `ciCheck`, the CI check that runs that full command,
-// which opts in to baseline reuse. Verifika's own schema rejects extra keys, so
-// these live in this small file instead; it is read from the base commit, so
-// only what the default branch already holds counts.
+// `npm run verify`), `ciCheck`, the CI check that runs that full command,
+// which opts in to baseline reuse, and `forge` (see forge.mjs). Verifika's own
+// schema rejects extra keys, so these live in this small file instead; it is
+// read from the base commit, so only what the default branch already holds
+// counts.
 export const OPT_IN_FILE = ".mexxi.json";
 export const DEFAULT_VERIFY_COMMAND = "npm run verify";
 
@@ -49,29 +50,26 @@ function namedCheck({ settings, reason }) {
 
 // Decides whether the baseline verify run can be cited instead of rerun.
 // Only a completed, successful run of the named check on exactly baseSha
-// qualifies. Everything else (no opt-in, a gh failure, a pending, failed or
-// differently-pinned run) reports why and leaves the baseline to run locally.
-export async function provenBaseline(root, baseSha, committedSettings) {
+// qualifies. Everything else (no opt-in, no known forge, a forge CLI failure,
+// a pending, failed or differently-pinned run) reports why and leaves the
+// baseline to run locally. forge is detectForge's result.
+export async function provenBaseline(root, baseSha, committedSettings, forge) {
   const { check, reason } = namedCheck(committedSettings);
   if (!check) return { reused: false, reason };
-  let parsed;
+  if (!forge.name) return { reused: false, check, reason: `CI check state unavailable: ${forge.reason}` };
+  let runs;
   try {
-    const result = await run("gh", [
-      "api",
-      `repos/{owner}/{repo}/commits/${baseSha}/check-runs?check_name=${encodeURIComponent(check)}&filter=latest&per_page=100`,
-    ], { cwd: root, timeout: 30_000 });
-    parsed = JSON.parse(cleanOutput(result));
+    runs = await forge.checkRuns(root, baseSha, check);
   } catch (error) {
     return { reused: false, check, reason: `CI check state unavailable: ${error.message.split("\n")[0]}` };
   }
-  const runs = (Array.isArray(parsed?.check_runs) ? parsed.check_runs : [])
-    .filter((candidate) => candidate?.name === check && SHA.test(candidate?.head_sha ?? "")
-      && candidate.head_sha.toLowerCase() === baseSha.toLowerCase())
-    .sort((a, b) => b.id - a.id);
-  const latest = runs[0];
+  const latest = runs
+    .filter((candidate) => candidate.name === check && SHA.test(candidate.sha ?? "")
+      && candidate.sha.toLowerCase() === baseSha.toLowerCase())
+    .sort((a, b) => b.id - a.id)[0];
   if (!latest) return { reused: false, check, reason: `no ${check} run on ${baseSha}` };
   if (latest.status !== "completed" || latest.conclusion !== "success") {
     return { reused: false, check, reason: `${check} on ${baseSha} is ${latest.status === "completed" ? latest.conclusion : latest.status}` };
   }
-  return { reused: true, check, sha: latest.head_sha, url: latest.html_url ?? null, runId: latest.id, completedAt: latest.completed_at ?? null };
+  return { reused: true, check, sha: latest.sha, url: latest.url, runId: latest.id, completedAt: latest.completedAt };
 }

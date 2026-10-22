@@ -198,17 +198,21 @@ that gate leave no unresolved blockers.
    Evidence.
 7. Use `commit-pr-writing` for the pull-request title and description, whose
    first screen gives the merge call, the reviewer's part and the evidence. For
-   initial delivery, create the pull request with `gh` against `defaultBranch`.
-   For follow-up delivery, update the existing pull request instead of
-   creating another. A change to `verify` or `ciCheck` in `.mexxi.json` changes
-   the gate itself: call it out in the description's merge call.
+   initial delivery, create the pull request against `defaultBranch` with the
+   forge's CLI (`gh pr create` on GitHub, `glab mr create` on GitLab); the
+   `forge` field of `prepare` or `ibni info` names it. When `forge` is null,
+   stop and report its `forgeReason` rather than guess. For follow-up delivery,
+   update the existing pull request instead of creating another. A change to
+   `verify` or `ciCheck` in `.mexxi.json` changes the gate itself: call it out
+   in the description's merge call.
 8. Run `ibni mark-pr --session "<sessionId>" --url "<pr-url>"`.
 9. When rendered QA ended with **Could become executable checks**, write them
    one per line to a file in `evidenceDir` and run `ibni file-qa-checks
    --session "<sessionId>" --from "<file>"`. It files each as a `qa-check`
    issue in the repository, skipping titles already filed. Mention the created
-   issues in your report; if it fails (for example `gh` is unauthenticated),
-   report that and carry on, since the pull request is already delivered.
+   issues in your report; if it fails (for example the forge's CLI is
+   unauthenticated), report that and carry on, since the pull request is
+   already delivered.
 
 If any delivery stage fails, preserve the worktree and any commit, and report
 the failed stage with the tool's diagnostic. Do not bypass permissions, guess

@@ -206,20 +206,3 @@ export async function push(root, args, options = {}) {
   if (result.code !== 0 && TRANSIENT_HTTP_FAILURE.test(result.stderr)) return attempt();
   return result;
 }
-
-export function githubRepository(url) {
-  const match = url.match(
-    /^(?:https:\/\/(?:[^@/]+@)?github\.com\/|(?:ssh:\/\/)?git@github\.com[:/])([^/]+)\/([^/]+?)(?:\.git)?\/?$/i,
-  );
-  return match ? { owner: match[1], repo: match[2] } : null;
-}
-
-// The configured URL names the GitHub repository; `git remote get-url` would
-// expand insteadOf rewrites, which are transport plumbing.
-export async function configuredGithubRepository(root, remote) {
-  for (const key of [`remote.${remote}.pushurl`, `remote.${remote}.url`]) {
-    const value = cleanOutput(await git(root, ["config", "--get", key], { allowedExitCodes: [0, 1] }));
-    if (value) return githubRepository(value);
-  }
-  return null;
-}

@@ -4,6 +4,7 @@ import path from "node:path";
 import { workspaceConfig, workspaceRoot, sanitizePrefix, sanitizeSegment } from "../lib/config.mjs";
 import { WorkspaceError } from "../lib/errors.mjs";
 import { provenBaseline, repositorySettings, verifyCommandFrom } from "../lib/baseline.mjs";
+import { detectForge } from "../lib/forge.mjs";
 import { pathExists } from "../lib/fs.mjs";
 import {
   assertClean,
@@ -172,11 +173,12 @@ export async function prepareWorkspace({ cwd = process.cwd(), slug, prefix }) {
       );
     }
 
-    const cleanup = await sweepConsumedWorkspaces(repository);
+    const cleanup = await sweepConsumedWorkspaces(repository, config);
     const baseSha = cleanOutput(await git(repository.root, ["rev-parse", "HEAD"]));
     const settings = await repositorySettings(repository.root, baseSha);
     const verifyCommand = verifyCommandFrom(settings);
-    const baseline = await provenBaseline(repository.root, baseSha, settings);
+    const forge = await detectForge({ root: repository.root, remote, baseSha, config });
+    const baseline = await provenBaseline(repository.root, baseSha, settings, forge);
     const allocation = await allocateWorkspace(
       repository,
       repository.root,
@@ -243,6 +245,8 @@ export async function prepareWorkspace({ cwd = process.cwd(), slug, prefix }) {
         remote: metadata.remote,
         defaultBranch: metadata.defaultBranch,
         baseSha: metadata.baseSha,
+        forge: forge.name,
+        forgeReason: forge.name ? null : forge.reason,
         evidenceDir,
         port,
         verifyCommand,

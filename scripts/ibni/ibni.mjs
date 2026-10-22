@@ -57,7 +57,9 @@ export const COMMANDS = {
       "If .mexxi.json names a ciCheck (the CI run of its full verify command) and that",
       "check succeeded on exactly the base commit, baseline.reused is true and baseline cites the",
       "run, so the local baseline verify can be skipped; otherwise baseline says why it runs.",
-      "Prints sessionId, worktreePath, branch, evidenceDir, port, verifyCommand, baseline, provisionedEnv and cleanup.",
+      "forge is github or gitlab, from the push remote's host, forge.hosts in config.json or",
+      "\"forge\" in .mexxi.json; null when none is known, and forgeReason then says why.",
+      "Prints sessionId, worktreePath, branch, baseSha, forge, evidenceDir, port, verifyCommand, baseline, provisionedEnv and cleanup.",
     ],
     options: {
       slug: "Short task name for the branch and worktree folder.",
@@ -99,7 +101,7 @@ export const COMMANDS = {
     summary: "Publish screenshots and recordings from evidenceDir to the pr-media branch.",
     details: [
       `Allowed file types: ${[...MEDIA_EXTENSIONS].join(", ")}.`,
-      "Files must be inside the session's evidenceDir; returns embeddable GitHub URLs.",
+      "Files must be inside the session's evidenceDir; returns embeddable GitHub or GitLab URLs.",
       SESSION_LOOKUP,
     ],
     options: {
@@ -127,7 +129,7 @@ export const COMMANDS = {
       "The file lists one check per line (a leading list marker is dropped); each is an issue title.",
       "Creates the qa-check label if the repository lacks it, then an issue per check whose title",
       "(case-insensitive) is not already open or closed under that label. Safe to repeat.",
-      "Prints created (title, url) and skipped titles. Needs an authenticated gh.",
+      "Prints created (title, url) and skipped titles. Needs an authenticated gh (GitHub) or glab (GitLab).",
       SESSION_LOOKUP,
     ],
     options: {
@@ -173,7 +175,7 @@ export const COMMANDS = {
   },
   info: {
     usage: "ibni info --session <id>",
-    summary: "Print one session's workspace: paths, branch, port, verify command, PR and state, plus the review tool config.json sets.",
+    summary: "Print one session's workspace: paths, branch, port, verify command, PR, state and forge, plus the review tool config.json sets.",
     details: [SESSION_LOOKUP],
     options: { session: "The sessionId from prepare or adopt." },
     run: (options) => workspaceInfo({ sessionId: options.session }),
@@ -216,7 +218,7 @@ export const COMMANDS = {
       "task contract, the changed paths and diff stats against baseSha; never file contents, diffs,",
       "logs, env files or command output. Secrets are redacted first, and the request stays below",
       "jev.maxPayloadBytes by shortening the path list, then the request, then the contract.",
-      "Runs only when jev.enabled is true, the push remote's GitHub repository is listed in",
+      "Runs only when jev.enabled is true, the push remote's github.com repository is listed in",
       "jev.repositories and owned by one of jev.owners, and OPENROUTER_API_KEY is set.",
       "Always exits 0 once the session is found: a skip, timeout, 429 (retried once), HTTP error or",
       "malformed answer prints outcome skipped or failed with a reason, and the run carries on.",

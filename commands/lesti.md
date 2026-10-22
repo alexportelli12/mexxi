@@ -59,8 +59,8 @@ Choose the verify command first:
 
 Any verify command other than `npm run verify` goes in a committed
 `.mexxi.json` as `"verify": "<command>"`, run from the repository root. If a
-CI check runs that full command, add `"ciCheck": "<that check's name as GitHub
-reports it>"` so `ibni prepare` can reuse CI's result. With neither, write no
+CI check runs that full command, add `"ciCheck": "<that check's name as the
+forge reports it>"` (a GitHub check run or a GitLab job) so `ibni prepare` can reuse CI's result. With neither, write no
 `.mexxi.json`. Keep any keys an existing `.mexxi.json` already holds.
 
 Commit in two kinds, setup first: the verify command (Verifika, the `verify`

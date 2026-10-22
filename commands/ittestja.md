@@ -21,7 +21,8 @@ observes and reports; it never edits code, commits, or switches branches.
    and write evidence to its `evidenceDir`.
 2. Otherwise use the current checkout and a fresh system temporary directory
    for evidence. For a pull request with no retained workspace, confirm with
-   `gh pr view` that the checkout is on its head branch; if it is not, say so
+   the forge's CLI (`gh pr view` on GitHub, `glab mr view` on GitLab) that the
+   checkout is on its head branch; if it is not, say so
    and stop rather than switching branches.
 3. Derive the routes, states and flows to exercise from the arguments and,
    for a pull request or session, from its description and diff.

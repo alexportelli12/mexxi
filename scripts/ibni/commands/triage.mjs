@@ -2,18 +2,20 @@ import { readFile } from "node:fs/promises";
 import { redact } from "../../lib/redact.mjs";
 import { workspaceConfig } from "../lib/config.mjs";
 import { WorkspaceError } from "../lib/errors.mjs";
-import { configuredGithubRepository, git } from "../lib/git.mjs";
+import { configuredGithubRepository } from "../lib/forge.mjs";
+import { git } from "../lib/git.mjs";
 import { askJev, buildRequest, GATE_QUESTIONS } from "../lib/jev.mjs";
 import { appendHistory } from "../lib/timings.mjs";
 import { sessionWorkspace } from "../lib/session.mjs";
 
 // Why triage may not send anything from this session's repository, or null.
-// The repository is the owner/name of the push remote's configured GitHub URL;
-// it must be listed in jev.repositories and owned by one of jev.owners.
+// The repository is the owner/name of the push remote's configured github.com
+// URL; it must be listed in jev.repositories and owned by one of jev.owners.
+// Jev is GitHub-only: other forges and self-hosted GitHub are skipped.
 export async function triagePolicy({ jev, root, remote, apiKey }) {
   if (!jev.enabled) return "jev.enabled is false";
   const github = await configuredGithubRepository(root, remote);
-  if (!github) return `remote ${remote} is not a GitHub repository, so it cannot be matched against jev.repositories`;
+  if (!github) return `remote ${remote} is not a GitHub repository, so it cannot be matched against jev.repositories (Jev triage runs only on github.com)`;
   const name = `${github.owner}/${github.repo}`;
   const same = (a, b) => a.toLowerCase() === b.toLowerCase();
   if (!jev.repositories.some((listed) => same(listed, name))) return `${name} is not listed in jev.repositories`;

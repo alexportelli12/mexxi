@@ -30,7 +30,7 @@ To see the difference, compare two pull requests for the same request in a small
 
 ## Getting started
 
-You need Node.js 22.13 or newer, Git, the GitHub CLI (`gh`), and one of Claude Code, Codex or OpenCode. Optional: the review tool ([OpenCodeReview](https://github.com/alibaba/open-code-review), `ocr`), the [Playwright MCP](https://github.com/microsoft/playwright-mcp) server for browser checks, and `ffmpeg` for GIFs.
+You need Node.js 22.13 or newer, Git, the forge's CLI (`gh` for GitHub, `glab` for GitLab), and one of Claude Code, Codex or OpenCode. Optional: the review tool ([OpenCodeReview](https://github.com/alibaba/open-code-review), `ocr`), the [Playwright MCP](https://github.com/microsoft/playwright-mcp) server for browser checks, and `ffmpeg` for GIFs.
 
 Paste this into your agent to install mexxi. It checks the prerequisites, asks what it cannot detect, and shows what it will change before it changes anything:
 

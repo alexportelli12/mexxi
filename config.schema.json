@@ -181,6 +181,20 @@
         "contextNudgePercent": { "description": "Context window fill, in percent, at which the run pane's band suggests a fresh session and ibni adopt for follow-ups.", "type": "integer", "minimum": 1, "maximum": 100, "default": 70 }
       }
     },
+    "forge": {
+      "description": "Which code forge a repository's pull requests, CI state, issues and media URLs come from: GitHub through gh, GitLab through glab. github.com and gitlab.com are known; a repository can name its own with \"forge\" in its committed .mexxi.json, which wins over this group. A remote on any other host has no forge, and the steps that need one fail or skip with the reason.",
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "hosts": {
+          "description": "Self-hosted forges by the host in the push remote's URL (with its port for an http(s) remote), as github or gitlab, such as {\"git.example.com\": \"gitlab\"}. An SSH host alias (git@github-work:owner/repo) needs no entry: ibni resolves it through ssh config, as gh does, and ssh.github.com counts as github.com.",
+          "type": "object",
+          "additionalProperties": { "type": "string", "enum": ["github", "gitlab"] },
+          "default": {}
+        }
+      }
+    },
     "jev": {
       "description": "Jev triage through OpenRouter; the API key is read from OPENROUTER_API_KEY, never from this file.",
       "type": "object",
@@ -191,8 +205,8 @@
         "stage": { "description": "What triage may do with its answers. Only shadow exists: it records answers beside the agent's own gate choices and changes nothing. Escalate (add a gate on a confident answer) and skip (drop the independent review on a confident mechanical answer) come only once shadow data shows agreement.", "type": "string", "enum": ["shadow"], "default": "shadow" },
         "model": { "description": "Pinned Jev model; not the ~typesafe/jev-latest alias, so a release cannot shift answers mid-calibration.", "type": "string", "default": "typesafe/jev-1.14" },
         "endpoint": { "description": "OpenRouter's Decisions API, which takes the question schema triage sends. It receives the API key, so it must be HTTPS; plain HTTP is allowed only on loopback (localhost, 127.0.0.1, [::1]), where a local stand-in never sends the key over a network.", "type": "string", "pattern": "^(https://|http://(localhost|127\\.0\\.0\\.1|\\[::1\\])(:[0-9]+)?(/|$))", "default": "https://openrouter.ai/api/alpha/decisions" },
-        "owners": { "description": "GitHub accounts and organisations that are yours. A listed repository owned by anyone else is skipped, since its content is not only yours to share.", "type": "array", "items": { "type": "string", "pattern": "^[^/\\s]+$" }, "default": [] },
-        "repositories": { "description": "Repositories (owner/name, as in the push remote's GitHub URL) triage may run in.", "type": "array", "items": { "type": "string", "pattern": "^[^/\\s]+/[^/\\s]+$" }, "default": [] },
+        "owners": { "description": "GitHub accounts and organisations that are yours. A listed repository owned by anyone else is skipped, since its content is not only yours to share. Jev runs only on github.com: a repository on GitLab or a self-hosted forge is skipped.", "type": "array", "items": { "type": "string", "pattern": "^[^/\\s]+$" }, "default": [] },
+        "repositories": { "description": "Repositories (owner/name, as in the push remote's github.com URL) triage may run in.", "type": "array", "items": { "type": "string", "pattern": "^[^/\\s]+/[^/\\s]+$" }, "default": [] },
         "maxPayloadBytes": { "description": "Each request stays below this many bytes; larger text puts Jev in a slower, less accurate long-context mode.", "type": "integer", "minimum": 4096, "default": 32768 },
         "timeoutMs": { "description": "How long one request may take before triage gives up and the run carries on.", "type": "integer", "minimum": 500, "default": 5000 },
         "zeroDataRetention": { "description": "Ask OpenRouter to route only to providers that retain no data (provider.zdr). If none serves the model, calls fail and are recorded with the reason.", "type": "boolean", "default": true }

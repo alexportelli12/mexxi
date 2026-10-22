@@ -1,36 +1,18 @@
 import { rm } from "node:fs/promises";
 import { canonicalPath } from "../lib/fs.mjs";
-import { cleanOutput, fetchBranch, git, isAncestor, refExists, remoteBranchSha, repositoryAt, run } from "../lib/git.mjs";
+import { workspaceConfig } from "../lib/config.mjs";
+import { changeRequestForge, detectForge } from "../lib/forge.mjs";
+import { cleanOutput, fetchBranch, git, isAncestor, refExists, remoteBranchSha, repositoryAt } from "../lib/git.mjs";
 import { withRepositoryLock } from "../lib/lock.mjs";
 import { MEDIA_BRANCH, updateMediaBranch } from "../lib/media.mjs";
 import { evidenceDirectoryFor, inspectImplementationWorktrees, workspaceSummary } from "../lib/metadata.mjs";
 
-const PR_OPEN_STATES = new Set(["OPEN", "MERGED", "CLOSED"]);
-
-async function pullRequestState(root, prUrl) {
+// The pull request's state and merge commit from its forge, or a diagnostic.
+async function pullRequestState(root, metadata, config) {
   try {
-    const result = await run(
-      "gh",
-      ["pr", "view", prUrl, "--json", "state,mergeCommit"],
-      { cwd: root, timeout: 30_000 },
-    );
-    let parsed;
-    try {
-      parsed = JSON.parse(result.stdout);
-    } catch {
-      return { state: null, mergeCommit: null, diagnostic: `unexpected gh output: ${cleanOutput(result)}` };
-    }
-    const state = typeof parsed?.state === "string" && PR_OPEN_STATES.has(parsed.state)
-      ? parsed.state
-      : null;
-    const mergeCommit = parsed?.mergeCommit
-      && typeof parsed.mergeCommit.oid === "string"
-      && /^[0-9a-f]+$/i.test(parsed.mergeCommit.oid)
-      ? parsed.mergeCommit.oid
-      : null;
-    if (!state) {
-      return { state: null, mergeCommit, diagnostic: `unexpected gh output: ${result.stdout.trim()}` };
-    }
+    const forge = changeRequestForge(await detectForge({ root, remote: metadata.remote, baseSha: metadata.baseSha, config }), metadata.prUrl);
+    if (!forge.name) return { state: null, mergeCommit: null, diagnostic: forge.reason };
+    const { state, mergeCommit } = await forge.changeRequest(root, metadata.prUrl);
     return { state, mergeCommit, diagnostic: null };
   } catch (error) {
     return { state: null, mergeCommit: null, diagnostic: error.message };
@@ -66,7 +48,7 @@ async function currentInvocationWorktree() {
   return { invocationRoot, gitDirectory: repository.gitDirectory };
 }
 
-async function cleanupStatus(entry, activeGitDirectory, repositoryRoot) {
+async function cleanupStatus(entry, activeGitDirectory, repositoryRoot, config) {
   const base = { worktreePath: entry.worktreePath };
   if (!entry.worktreeExists) {
     return { ...base, decision: "protect", reason: `worktree path is inaccessible: ${entry.error || "missing directory"}` };
@@ -95,7 +77,7 @@ async function cleanupStatus(entry, activeGitDirectory, repositoryRoot) {
     return { ...base, summary, decision: "protect", reason: "no recorded pull request" };
   }
 
-  const { state, mergeCommit, diagnostic } = await pullRequestState(repositoryRoot, metadata.prUrl);
+  const { state, mergeCommit, diagnostic } = await pullRequestState(repositoryRoot, metadata, config);
   if (!state) {
     return { ...base, summary, decision: "protect", reason: `could not determine pull request state: ${diagnostic}` };
   }
@@ -172,12 +154,12 @@ async function removeWorkspace(root, status) {
 
 // Callers hold the repository lock. Every per-workspace failure is reported as
 // a kept workspace so one unreadable entry never blocks the others.
-async function cleanupUnlocked(repository, { dryRun, activeGitDirectory }) {
+async function cleanupUnlocked(repository, { dryRun, activeGitDirectory, config }) {
   const inspected = await inspectImplementationWorktrees(repository.commonDirectory);
   const statuses = [];
   for (const entry of inspected) {
     try {
-      statuses.push(await cleanupStatus(entry, activeGitDirectory, repository.root));
+      statuses.push(await cleanupStatus(entry, activeGitDirectory, repository.root, config));
     } catch (error) {
       statuses.push({
         worktreePath: entry.worktreePath,
@@ -214,19 +196,21 @@ async function cleanupUnlocked(repository, { dryRun, activeGitDirectory }) {
 
 export async function cleanupWorkspaces({ cwd = process.cwd(), dryRun = true }) {
   const repository = await repositoryAt(cwd);
+  const config = await workspaceConfig();
   return withRepositoryLock(repository.commonDirectory, async () => {
     const { gitDirectory: activeGitDirectory } = await currentInvocationWorktree();
-    return cleanupUnlocked(repository, { dryRun, activeGitDirectory });
+    return cleanupUnlocked(repository, { dryRun, activeGitDirectory, config });
   });
 }
 
 // prepare runs this under its lock after fetching. It must never fail or block
 // preparation: any error simply means every workspace was kept.
-export async function sweepConsumedWorkspaces(repository) {
+export async function sweepConsumedWorkspaces(repository, config) {
   try {
     const result = await cleanupUnlocked(repository, {
       dryRun: false,
       activeGitDirectory: repository.gitDirectory,
+      config,
     });
     const owned = result.results.filter((status) => status.summary || status.owned);
     return {

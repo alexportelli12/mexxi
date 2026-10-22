@@ -72,7 +72,11 @@ async function createFixture(t) {
   const gh = await ghStub(t);
   const config = path.join(root, "mexxi-config.json");
   await writeFile(config, JSON.stringify({ paths: { worktreeRoot: worktrees } }));
-  return { root, remote, seed, control, worktrees, gh, config };
+  const fixture = { root, remote, seed, control, worktrees, gh, config };
+  // Forge calls (pull requests, CI state, issues, media URLs) need a remote on
+  // a known forge; useLocalRemote takes it away again.
+  await useGithubRemote(fixture);
+  return fixture;
 }
 
 async function pathExists(candidate) {
@@ -1032,12 +1036,20 @@ test("publish explains how to proceed when evidence is missing or stale", async 
   assert.match(stale.json.nextAction, /verify command \(npm run verify\).*record-evidence.*publish again/);
 });
 
-// The configured URL names a GitHub repository while insteadOf routes the
+// The configured URL names a forge repository while insteadOf routes the
 // transport to the local bare remote, as a credential helper or mirror would.
+async function useForgeRemote(fixture, url) {
+  await git(fixture.control, "config", `url.${fixture.remote}.insteadOf`, url);
+  await git(fixture.control, "remote", "set-url", "origin", url);
+}
+
 async function useGithubRemote(fixture) {
-  const github = "https://github.com/acme/widgets.git";
-  await git(fixture.control, "config", `url.${fixture.remote}.insteadOf`, github);
-  await git(fixture.control, "remote", "set-url", "origin", github);
+  await useForgeRemote(fixture, "https://github.com/acme/widgets.git");
+}
+
+// A remote that is a plain local path names no forge.
+async function useLocalRemote(fixture) {
+  await git(fixture.control, "remote", "set-url", "origin", fixture.remote);
 }
 
 async function mediaTree(fixture) {
@@ -1053,7 +1065,6 @@ async function mediaParents(fixture) {
 
 test("publish-media commits evidence to pr-media without touching the feature branch or control checkout", async (t) => {
   const fixture = await createFixture(t);
-  await useGithubRemote(fixture);
   const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "media demo" });
   const { evidenceDir, worktreePath, sessionId, branch } = prepared.json;
   const featureHead = await commit(worktreePath, "feature.txt", "feature\n", "feature");
@@ -1088,7 +1099,6 @@ test("publish-media commits evidence to pr-media without touching the feature br
 
 test("publish-media refuses files outside evidenceDir and non-media files", async (t) => {
   const fixture = await createFixture(t);
-  await useGithubRemote(fixture);
   const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "media guard" });
   const { evidenceDir, sessionId } = prepared.json;
   const outside = path.join(fixture.root, "outside.png");
@@ -1105,17 +1115,17 @@ test("publish-media refuses files outside evidenceDir and non-media files", asyn
   assert.deepEqual(await mediaTree(fixture), []);
 });
 
-test("publish-media explains when the remote is not on GitHub", async (t) => {
+test("publish-media explains when the remote is not on a known forge", async (t) => {
   const fixture = await createFixture(t);
+  await useLocalRemote(fixture);
   const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "media local" });
   await writeFile(path.join(prepared.json.evidenceDir, "shot.png"), "png");
   const result = await lifecycle(fixture, fixture.control, "publish-media", { session: prepared.json.sessionId }, [2]);
-  assert.match(result.stderr, /needs a GitHub remote/);
+  assert.match(result.stderr, /needs a GitHub or GitLab remote/);
 });
 
 test("cleanup removes a removed workspace's media folder in one additive commit", async (t) => {
   const fixture = await withEnvGitignore(t);
-  await useGithubRemote(fixture);
   const merged = await lifecycle(fixture, fixture.control, "prepare", { slug: "media merged" });
   const open = await lifecycle(fixture, fixture.control, "prepare", { slug: "media open" });
   for (const prepared of [merged, open]) {
@@ -1160,7 +1170,6 @@ test("the tool and every subcommand answer --help and -h with exit 0", async (t)
 
 test("session commands find their workspace from evidenceDir and from outside any repository", async (t) => {
   const fixture = await createFixture(t);
-  await useGithubRemote(fixture);
   const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "anywhere" });
   const { evidenceDir, sessionId, worktreePath } = prepared.json;
   await mkdir(path.join(evidenceDir, "shots"));
@@ -1259,7 +1268,6 @@ async function triageFiles(evidenceDir, request = "Rename the settings page", co
 
 test("lifecycle steps, verify attempts and finding counts are recorded and reported by stats", async (t) => {
   const fixture = await createFixture(t);
-  await useGithubRemote(fixture);
   const jev = await jevStub(t, [{ status: 200, body: JEV_ANSWERS }]);
   await useJev(fixture, { enabled: true, endpoint: jev.endpoint, owners: ["acme"], repositories: ["acme/widgets"] });
   const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "timed" });
@@ -1336,13 +1344,13 @@ test("triage sends nothing unless enabled, listed, owned by you and keyed, and r
   };
 
   const local = await createFixture(t);
+  await useLocalRemote(local);
   const localPrepared = await lifecycle(local, local.control, "prepare", { slug: "local remote" });
   assert.equal(await triage(local, localPrepared), "jev.enabled is false");
   await useJev(local, { enabled: true, endpoint: jev.endpoint, owners: ["acme"], repositories: ["acme/widgets"] });
   assert.match(await triage(local, localPrepared), /^remote origin is not a GitHub repository/);
 
   const fixture = await createFixture(t);
-  await useGithubRemote(fixture);
   const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "policy" });
   const reasons = [];
   for (const [jevConfig, env] of [
@@ -1369,7 +1377,6 @@ test("triage sends nothing unless enabled, listed, owned by you and keyed, and r
 
 test("triage sends only redacted metadata, records the answers and their cost, and keeps them from the agent", async (t) => {
   const fixture = await createFixture(t);
-  await useGithubRemote(fixture);
   const jev = await jevStub(t, [{ status: 200, body: JEV_ANSWERS }]);
   await useJev(fixture, { enabled: true, endpoint: jev.endpoint, owners: ["acme"], repositories: ["acme/widgets"] });
   const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "metadata only" });
@@ -1411,7 +1418,6 @@ test("triage sends only redacted metadata, records the answers and their cost, a
 
 test("triage fails open on a server error or a timeout and records why", async (t) => {
   const fixture = await createFixture(t);
-  await useGithubRemote(fixture);
   const jev = await jevStub(t, [{ status: 503, body: { error: { code: 503, message: "unavailable" } } }, { hang: true }]);
   await useJev(fixture, { enabled: true, endpoint: jev.endpoint, owners: ["acme"], repositories: ["acme/widgets"], timeoutMs: 500 });
   const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "fails open" });
@@ -1707,7 +1713,6 @@ else if (group === "issue" && action === "list") {
 test("file-qa-checks files each suggestion as a qa-check issue, creating the label and skipping duplicates", async (t) => {
   const fixture = await createFixture(t);
   // The stub refuses any call without --repo acme/widgets, the remote's repository.
-  await useGithubRemote(fixture);
   const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "qa checks" });
   const { sessionId, evidenceDir } = prepared.json;
   const from = path.join(evidenceDir, "qa-checks.txt");
@@ -1737,14 +1742,15 @@ test("file-qa-checks files each suggestion as a qa-check issue, creating the lab
   assert.match(missing.stderr, /requires --from/);
 });
 
-test("file-qa-checks refuses a remote that is not a GitHub repository rather than letting gh guess", async (t) => {
+test("file-qa-checks refuses a remote that is not on a known forge rather than letting gh guess", async (t) => {
   const fixture = await createFixture(t);
+  await useLocalRemote(fixture);
   const { sessionId, evidenceDir } = (await lifecycle(fixture, fixture.control, "prepare", { slug: "qa local" })).json;
   const from = path.join(evidenceDir, "qa-checks.txt");
   await writeFile(from, "Fail on console errors\n");
   const gh = await issueGhStub(t);
   const result = await lifecycle(fixture, evidenceDir, "file-qa-checks", { session: sessionId, from }, [2], gh.env);
-  assert.match(result.stderr, /needs remote origin to be a GitHub repository/);
+  assert.match(result.stderr, /needs remote origin to be a GitHub or GitLab repository/);
   assert.deepEqual((await gh.read()).labels, []);
 });
 
@@ -1822,4 +1828,243 @@ test("cross-review falls back to the same-model reviewer and says why", async (t
   const missing = await lifecycle(configured.fixture, configured.prepared.json.worktreePath, "cross-review", configured.options, [0], { PATH: bare });
   assert.equal(missing.json.delegated, false);
   assert.match(missing.json.reason, /codex is not installed/);
+});
+
+// A glab stand-in for `glab api`: answers merge requests, commit statuses,
+// labels and issues from a JSON state file, and logs each call's host and
+// endpoint. Any other glab command fails, so a test proves ibni used the API.
+async function glabStub(t, state = {}) {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "mexxi-glab-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const file = path.join(directory, "state.json");
+  await writeFile(file, JSON.stringify({ mergeRequests: {}, statuses: [], labels: [], issues: [], calls: [], ...state }));
+  await writeFile(path.join(directory, "glab"), `#!${process.execPath}
+const fs = require("node:fs");
+const state = JSON.parse(fs.readFileSync(${JSON.stringify(file)}, "utf8"));
+const args = process.argv.slice(2);
+const save = () => fs.writeFileSync(${JSON.stringify(file)}, JSON.stringify(state));
+const fail = (message) => { console.error("glab stub: " + message); process.exit(1); };
+if (args[0] !== "api") fail("unexpected " + args.join(" "));
+const hostname = args[args.indexOf("--hostname") + 1];
+const method = args.includes("--method") ? args[args.indexOf("--method") + 1] : "GET";
+const fields = {};
+args.forEach((arg, index) => { if (args[index - 1] === "-f") { const at = arg.indexOf("="); fields[arg.slice(0, at)] = arg.slice(at + 1); } });
+const endpoint = args.find((arg, index) => index > 0 && !arg.startsWith("-") && !["--hostname", "--method", "-f"].includes(args[index - 1]));
+const [route, query = ""] = endpoint.split("?");
+const params = new URLSearchParams(query);
+state.calls.push({ hostname, method, route, query, fields });
+save();
+let match;
+if ((match = route.match(/^projects\\/([^/]+)\\/merge_requests\\/(\\d+)$/))) {
+  const request = state.mergeRequests[decodeURIComponent(match[1]) + "!" + match[2]];
+  if (!request) fail("no merge request " + route);
+  console.log(JSON.stringify(request));
+} else if (/^projects\\/[^/]+\\/repository\\/commits\\/[0-9a-f]+\\/statuses$/.test(route)) {
+  if (state.statuses === null) fail("statuses unavailable");
+  console.log(JSON.stringify(state.statuses));
+} else if (/^projects\\/[^/]+\\/labels$/.test(route)) {
+  if (method === "POST") { state.labels.push(fields); save(); console.log(JSON.stringify(fields)); }
+  else console.log(JSON.stringify(state.labels.filter((label) => label.name.includes(params.get("search") ?? ""))));
+} else if (/^projects\\/[^/]+\\/issues$/.test(route)) {
+  if (method === "POST") {
+    state.issues.push(fields); save();
+    console.log(JSON.stringify({ iid: state.issues.length, web_url: "https://" + hostname + "/issues/" + state.issues.length }));
+  } else {
+    const page = Number(params.get("page")), size = Number(params.get("per_page"));
+    const labelled = state.issues.filter((issue) => issue.labels === params.get("labels"));
+    console.log(JSON.stringify(labelled.slice((page - 1) * size, page * size)));
+  }
+} else fail("unexpected endpoint " + endpoint);
+`);
+  await chmod(path.join(directory, "glab"), 493);
+  return {
+    env: (fixture) => ({ PATH: `${directory}:${ghEnv(fixture.gh).PATH}` }),
+    read: async () => JSON.parse(await readFile(file, "utf8")),
+    update: async (change) => writeFile(file, JSON.stringify({ ...JSON.parse(await readFile(file, "utf8")), ...change })),
+  };
+}
+
+const glabStatus = (sha, overrides = {}) => ({
+  id: 31, sha, name: "verify", status: "success",
+  target_url: "https://gitlab.com/group/sub/widgets/-/jobs/31", finished_at: "2026-10-21T10:00:00Z",
+  ...overrides,
+});
+
+test("a gitlab.com remote with nested groups takes baseline, media, issues, adopt and cleanup through glab", async (t) => {
+  const fixture = await createFixture(t);
+  await useForgeRemote(fixture, "git@gitlab.com:group/sub/widgets.git");
+  const project = "group/sub/widgets";
+  const sha = await optInToBaselineReuse(fixture);
+  const glab = await glabStub(t, { statuses: [glabStatus(sha)], issues: [{ title: "Fail on console errors at every route", labels: "qa-check" }] });
+  const env = glab.env(fixture);
+
+  // Baseline reuse reads the commit's statuses, and only a success on exactly baseSha counts.
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "gitlab" }, [0], env);
+  assert.equal(prepared.json.forge, "gitlab");
+  assert.equal(prepared.json.forgeReason, null);
+  assert.deepEqual(prepared.json.baseline, {
+    reused: true, check: "verify", sha, url: "https://gitlab.com/group/sub/widgets/-/jobs/31", runId: 31, completedAt: "2026-10-21T10:00:00Z",
+  });
+  for (const [index, [statuses, reason]] of [
+    [[glabStatus(sha, { status: "running" })], /verify on .* is running/],
+    [[glabStatus(sha), glabStatus(sha, { id: 32, status: "failed" })], /is failure/],
+    [[glabStatus("0".repeat(40))], /no verify run/],
+    [null, /unavailable/],
+  ].entries()) {
+    await glab.update({ statuses });
+    const unproven = await lifecycle(fixture, fixture.control, "prepare", { slug: `unproven ${index}` }, [0], env);
+    assert.equal(unproven.json.baseline.reused, false);
+    assert.match(unproven.json.baseline.reason, reason);
+  }
+  const statusCall = (await glab.read()).calls.find((call) => call.route.endsWith("/statuses"));
+  assert.deepEqual([statusCall.hostname, statusCall.route, new URLSearchParams(statusCall.query).get("name")],
+    ["gitlab.com", `projects/${encodeURIComponent(project)}/repository/commits/${sha}/statuses`, "verify"]);
+
+  const { sessionId, worktreePath, evidenceDir, branch } = prepared.json;
+  assert.equal((await lifecycle(fixture, fixture.control, "info", { session: sessionId }, [0], env)).json.forge, "gitlab");
+  await writeFile(path.join(evidenceDir, "after home.png"), "png");
+  const media = await lifecycle(fixture, worktreePath, "publish-media", { session: sessionId }, [0], env);
+  assert.equal(media.json.files[0].url, `https://gitlab.com/${project}/-/raw/${media.json.commit}/agent/gitlab/after%20home.png`);
+
+  const from = path.join(evidenceDir, "qa-checks.txt");
+  await writeFile(from, "Fail on console errors at every route\nAssert no horizontal overflow at 390px\n");
+  const filed = await lifecycle(fixture, evidenceDir, "file-qa-checks", { session: sessionId, from }, [0], env);
+  assert.deepEqual(filed.json.created, [{ title: "Assert no horizontal overflow at 390px", url: "https://gitlab.com/issues/2" }]);
+  assert.deepEqual(filed.json.skipped, ["Fail on console errors at every route"]);
+  let state = await glab.read();
+  assert.deepEqual(state.labels, [{ name: "qa-check", color: "#0E8A16", description: "A check rendered QA suggested, to become an executable test" }]);
+  assert.match(state.issues[1].description, /Suggested by rendered QA of branch /);
+  assert.ok(state.calls.every((call) => call.hostname === "gitlab.com" && (call.route.startsWith(`projects/${encodeURIComponent(project)}/`))));
+  const again = await lifecycle(fixture, evidenceDir, "file-qa-checks", { session: sessionId, from }, [0], env);
+  assert.deepEqual([again.json.created, (await glab.read()).labels.length], [[], 1]);
+
+  // adopt reads the merge request named by the URL mark-pr recorded.
+  await commit(worktreePath, "feature.txt", "feature\n", "feature");
+  await recordEvidence(fixture, prepared);
+  await lifecycle(fixture, worktreePath, "publish", { session: sessionId });
+  const publishedSha = (await git(worktreePath, "rev-parse", "HEAD")).stdout.trim();
+  const mrUrl = `https://gitlab.com/${project}/-/merge_requests/7`;
+  await lifecycle(fixture, worktreePath, "mark-pr", { session: sessionId, url: mrUrl });
+  const mergeRequests = { [`${project}!7`]: { iid: 7, state: "opened", source_branch: branch, sha: publishedSha, merge_commit_sha: null, squash_commit_sha: null } };
+  await glab.update({ mergeRequests });
+  const adopted = await lifecycle(fixture, fixture.control, "adopt", { pr: mrUrl }, [0], env);
+  assert.equal(adopted.json.headSha, publishedSha);
+
+  // An open merge request is kept; a merged one whose squash commit reached trunk is removed.
+  const kept = await lifecycle(fixture, fixture.control, "cleanup", { "dry-run": "true" }, [0], env);
+  assert.match(kept.json.results.find((row) => row.worktreePath === worktreePath).reason, /pull request is open/);
+  await pretendMerged(fixture, prepared);
+  const trunk = (await git(fixture.control, "rev-parse", "HEAD")).stdout.trim();
+  await glab.update({ mergeRequests: { [`${project}!7`]: { ...mergeRequests[`${project}!7`], state: "merged", squash_commit_sha: trunk } } });
+  const removed = await lifecycle(fixture, fixture.control, "cleanup", { "dry-run": "false" }, [0], env);
+  assert.equal(removed.json.results.find((row) => row.worktreePath === worktreePath).decision, "remove");
+  assert.equal(await pathExists(worktreePath), false);
+  state = await glab.read();
+  assert.ok(state.calls.some((call) => call.route === `projects/${encodeURIComponent(project)}/merge_requests/7`));
+});
+
+test("a self-hosted remote has no forge until forge.hosts or the repository's .mexxi.json names one", async (t) => {
+  const fixture = await createFixture(t);
+  await useForgeRemote(fixture, "https://git.example.com/team/widgets.git");
+  const glab = await glabStub(t);
+  const env = glab.env(fixture);
+
+  const unknown = await lifecycle(fixture, fixture.control, "prepare", { slug: "self hosted" }, [0], env);
+  assert.equal(unknown.json.forge, null);
+  assert.match(unknown.json.forgeReason, /git\.example\.com, which is not a known forge; map it in forge\.hosts/);
+  const from = path.join(unknown.json.evidenceDir, "qa-checks.txt");
+  await writeFile(from, "Fail on console errors\n");
+  const refused = await lifecycle(fixture, fixture.control, "file-qa-checks", { session: unknown.json.sessionId, from }, [2], env);
+  assert.match(refused.stderr, /needs remote origin to be a GitHub or GitLab repository[\s\S]*forge\.hosts/);
+  // No forge CLI is guessed for an unknown host.
+  assert.deepEqual((await glab.read()).calls, []);
+
+  await writeFile(fixture.config, JSON.stringify({ paths: { worktreeRoot: fixture.worktrees }, forge: { hosts: { "git.example.com": "gitlab" } } }));
+  const info = await lifecycle(fixture, fixture.control, "info", { session: unknown.json.sessionId }, [0], env);
+  assert.deepEqual([info.json.forge, info.json.forgeReason], ["gitlab", null]);
+  await writeFile(path.join(unknown.json.evidenceDir, "shot.png"), "png");
+  const media = await lifecycle(fixture, fixture.control, "publish-media", { session: unknown.json.sessionId }, [0], env);
+  assert.match(media.json.files[0].url, /^https:\/\/git\.example\.com\/team\/widgets\/-\/raw\/[0-9a-f]{40}\/agent\/self-hosted\/shot\.png$/);
+
+  // The repository's committed choice wins over forge.hosts; an unknown name is refused.
+  for (const [forge, expected] of [["github", "github"], ["bitbucket", null]]) {
+    await git(fixture.seed, "pull", "--quiet", "origin", "trunk");
+    await commit(fixture.seed, ".mexxi.json", `${JSON.stringify({ forge })}\n`, `forge ${forge}`);
+    await git(fixture.seed, "push", "--quiet", "origin", "trunk");
+    const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: `committed ${forge}` }, [0], env);
+    assert.equal(prepared.json.forge, expected);
+    if (!expected) assert.match(prepared.json.forgeReason, /names forge "bitbucket"; use one of github, gitlab/);
+  }
+});
+
+test("remote URLs parse to host, namespace and repository; GitHub owners are never nested", async () => {
+  const { parseRemoteUrl } = await import("./lib/forge.mjs");
+  const cases = {
+    "https://github.com/acme/widgets.git": { host: "github.com", namespace: "acme", repo: "widgets", ssh: false },
+    // An http(s) port is part of the web host; an SSH port is transport only.
+    "https://user:token@GitLab.example.com:8443/group/sub/widgets/": { host: "gitlab.example.com:8443", namespace: "group/sub", repo: "widgets", ssh: false },
+    "ssh://git@git.example.com:2222/team/widgets.git": { host: "git.example.com", namespace: "team", repo: "widgets", ssh: true },
+    "git@gitlab.com:group/sub/deeper/widgets.git": { host: "gitlab.com", namespace: "group/sub/deeper", repo: "widgets", ssh: true },
+    "/srv/git/widgets.git": null,
+    "../remote.git": null,
+    "file:///srv/git/widgets.git": null,
+    "https://github.com/widgets": null,
+    // Never handed to ssh -G as an option.
+    "git@-oProxyCommand=x:o/r": null,
+    "ssh://-oProxyCommand=x/o/r": null,
+  };
+  for (const [url, expected] of Object.entries(cases)) assert.deepEqual(parseRemoteUrl(url), expected, url);
+});
+
+// An ssh stand-in for `ssh -G`: prints the hostname ssh config would resolve
+// for each alias in the map, and the alias itself otherwise, as ssh does.
+async function sshStub(t, aliases) {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "mexxi-ssh-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  await writeFile(path.join(directory, "ssh"), `#!${process.execPath}
+const [flag, alias] = process.argv.slice(2);
+if (flag !== "-G") process.exit(255);
+console.log("user git\\nhostname " + (${JSON.stringify(aliases)}[alias] ?? alias) + "\\nport 22");
+`);
+  await chmod(path.join(directory, "ssh"), 493);
+  return directory;
+}
+
+test("SSH aliases and ssh.github.com behave as github.com, and an unresolved alias still reads its pull request", async (t) => {
+  const fixture = await createFixture(t);
+  const ssh = await sshStub(t, { "github-work": "github.com" });
+  const env = { PATH: `${ssh}:${ghEnv(fixture.gh).PATH}` };
+  await useForgeRemote(fixture, "git@github-work:acme/widgets.git");
+  const sha = await optInToBaselineReuse(fixture);
+  await setCheckRuns(fixture, [checkRun(sha)]);
+  const aliased = await lifecycle(fixture, fixture.control, "prepare", { slug: "alias" }, [0], env);
+  assert.equal(aliased.json.forge, "github");
+  assert.equal(aliased.json.baseline.reused, true);
+  await writeFile(path.join(aliased.json.evidenceDir, "shot.png"), "png");
+  const media = await lifecycle(fixture, fixture.control, "publish-media", { session: aliased.json.sessionId }, [0], env);
+  assert.match(media.json.files[0].url, /^https:\/\/github\.com\/acme\/widgets\/blob\/[0-9a-f]{40}\/agent\/alias\/shot\.png\?raw=true$/);
+
+  await useForgeRemote(fixture, "ssh://git@ssh.github.com:443/acme/widgets.git");
+  assert.equal((await lifecycle(fixture, fixture.control, "info", { session: aliased.json.sessionId }, [0], env)).json.forge, "github");
+
+  // An alias ssh config does not resolve names no forge, but the recorded
+  // github.com pull request URL still decides cleanup and adopt.
+  await useForgeRemote(fixture, "git@unmapped-alias:acme/widgets.git");
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "unresolved" }, [0], env);
+  assert.equal(prepared.json.forge, null);
+  assert.match(prepared.json.forgeReason, /unmapped-alias, which is not a known forge/);
+  await commit(prepared.json.worktreePath, "feature.txt", "feature\n", "feature");
+  await recordEvidence(fixture, prepared);
+  await lifecycle(fixture, prepared.json.worktreePath, "publish", { session: prepared.json.sessionId });
+  const prUrl = "https://github.com/acme/widgets/pull/8";
+  await lifecycle(fixture, prepared.json.worktreePath, "mark-pr", { session: prepared.json.sessionId, url: prUrl });
+  const head = (await git(prepared.json.worktreePath, "rev-parse", "HEAD")).stdout.trim();
+  await setGhState(fixture.gh, 8, "OPEN");
+  await setGhHead(fixture.gh, 8, prepared.json.branch, head);
+  assert.equal((await lifecycle(fixture, fixture.control, "adopt", { pr: prUrl }, [0], env)).json.headSha, head);
+  await pretendMerged(fixture, prepared);
+  await rm(path.join(fixture.gh, "8.head"));
+  await setGhState(fixture.gh, 8, "MERGED");
+  const cleaned = await lifecycle(fixture, fixture.control, "cleanup", { "dry-run": "false" }, [0], env);
+  assert.equal(cleaned.json.results.find((row) => row.worktreePath === prepared.json.worktreePath).decision, "remove");
 });

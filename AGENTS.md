@@ -43,7 +43,8 @@ follow-up information.
 Deliver completed work as a pull request without waiting to be asked. Once the
 repository's verify command (`npm run verify` unless its committed `.mexxi.json`
 names another) is green, you may create a feature branch, commit the intended
-changes, push that branch, and open or update a pull request with the `gh` CLI.
+changes, push that branch, and open or update a pull request with the forge's
+CLI (`gh` on GitHub, `glab` on GitLab).
 If you are on the default branch, create a feature branch first, preferably in
 a linked worktree
 (`git worktree add`) so my checkout stays on its branch; never commit to the

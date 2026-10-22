@@ -2,7 +2,9 @@ import { lstat, readdir } from "node:fs/promises";
 import path from "node:path";
 import { WorkspaceError } from "../lib/errors.mjs";
 import { canonicalPath } from "../lib/fs.mjs";
-import { cleanOutput, configuredGithubRepository, git } from "../lib/git.mjs";
+import { workspaceConfig } from "../lib/config.mjs";
+import { detectForge } from "../lib/forge.mjs";
+import { cleanOutput, git } from "../lib/git.mjs";
 import { withRepositoryLock } from "../lib/lock.mjs";
 import { MEDIA_BRANCH, MEDIA_EXTENSIONS, updateMediaBranch } from "../lib/media.mjs";
 import { evidenceDirectoryFor } from "../lib/metadata.mjs";
@@ -51,11 +53,11 @@ export async function publishMedia({ cwd = process.cwd(), sessionId, files: requ
   const initial = await ownedSession(cwd, sessionId);
   return withRepositoryLock(initial.repository.commonDirectory, async () => {
     const { repository, metadata } = await ownedSession(cwd, sessionId);
-    const github = await configuredGithubRepository(repository.root, metadata.remote);
-    if (!github) {
+    const forge = await detectForge({ root: repository.root, remote: metadata.remote, baseSha: metadata.baseSha, config: await workspaceConfig() });
+    if (!forge.name) {
       throw new WorkspaceError(
-        "publish-media needs a GitHub remote to build embeddable URLs",
-        "Deliver the pull request without media and note why in its Evidence section.",
+        "publish-media needs a GitHub or GitLab remote to build embeddable URLs",
+        `${forge.reason}. Deliver the pull request without media and note why in its Evidence section.`,
       );
     }
     const files = await mediaFiles(evidenceDirectoryFor(metadata.worktreePath), requested);
@@ -71,7 +73,6 @@ export async function publishMedia({ cwd = process.cwd(), sessionId, files: requ
         }
       },
     );
-    const encode = (value) => value.split("/").map(encodeURIComponent).join("/");
     // URLs pin the media commit rather than the branch tip: cleanup later drops
     // the folder from the tip, and merged PR descriptions must keep rendering.
     return {
@@ -81,7 +82,7 @@ export async function publishMedia({ cwd = process.cwd(), sessionId, files: requ
       files: published.map((file) => ({
         file: file.relative,
         path: file.path,
-        url: `https://github.com/${github.owner}/${github.repo}/blob/${commit}/${encode(file.path)}?raw=true`,
+        url: forge.rawFileUrl(commit, file.path),
       })),
     };
   });

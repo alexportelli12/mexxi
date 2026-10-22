@@ -366,8 +366,30 @@ function checkGh(argv) {
   }
   if (words[0] === "pr" && words[1] === "merge") return "gh pr merge: merge decisions stay with the human";
   if (words[0] === "api" && argv.some((arg) => /\/pulls\/[^/\s]+\/merge\b/.test(arg))) return "gh api .../merge: merge decisions stay with the human";
-  if (words[0] === "api" && argv.includes("graphql") && argv.some((arg) => /\b(?:mergePullRequest|enablePullRequestAutoMerge)\b/.test(arg))) {
+  // In any argument: the endpoint may be the full .../graphql URL rather than the word graphql.
+  if (words[0] === "api" && argv.some((arg) => /\b(?:mergePullRequest|enablePullRequestAutoMerge)\b/.test(arg))) {
     return "gh api graphql mergePullRequest: merge decisions stay with the human";
+  }
+  return null;
+}
+
+// glab's options that take a value, wherever they sit before or between the
+// subcommands (glab -R g/r mr merge, glab mr --repo g/r merge).
+const GLAB_VALUE_OPTIONS = new Set(["-R", "--repo", "--hostname"]);
+
+// GitLab's equivalents: glab mr merge (alias accept), the REST merge and
+// merge-train endpoints, and the GraphQL mutation that merges or sets
+// auto-merge (mergeRequestAccept), in any argument.
+function checkGlab(argv) {
+  const words = [];
+  for (let index = 1; index < argv.length && words.length < 2; index += 1) {
+    if (GLAB_VALUE_OPTIONS.has(argv[index])) index += 1;
+    else if (!argv[index].startsWith("-")) words.push(argv[index]);
+  }
+  if (words[0] === "mr" && ["merge", "accept"].includes(words[1])) return `glab mr ${words[1]}: merge decisions stay with the human`;
+  if (words[0] === "api" && argv.some((arg) => /merge_requests\/[^/\s]+\/merge\b|merge_trains\/merge_requests\//.test(arg))) return "glab api .../merge: merge decisions stay with the human";
+  if (words[0] === "api" && argv.some((arg) => /\bmergeRequestAccept\b/.test(arg))) {
+    return "glab api graphql mergeRequestAccept: merge decisions stay with the human";
   }
   return null;
 }
@@ -572,6 +594,7 @@ export function checkCommand(command, { cwd, config, home = os.homedir() }) {
     const relocatedBy = command.match(RELOCATING_ENV)?.[0] ?? null;
     const check = (words) => (words[0] === "git" ? checkGit(words, directory, config, heads, relocatedBy, simple.expansions) : null)
       ?? (words[0] === "gh" ? checkGh(words) : null)
+      ?? (words[0] === "glab" ? checkGlab(words) : null)
       ?? checkDeny(words, config)
       ?? checkShopify(words)
       ?? checkGlobs({ ...simple, argv: words }, config);
@@ -590,7 +613,7 @@ export function checkCommand(command, { cwd, config, home = os.homedir() }) {
 }
 
 function guardedNames(config) {
-  return new Set(["git", "gh", "curl", "wget", "shopify", ...config.guard.deny.map((prefix) => prefix.trim().split(/\s+/)[0])]);
+  return new Set(["git", "gh", "glab", "curl", "wget", "shopify", ...config.guard.deny.map((prefix) => prefix.trim().split(/\s+/)[0])]);
 }
 
 // An invalid config.json must not switch the guard off: it falls back to the

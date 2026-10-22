@@ -20,6 +20,8 @@ export const info = {
   "evidenceRecordedAt": "2026-10-21T02:30:35.087Z",
   "createdAt": "2026-10-21T02:30:32.257Z",
   "updatedAt": "2026-10-21T02:30:36.105Z",
+  "forge": "github",
+  "forgeReason": null,
   "reviewTool": "ocr"
 }
 

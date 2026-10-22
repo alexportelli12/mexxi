@@ -1,27 +1,26 @@
 import { randomBytes } from "node:crypto";
 import { WorkspaceError } from "../lib/errors.mjs";
-import { assertClean, assertNoGitOperation, cleanOutput, git, remoteBranchSha, run } from "../lib/git.mjs";
+import { workspaceConfig } from "../lib/config.mjs";
+import { changeRequestForge, detectForge, requireForge } from "../lib/forge.mjs";
+import { assertClean, assertNoGitOperation, cleanOutput, git, remoteBranchSha } from "../lib/git.mjs";
 import { withRepositoryLock } from "../lib/lock.mjs";
 import { updateMetadata, workspaceSummary } from "../lib/metadata.mjs";
 import { locateWorkspaces, ownedSession, validateRemote } from "../lib/session.mjs";
 
-async function pullRequest(root, prUrl) {
-  let result;
+async function pullRequest(root, metadata, prUrl) {
+  const config = await workspaceConfig();
+  const detected = await detectForge({ root, remote: metadata.remote, baseSha: metadata.baseSha, config });
+  const forge = requireForge(changeRequestForge(detected, prUrl), "adopt");
+  let request;
   try {
-    result = await run("gh", ["pr", "view", prUrl, "--json", "state,headRefName,headRefOid"], { cwd: root, timeout: 30_000 });
+    request = await forge.changeRequest(root, prUrl);
   } catch (error) {
-    throw new WorkspaceError("could not read the pull request from GitHub", error.message);
+    throw new WorkspaceError(`could not read the pull request from ${forge.label}`, error.message);
   }
-  let parsed;
-  try {
-    parsed = JSON.parse(result.stdout);
-  } catch {
-    parsed = null;
+  if (!request.headBranch || !request.headSha) {
+    throw new WorkspaceError(`${forge.cli} returned an unexpected pull request description`, JSON.stringify(request));
   }
-  if (typeof parsed?.state !== "string" || typeof parsed.headRefName !== "string" || typeof parsed.headRefOid !== "string") {
-    throw new WorkspaceError("gh returned an unexpected pull request description", cleanOutput(result));
-  }
-  return parsed;
+  return request;
 }
 
 async function workspaceForPullRequest(cwd, prUrl) {
@@ -63,16 +62,16 @@ export async function adoptWorkspace({ cwd = process.cwd(), prUrl }) {
     await validateRemote(session);
     if (!metadata.publishedSha) throw new WorkspaceError("the workspace has never been published");
 
-    const remote = await pullRequest(repository.root, prUrl);
+    const remote = await pullRequest(repository.root, metadata, prUrl);
     if (remote.state !== "OPEN") {
       throw new WorkspaceError(`the pull request is ${remote.state.toLowerCase()}, not open`, "Only an open pull request can take follow-up changes; start a new /wettaq instead.");
     }
-    if (remote.headRefName !== metadata.branch) {
-      throw new WorkspaceError("the pull request's head branch does not match the workspace", `Pull request: ${remote.headRefName}; workspace: ${metadata.branch}`);
+    if (remote.headBranch !== metadata.branch) {
+      throw new WorkspaceError("the pull request's head branch does not match the workspace", `Pull request: ${remote.headBranch}; workspace: ${metadata.branch}`);
     }
     const remoteSha = await remoteBranchSha(repository.root, metadata.pushUrl, metadata.branch);
     const head = cleanOutput(await git(repository.root, ["rev-parse", "HEAD"]));
-    const heads = { pullRequest: remote.headRefOid, recorded: metadata.publishedSha, remote: remoteSha, local: head };
+    const heads = { pullRequest: remote.headSha, recorded: metadata.publishedSha, remote: remoteSha, local: head };
     if (new Set(Object.values(heads)).size !== 1) {
       throw new WorkspaceError(
         "the pull request, remote branch, recorded publication and local HEAD do not all match",
