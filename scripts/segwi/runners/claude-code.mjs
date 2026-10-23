@@ -79,7 +79,11 @@ export function buildArgs({ spec, sessionId, settingsFile, mcpFile }) {
   ];
 }
 
-const ownOrigins = (port) => [`http://127.0.0.1:${port}`, `http://localhost:${port}`, `http://[::1]:${port}`].join(";");
+/** Every origin segwi answers on: loopback at its port and, behind tailscale serve, the tailnet name. */
+const ownOrigins = ({ bindPort, tailnetName }) => [
+  ...(bindPort ? [`http://127.0.0.1:${bindPort}`, `http://localhost:${bindPort}`, `http://[::1]:${bindPort}`] : []),
+  ...(tailnetName ? [`https://${tailnetName}`, `http://${tailnetName}`] : []),
+].join(";");
 
 export function renderMcpConfig({ spec }) {
   return {
@@ -89,8 +93,9 @@ export function renderMcpConfig({ spec }) {
         args: [serverEntry, "approver", "--run", spec.runId],
         env: { SEGWI_URL: spec.serverUrl ?? "", SEGWI_RUN_SECRET: spec.runSecret ?? "" },
       },
-      // The run's browser must never reach segwi itself, or the agent could open the app and tap Approve.
-      playwright: { command: "npx", args: ["-y", ...playwrightArguments(spec.browser), ...(spec.bindPort ? [`--blocked-origins=${ownOrigins(spec.bindPort)}`] : [])] },
+      // The browser runs outside the sandbox, and behind tailscale serve it would carry your identity,
+      // so it must never reach segwi itself, or the agent could open the app and tap Approve.
+      playwright: { command: "npx", args: ["-y", ...playwrightArguments(spec.browser), ...(ownOrigins(spec) ? [`--blocked-origins=${ownOrigins(spec)}`] : [])] },
     },
   };
 }

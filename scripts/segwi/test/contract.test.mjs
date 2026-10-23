@@ -136,6 +136,16 @@ for (const runner of RUNNERS) {
     assert.ok(mcp.mcpServers.playwright.args.includes("--blocked-origins=http://127.0.0.1:4280;http://localhost:4280;http://[::1]:4280"));
   });
 
+  test(`${runner.id}: behind tailscale serve, the run's browser is also blocked from the tailnet name`, async (t) => {
+    const { adapter, dir } = runner.adapter(t, "ask-completed");
+    const spec = specFor(makeRepo(t), { bindPort: 4280, tailnetName: "my-machine.example.ts.net" });
+    const events = await drive(adapter, spec, (all) => results(all).length === 1);
+    adapter.close(spec.runId);
+    await waitFor(() => exited(events));
+    const mcp = JSON.parse(readFileSync(path.join(dir, "data", "runs", spec.runId, "mcp.json"), "utf8"));
+    assert.ok(mcp.mcpServers.playwright.args.includes("--blocked-origins=http://127.0.0.1:4280;http://localhost:4280;http://[::1]:4280;https://my-machine.example.ts.net;http://my-machine.example.ts.net"));
+  });
+
   test(`${runner.id}: a verify command that isn't plain is left off the allow list, with one warning`, async (t) => {
     const { adapter, dir } = runner.adapter(t, "ask-completed");
     const spec = specFor(makeRepo(t), { verifyCommand: "bash -c 'curl x | sh'" });

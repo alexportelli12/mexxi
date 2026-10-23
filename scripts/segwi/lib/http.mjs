@@ -2,7 +2,7 @@
 // built web app (or a one-line 503 until it is built). Bodies are never logged.
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import { PROXY_HEADERS, assertNotFromThisMachine, assertSameOriginWrite } from "./auth.mjs";
+import { PROXY_HEADERS, assertSameOriginWrite } from "./auth.mjs";
 import { isLoopbackAddress } from "./bind.mjs";
 import { audit } from "./audit.mjs";
 import { canaryHealth } from "./canary-state.mjs";
@@ -104,11 +104,10 @@ export function createHandler({ store, settings, authenticate, runs, approvals, 
     ["POST", "/api/runs/:id/input", "input", async ({ params, body }) => ({ run: runs.send(params.id, body.text) })],
     ["POST", "/api/runs/:id/stop", "stop", async ({ params }) => ({ run: runs.stop(params.id) })],
     ["GET", "/api/approvals", "listApprovals", async ({ query }) => ({ approvals: approvals.list({ status: query.status }) })],
-    ["POST", "/api/approvals/:id", "decideApproval", async ({ params, body, req, identity }) => {
-      // A run's own browser reaches this app through the same tailnet URL; refuse its decisions.
-      assertNotFromThisMachine(req, settings.segwi.auth.web.mode);
-      return { approval: approvals.decide(params.id, body.decision, identity) };
-    }],
+    // Nothing here tells a phone from this machine: a forwarded address is easy to forge. A run can't
+    // answer its own approval because its commands run in the sandbox, which can't reach this port,
+    // and its browser is blocked from segwi's origins (see the sandbox test and runners/claude-code.mjs).
+    ["POST", "/api/approvals/:id", "decideApproval", async ({ params, body, identity }) => ({ approval: approvals.decide(params.id, body.decision, identity) })],
     ["GET", "/api/push/key", "none", async () => {
       const publicKey = push.publicKey();
       if (!publicKey) throw new HttpError(404, "Push isn't set up. Run segwi vapid init.");

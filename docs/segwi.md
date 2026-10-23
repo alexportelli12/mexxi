@@ -78,7 +78,7 @@ The web app has two modes, set in `segwi.auth.web.mode`. The server only ever li
 - **`localhost-only`** is the default. It trusts anyone using this machine, and it refuses any request that a proxy forwarded. Use it when you work at the machine itself.
 - **`tailscale-header`** trusts the identity header that `tailscale serve` adds, but only on loopback. List the identities you allow in `segwi.auth.web.allowed`, and set `segwi.auth.web.hostname` to this machine's tailnet name. segwi answers only to that name and to loopback names, so a page on another site can't reach it by pointing its own name at your machine. The server will not start with an empty list or without the name.
 
-In `tailscale-header` mode, segwi refuses to take an approval from the machine the agent runs on. Otherwise the agent could open the app in its own browser and answer its own question. Answer from your phone or another device. The agent's own browser is also blocked from reaching segwi.
+segwi can't tell your phone from the machine it runs on by the request: a forwarded address is easy to forge, so it doesn't use one. What stops the agent from answering its own approval is the [sandbox](#what-keeps-a-run-safe). Every command the agent runs is inside it, and the sandbox has its own network, so it can't reach segwi's port at all. A test runs the real Claude Code to prove that. The agent's browser runs outside the sandbox, so it is blocked from segwi's loopback addresses and from your tailnet name.
 
 MCP clients never use the web sign-in. They always send a bearer token, described [below](#connect-an-mcp-client).
 

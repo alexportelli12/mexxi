@@ -3,7 +3,6 @@
 // local. The Host must be a loopback name, or in tailscale-header mode the
 // configured tailnet name, so a page on another site cannot reach the API
 // through DNS rebinding: its requests carry its own name as Host.
-import os from "node:os";
 import { isLoopbackAddress } from "./bind.mjs";
 import { HttpError } from "./errors.mjs";
 
@@ -61,23 +60,4 @@ export function assertSameOriginWrite(req, { json = true } = {}) {
   if (json && !/^application\/json\s*(;|$)/i.test(req.headers["content-type"] ?? "")) {
     throw new HttpError(415, "Send the body as application/json.");
   }
-}
-
-const normaliseAddress = (address) => address.trim().replace(/^::ffff:/i, "").replace(/%.*$/, "").toLowerCase();
-
-/**
- * For decisions only (approving a call). Behind tailscale serve, a request from a
- * browser on this machine still carries the owner's identity, so the agent could
- * answer its own approval. The forwarded client address must be another device.
- * localhost-only mode trusts everyone on this machine and allows decisions.
- */
-export function assertNotFromThisMachine(req, mode, interfaces = os.networkInterfaces()) {
-  if (mode !== "tailscale-header") return;
-  const refusal = new HttpError(403, "Approvals can't be answered from the machine the agent runs on. Use your phone or another device.");
-  const forwarded = req.headers["x-forwarded-for"];
-  const first = typeof forwarded === "string" ? forwarded.split(",")[0] : "";
-  if (!first.trim()) throw refusal;
-  const client = normaliseAddress(first);
-  const own = Object.values(interfaces).flat().filter(Boolean).map((entry) => normaliseAddress(entry.address));
-  if (own.includes(client)) throw refusal;
 }

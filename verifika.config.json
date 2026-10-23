@@ -59,6 +59,10 @@
       "paths": ["scripts/segwi/**", "scripts/ibni/**", "scripts/lib/config.mjs", "scripts/lib/redact.mjs", "scripts/lib/claude-settings.mjs", "scripts/lib/browser.mjs", "scripts/lib/secret-patterns.json", "config.schema.json", "site/tokens.css"],
       "exclude": ["scripts/segwi/web/**"]
     },
+    "segwi-sandbox": {
+      "command": "node --test scripts/segwi/test/sandbox.test.mjs",
+      "paths": ["scripts/segwi/lib/**", "scripts/segwi/runners/**", "scripts/segwi/server.mjs", "scripts/segwi/test/sandbox*.mjs", "scripts/segwi/test/fake-anthropic.mjs", "scripts/segwi/test/helpers.mjs", "scripts/lib/claude-settings.mjs", "scripts/lib/browser.mjs", "scripts/lib/redact.mjs", "scripts/lib/config.mjs"]
+    },
     "segwi-web": {
       "command": "node scripts/segwi/web-check.mjs",
       "paths": ["scripts/segwi/web/**", "scripts/segwi/web-check.mjs", "site/tokens.css", "names.json"]

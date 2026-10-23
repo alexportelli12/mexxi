@@ -286,7 +286,6 @@ test("the internal route refuses a peer that is not loopback and a run that is n
 test("web identity and an MCP-style bearer can't use each other's doors", async (t) => {
   const identity = { "Tailscale-User-Login": "you@example.com" };
   const { server, host } = await boot(t, { auth: { mode: "tailscale-header", allowed: ["you@example.com"] } });
-  const webHeaders = { ...identity, "X-Forwarded-For": "100.64.0.9" };
   const created = await request(server, "POST", "/api/runs", { headers: identity, body: { repo: "my-app", action: "build", task: "x" } });
   const runId = created.json.run.id;
   const approval = await waitFor(async () => (await request(server, "GET", "/api/approvals", { headers: identity })).json.approvals[0], { timeoutMs: 2000 });
@@ -300,11 +299,9 @@ test("web identity and an MCP-style bearer can't use each other's doors", async 
     assert.equal(response.status, 401);
     assert.equal((await request(server, "GET", "/api/approvals", { headers: { Authorization: `Bearer ${bearer}` } })).status, 401);
   }
-  // A decision forwarded from this machine's own address is refused; another device's is fine.
-  assert.equal((await decide(server, approval.id, "allow", { headers: identity })).status, 403, "no forwarded address");
-  assert.equal((await decide(server, approval.id, "allow", { headers: { ...identity, "X-Forwarded-For": "127.0.0.1" } })).status, 403, "own address");
   assert.equal(server.store.getApproval(approval.id).status, "pending");
-  const ok = await decide(server, approval.id, "deny", { headers: webHeaders });
+  // The web identity decides; a forwarded address plays no part.
+  const ok = await decide(server, approval.id, "deny", { headers: identity });
   assert.equal(ok.status, 200);
   assert.equal(server.store.getApproval(approval.id).decidedBy, "you@example.com");
 });
