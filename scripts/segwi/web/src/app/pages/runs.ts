@@ -11,19 +11,16 @@ import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { EmptyState } from '../ui/empty-state';
 import { NotificationsSetting } from '../ui/notifications-setting';
-import { SandboxBanner } from '../ui/sandbox-banner';
 import { Skeleton } from '../ui/skeleton';
 import { StatusPill } from '../ui/status-pill';
 import { actionLabels, commandFor, titles } from '../words';
 import type { Run } from '../models';
 
 @Component({
-  imports: [NgTemplateOutlet, RouterLink, Banner, Button, Card, EmptyState, NotificationsSetting, RelativeTime, SandboxBanner, Skeleton, StatusPill],
+  imports: [NgTemplateOutlet, RouterLink, Banner, Button, Card, EmptyState, NotificationsSetting, RelativeTime, Skeleton, StatusPill],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <h1 class="text-2xl font-semibold">{{ title }}</h1>
-
-    <segwi-sandbox-banner />
 
     <nav class="flex flex-wrap gap-2" aria-label="Filter runs">
       @for (chip of filters; track chip.id) {

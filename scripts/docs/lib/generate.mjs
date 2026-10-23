@@ -37,7 +37,7 @@ const SKILL_GROUPS = {
 const CLI_GROUPS = [
   {
     title: "The agent's lifecycle",
-    text: "The agent runs these during a `/wettaq` run, in this order. `verify` runs once before the change and again whenever the committed code changes. `setup` runs only when `prepare` left the install to the run, as in segwi, or when `adopt` says the dependencies are out of date. `record` runs whenever a browser check or review finishes, and `publish-media` only when the run has screenshots. `publish` brings in the latest default branch itself; the agent runs `sync` first when it picks up an existing pull request for a follow-up.",
+    text: "The agent runs these during a `/wettaq` run, in this order. `verify` runs once before the change and again whenever the committed code changes. `setup` runs only when `adopt` says the dependencies are out of date, or after a commit changes a lockfile. `record` runs whenever a browser check or review finishes, and `publish-media` only when the run has screenshots. `publish` brings in the latest default branch itself; the agent runs `sync` first when it picks up an existing pull request for a follow-up.",
     diagram: [
       "sequenceDiagram",
       "  participant A as Agent",

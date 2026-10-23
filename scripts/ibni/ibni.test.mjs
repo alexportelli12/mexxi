@@ -166,27 +166,6 @@ test("uses readable slug names and numeric suffixes for repeated requests", asyn
   assert.notEqual(first.json.sessionId, second.json.sessionId);
 });
 
-test("IBNI_LOCK_ROOT moves the repository lock, except prepare's, and IBNI_SKIP_SWEEP skips prepare's sweep", async (t) => {
-  const fixture = await createFixture(t);
-  const lockRoot = path.join(fixture.root, "locks");
-  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "locked elsewhere" }, [0], { IBNI_LOCK_ROOT: lockRoot, IBNI_SKIP_SWEEP: "1" });
-  assert.equal(prepared.json.cleanup.skipped, "IBNI_SKIP_SWEEP is set");
-  const recorded = await lifecycle(fixture, prepared.json.worktreePath, "record-evidence", { session: prepared.json.sessionId }, [0], { IBNI_LOCK_ROOT: lockRoot });
-  assert.equal(recorded.json.operation, "record-evidence");
-  assert.ok(existsSync(lockRoot), "other commands lock under IBNI_LOCK_ROOT");
-  const { repositoryLockPath } = await import("./lib/lock.mjs");
-  const common = path.join(fixture.control, ".git");
-  assert.equal(path.dirname(repositoryLockPath(common, { IBNI_LOCK_ROOT: lockRoot })), lockRoot);
-  assert.equal(repositoryLockPath(common, {}), path.join(common, "opencode-implementation.lock"));
-});
-
-test("prepares from the checkout IBNI_LAUNCH_CHECKOUT names when run from elsewhere", async (t) => {
-  const fixture = await createFixture(t);
-  const prepared = await lifecycle(fixture, fixture.root, "prepare", { slug: "from elsewhere" }, [0], { IBNI_LAUNCH_CHECKOUT: fixture.control });
-  assert.equal((await git(prepared.json.worktreePath, "branch", "--show-current")).stdout.trim(), prepared.json.branch);
-  assert.equal((await git(fixture.control, "worktree", "list")).stdout.includes(prepared.json.worktreePath), true);
-});
-
 test("keeps workspaces retained under a legacy root available while new ones use the configured root", async (t) => {
   const fixture = await createFixture(t);
   const identity = createHash("sha256").update(path.join(fixture.control, ".git")).digest("hex").slice(0, 10);
@@ -217,36 +196,9 @@ test("takes the branch prefix from config.json unless --prefix overrides it", as
   assert.equal(configured.json.branch, "team/bots/configured");
   const explicit = await lifecycle(fixture, fixture.control, "prepare", { slug: "explicit", prefix: "fix" });
   assert.equal(explicit.json.branch, "fix/explicit");
-});
-
-test("under IBNI_BRANCH_PREFIXES, prepare takes only a listed prefix and refuses any other before making a branch", async (t) => {
-  const fixture = await createFixture(t);
-  // segwi lists workflow.branchPrefix and segwi.branchPrefixes, one per line: its sandbox can write only those refs.
-  const env = { IBNI_BRANCH_PREFIXES: "agent/\nsecurity/" };
-  const configured = await lifecycle(fixture, fixture.control, "prepare", { slug: "configured" }, [0], env);
-  assert.equal(configured.json.branch, "agent/configured");
-  const listed = await lifecycle(fixture, fixture.control, "prepare", { slug: "listed", prefix: "security" }, [0], env);
-  assert.equal(listed.json.branch, "security/listed");
-  const branches = async () => (await git(fixture.control, "for-each-ref", "--format=%(refname)", "refs/heads")).stdout;
-  const before = await branches();
-  const refused = await lifecycle(fixture, fixture.control, "prepare", { slug: "refused", prefix: "fix" }, [2], env);
-  assert.match(refused.stderr, /--prefix fix isn't one this run can write/);
-  assert.match(refused.stderr, /segwi\.branchPrefixes/);
-  assert.equal(await branches(), before, "no branch was made");
-});
-
-test("prepare says how to run it when it can't write the git directory, as inside segwi's sandbox", async (t) => {
-  const fixture = await createFixture(t);
-  const gitDirectory = path.join(fixture.control, ".git");
-  await chmod(gitDirectory, 0o555);
-  // Restored here, not in t.after: the fixture's own cleanup, registered first, runs first.
-  const prepare = (env) => lifecycle(fixture, fixture.control, "prepare", { slug: "read-only" }, [2], env);
-  const [plain, segwi] = await Promise.all([prepare({}), prepare({ IBNI_LAUNCH_CHECKOUT: fixture.control })]).finally(() => chmod(gitDirectory, 0o755));
-  assert.match(segwi.stderr, /can't write the repository's git directory \(EACCES: .*opencode-implementation\.lock\)/);
-  assert.match(segwi.stderr, /a Bash call of its own/);
-  // Outside a segwi run the error is left as it was.
-  assert.match(plain.stderr, /EACCES: permission denied, mkdir/);
-  assert.doesNotMatch(plain.stderr, /a Bash call of its own/);
+  // An agent that passes --prefix with nothing after it gets the configured prefix, not a branch without one.
+  const empty = await lifecycle(fixture, fixture.control, "prepare", { slug: "empty", prefix: "" });
+  assert.equal(empty.json.branch, "team/bots/empty");
 });
 
 test("refuses retired worktree-root variables and invalid configuration before touching Git", async (t) => {
@@ -2266,25 +2218,17 @@ test("a failed setup rolls the new workspace back and prints the end of its log"
   assert.doesNotMatch((await git(fixture.control, "worktree", "list")).stdout, /broken-install/);
 });
 
-test("IBNI_DEFER_SETUP leaves the install to ibni setup, which records it", async (t) => {
+test("ibni setup reinstalls a session's dependencies and records it, printing a failure's tail", async (t) => {
   const fixture = await createFixture(t);
   const stub = await packageManagerStub(t);
   await commitToDefaultBranch(fixture, { "package-lock.json": "{}\n" }, "lockfile");
-  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "deferred" }, [0], { ...stub.env(fixture), IBNI_DEFER_SETUP: "1" });
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "reinstall" }, [0], stub.env(fixture));
   const { sessionId, worktreePath } = prepared.json;
-  assert.deepEqual(prepared.json.setup, {
-    ran: false,
-    deferred: true,
-    command: "npm ci --prefer-offline --no-audit --no-fund",
-    source: "package-lock.json",
-    reason: "IBNI_DEFER_SETUP is set, so setup runs inside the caller's sandbox instead",
-    nextAction: `Run ibni setup --session ${sessionId} to install dependencies in the worktree.`,
-  });
-  assert.deepEqual(await stub.calls(), []);
+  assert.equal(prepared.json.setup.passed, true);
 
   const setup = await lifecycle(fixture, worktreePath, "setup", { session: sessionId }, [0], stub.env(fixture));
   assert.equal(setup.json.setup.passed, true);
-  assert.deepEqual(await stub.calls(), [`npm ci --prefer-offline --no-audit --no-fund in ${worktreePath}`]);
+  assert.deepEqual(await stub.calls(), Array(2).fill(`npm ci --prefer-offline --no-audit --no-fund in ${worktreePath}`));
   assert.equal(JSON.parse(await metadataFile(worktreePath)).setup.passed, true);
 
   await writeFile(path.join(stub.directory, "npm.exit"), "1");

@@ -5,7 +5,7 @@ sources:
   - skills/rendered-qa/SKILL.md
   - skills/test-design/SKILL.md
   - scripts/ibni/commands/**
-reviewed: 2026-10-23
+reviewed: 2026-10-24
 ---
 
 # How a run works
@@ -31,7 +31,7 @@ Not every change needs every step. A one-line fix skips the independent review; 
 
 ## The steps
 
-1. **Its own copy of the repository.** `ibni prepare`, from [`ibni`](cli/index.md), the command-line tool the agent runs, creates a [worktree](glossary.md#worktree) and branch for the task, so your checkout stays untouched. It picks a free port, so two tasks can run their development servers at once. It installs the dependencies too, with the command the repository's lockfile or `.mexxi.json` names, so the agent never guesses one. It also sweeps away worktrees whose pull requests have merged. In a [segwi](segwi.md) run it creates only branches the run's sandbox lets it commit to.
+1. **Its own copy of the repository.** `ibni prepare`, from [`ibni`](cli/index.md), the command-line tool the agent runs, creates a [worktree](glossary.md#worktree) and branch for the task, so your checkout stays untouched. It picks a free port, so two tasks can run their development servers at once. It installs the dependencies too, with the command the repository's lockfile or `.mexxi.json` names, so the agent never guesses one. It also sweeps away worktrees whose pull requests have merged.
 2. **Agree what done means.** The agent reads the repository, its closest examples and its tests, then writes down what done means before any code exists, so the target is settled first. It asks you only about product decisions it cannot work out from the code.
 3. **Start from green.** The repository's [verify command](glossary.md#verify) (`npm run verify` unless its `.mexxi.json` names another) must pass before work starts. Otherwise a failure at the end could be an old one, blamed on the change. `ibni verify` runs it, so the agent only waits for the result. If CI has already proven the starting commit, `ibni verify` cites that run instead.
 4. **Screenshots before.** When the change alters existing UI, the agent captures it first, so the pull request can show before and after.

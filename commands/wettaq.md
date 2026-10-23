@@ -59,9 +59,7 @@ branch `prepare` made, stop rather than renaming it outside the lifecycle tool.
 
 `prepare` also installs dependencies in the worktree and reports it as
 `setup`: the `setup` command in `.mexxi.json`, or the root lockfile's own
-install. Do not install them by hand. When `setup.deferred` is true (the
-run was launched in a sandbox that `prepare` runs outside), run `ibni setup --session "<sessionId>"`
-before anything else. When `setup.ran` is false for another reason, read
+install. Do not install them by hand. When `setup.ran` is false, read
 `setup.reason`: install by hand only if the repository documents a setup that
 `.mexxi.json` does not yet name, and say so in the pull request. Rerun
 `ibni setup` after a commit that changes a lockfile. Do not share or link

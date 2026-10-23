@@ -4,7 +4,7 @@ sources:
   - scripts/hooks/loop-breaker.mjs
   - claude/mods/command-fixer/hooks/fix.ts
   - config.schema.json
-reviewed: 2026-10-23
+reviewed: 2026-10-24
 ---
 
 # Where the problems come from
@@ -15,6 +15,6 @@ Across 89 of my sessions, from 26 September to 20 October, agents hit 386 zsh gl
 
 Several of mexxi's parts answer these numbers. On Claude Code, the command fixer quotes globs and keeps pipe failures visible. The [loop breaker](glossary.md#loop-breaker) stops repeated failures, [`claude.bashMaxTimeoutMs`](configuration/index.md#claude) raises the Bash cap, and the pull request's first screen aims to cut the rework prompts. [`/irrifletti`](../commands/irrifletti.md), which looks back at recent sessions privately, is how these numbers are measured again after a change.
 
-segwi's first two real runs, on 23 October, stopped four times to wait for an approval on a phone. Every one was harmless: a `cd` chained with `ls`, a pull request body with a heading, and two `ibni` chains. That is why [segwi's permissions](segwi.md#choose-a-permissions-mode) now default to auto mode.
+segwi's first two real runs, on 23 October, stopped four times to wait for an approval on a phone. Every one was harmless: a `cd` chained with `ls`, a pull request body with a heading, and two `ibni` chains. That is why segwi's runs moved to auto mode.
 
-A later segwi run in an Angular repository ran its verify command on an untouched main, and four of seven checks failed only because of the sandbox. Chromium couldn't start, the build couldn't fetch Google Fonts, and Firebase's emulators couldn't reach each other. That is why [a run's checks](segwi.md#let-a-runs-checks-pass-in-the-sandbox) now get a browser that starts and the hosts you list.
+A later segwi run in an Angular repository ran its verify command on an untouched main, and four of seven checks failed only because of the sandbox. Chromium couldn't start, the build couldn't fetch Google Fonts, and Firebase's emulators couldn't reach each other. Each fix loosened the sandbox or added machinery, so [segwi runs are now trusted like your own sessions](decisions/0016-segwi-runs-trusted-like-own-sessions.md), with no sandbox at all.

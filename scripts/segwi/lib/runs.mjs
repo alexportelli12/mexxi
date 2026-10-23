@@ -8,14 +8,11 @@ import { audit } from "./audit.mjs";
 import { checkoutProblem, checkoutState } from "./checkout.mjs";
 import { HttpError } from "./errors.mjs";
 import { parsePrepareOutput } from "./ibni-link.mjs";
-import { allowedDomainsFor, permissionsFor } from "./settings.mjs";
 import { assertWithinCaps, createWatchdog } from "./limits.mjs";
 import { StepFolder } from "./steps.mjs";
 import { FINAL } from "./store.mjs";
 
 const RESTART_REASON = "segwi restarted while this run was active";
-const NO_SANDBOX = "Claude Code's sandbox can't start, so segwi won't start a run: without it, every allowed command could reach your whole machine.";
-const UNSANDBOXED = "Runs start without Claude Code's sandbox, because segwi.allowUnsandboxed is on.";
 const DAY_CACHE_MS = 60_000;
 
 export const hashSecret = (secret) => createHash("sha256").update(secret).digest("hex");
@@ -27,19 +24,15 @@ export function publicRun(run) {
   return rest;
 }
 
-// The verify and setup commands the checkout's .mexxi.json names. The run's
-// ibni verify and ibni setup run them, so a command that isn't plain makes
-// those ask (see allow-list.mjs).
-async function repositoryCommandsFor(repoPath) {
-  const commands = { verifyCommand: "npm run verify", setupCommand: null };
+// The verify command the checkout's .mexxi.json names, so the run's steps show it as a test.
+async function verifyCommandFor(repoPath) {
   try {
     const value = JSON.parse(await readFile(path.join(repoPath, ".mexxi.json"), "utf8"));
-    if (typeof value.verify === "string" && value.verify.trim()) commands.verifyCommand = value.verify.trim();
-    if (typeof value.setup === "string" && value.setup.trim()) commands.setupCommand = value.setup.trim();
+    if (typeof value.verify === "string" && value.verify.trim()) return value.verify.trim();
   } catch {
-    // No committed .mexxi.json: the defaults apply.
+    // No committed .mexxi.json: the default applies.
   }
-  return commands;
+  return "npm run verify";
 }
 
 export function createRunService({ store, settings, runner, ibni, broker, serverUrl = () => "" }) {
@@ -49,7 +42,6 @@ export function createRunService({ store, settings, runner, ibni, broker, server
   const watchdog = createWatchdog(limits, (runId, reason) => void timeOut(runId, reason));
   let detectCache = null;
   let shuttingDown = false;
-  const requireSandbox = !settings.segwi.allowUnsandboxed;
   /** @type {Array<(runId: string) => void>} */
   const finishListeners = [];
 
@@ -166,15 +158,9 @@ export function createRunService({ store, settings, runner, ibni, broker, server
       if (existing()) return { run: publicRun(existing()), created: false };
       const repository = repositories.find((candidate) => candidate.name === input.repo);
       const problem = checkoutProblem(await checkoutState(repository.path));
-      let sandboxReady = !requireSandbox || (await detected()).sandbox.available;
-      if (!sandboxReady) {
-        detectCache = null; // a refusal looks again, so installing bubblewrap takes effect at once
-        sandboxReady = (await detected()).sandbox.available;
-      }
       // A retry with the same clientId may have inserted its run while this one awaited; nothing awaits from here to the insert.
       if (existing()) return { run: publicRun(existing()), created: false };
       if (problem) throw new HttpError(409, problem);
-      if (!sandboxReady) throw new HttpError(409, NO_SANDBOX);
       // Checked and inserted in one synchronous step, so two requests can't both pass.
       assertWithinCaps(store, limits);
       const id = randomUUID();
@@ -182,7 +168,7 @@ export function createRunService({ store, settings, runner, ibni, broker, server
       broker.publish(store.addEvent(id, "status", { status: "queued", reason: null, branch: null, prUrl: null, verify: null }));
       const runSecret = randomBytes(32).toString("hex");
       store.setRunSecretHash(id, hashSecret(runSecret));
-      const { verifyCommand, setupCommand } = await repositoryCommandsFor(repository.path);
+      const verifyCommand = await verifyCommandFor(repository.path);
       // Stopped while queued: never start the host.
       if (isFinal(id)) return { run: publicRun(store.getRun(id)), created: true };
       live.set(id, { folder: new StepFolder({ root: repository.path, verifyCommand }), chain: Promise.resolve(), prepareCalls: new Set(), ibniSession: null, runSecret, repoPath: repository.path });
@@ -191,12 +177,9 @@ export function createRunService({ store, settings, runner, ibni, broker, server
       try {
         await runner.start({
           runId: id, repoPath: repository.path, action: input.action, task: input.task, limits: { maxTurns: limits.maxTurns, approvalTimeoutMinutes: limits.approvalTimeoutMinutes }, model: settings.segwi.model || undefined,
-          worktreeRoot: settings.worktreeRoot, verifyCommand, setupCommand,
-          denyPatterns: settings.deny, browser: settings.browser, serverUrl: serverUrl(), bindPort: Number(new URL(serverUrl() || "http://127.0.0.1").port) || undefined, runSecret,
+          worktreeRoot: settings.worktreeRoot,
+          browser: settings.browser, serverUrl: serverUrl(), bindPort: Number(new URL(serverUrl() || "http://127.0.0.1").port) || undefined, runSecret,
           tailnetName: settings.segwi.auth.web.mode === "tailscale-header" ? settings.segwi.auth.web.hostname : undefined,
-          branchPrefix: settings.branchPrefix, branchPrefixes: settings.segwi.branchPrefixes ?? [], controlCheckouts: repositories.map((candidate) => candidate.path),
-          permissions: permissionsFor({ segwi: settings.segwi, repository, action: input.action }),
-          allowedDomains: allowedDomainsFor({ segwi: settings.segwi, repository }),
         }, emitterFor(id));
       } catch (error) {
         setStatus(id, "failed", `The agent could not start: ${error.message}`);
@@ -285,17 +268,12 @@ export function createRunService({ store, settings, runner, ibni, broker, server
     },
 
     async health(version) {
-      const { available, version: runnerVersion, testedVersions, problems, sandbox } = await detected();
-      const blocked = requireSandbox && !sandbox.available;
+      const { available, version: runnerVersion, testedVersions, problems } = await detected();
       return {
-        ok: available && !blocked, version,
+        ok: available, version,
         // The caps the app needs to size its inputs and word a timed-out run.
         limits: { taskMaxChars: limits.taskMaxChars, inputMaxChars: limits.inputMaxChars, idleTimeoutMinutes: limits.idleTimeoutMinutes },
         runner: { id: runner.id, available, version: runnerVersion, tested: runnerVersion !== null && testedVersions.includes(runnerVersion), problems },
-        sandbox: {
-          available: sandbox.available, required: requireSandbox,
-          problems: sandbox.available ? [] : [...sandbox.problems, blocked ? NO_SANDBOX : UNSANDBOXED],
-        },
       };
     },
 

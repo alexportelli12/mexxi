@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { ConfigError, resolveConfig } from "../../lib/config.mjs";
+import { readSettings } from "../lib/settings.mjs";
 
 const home = path.join(path.sep, "home", "someone");
 
@@ -12,7 +15,6 @@ test("segwi is off by default, loopback-only, with the plan's caps", async () =>
   assert.equal(segwi.runner, "claude-code");
   assert.deepEqual(segwi.repositories, []);
   assert.deepEqual(segwi.auth.web, { mode: "localhost-only", header: "Tailscale-User-Login", allowed: [], hostname: "" });
-  assert.equal(segwi.allowUnsandboxed, false);
   assert.equal(segwi.limits.concurrentRuns, 2);
   assert.equal(segwi.limits.approvalTimeoutMinutes, 60);
   assert.equal(segwi.push, true);
@@ -42,14 +44,29 @@ test("the canary defaults to a small model and a short run, and refuses a model 
   await assert.rejects(resolveConfig({ segwi: { canary: { maxTurns: 0 } } }, { home }), ConfigError);
 });
 
-test("runs use auto permissions and only workflow.branchPrefix by default, and an unknown mode or a bad prefix is refused", async () => {
-  const { segwi } = await resolveConfig({}, { home });
-  assert.equal(segwi.permissions, "auto");
-  assert.deepEqual(segwi.branchPrefixes, []);
-  const repository = { name: "my-app", path: "~/workspace/my-app", actions: ["build"] };
-  const set = await resolveConfig({ segwi: { permissions: "strict", branchPrefixes: ["security/"], repositories: [{ ...repository, permissions: "sandboxed" }] } }, { home });
-  assert.equal(set.segwi.repositories[0].permissions, "sandboxed");
-  for (const segwi of [{ permissions: "yolo" }, { branchPrefixes: ["security"] }, { branchPrefixes: ["../x/"] }, { branchPrefixes: ["Security/"] }, { repositories: [{ ...repository, permissions: "bypass" }] }]) {
-    await assert.rejects(resolveConfig({ segwi }, { home }), ConfigError, JSON.stringify(segwi));
-  }
+test("an old config with the retired sandbox and permissions keys still loads, ignores them and warns once, naming each to delete", async (t) => {
+  const file = path.join(mkdtempSync(path.join(os.tmpdir(), "segwi-config-")), "config.json");
+  t.after(() => rmSync(path.dirname(file), { recursive: true, force: true }));
+  writeFileSync(file, JSON.stringify({ segwi: {
+    enabled: true, permissions: "strict", mcpPermissions: "strict", branchPrefixes: ["security/"], allowUnsandboxed: true, allowedDomains: ["fonts.gstatic.com"],
+    repositories: [
+      { name: "plain", path: "~/plain", actions: ["build"] },
+      { name: "old", path: "~/old", actions: ["build", "ask"], permissions: "sandboxed", allowedDomains: ["fonts.googleapis.com"] },
+    ],
+  } }));
+  const warnings = [];
+  const settings = await readSettings({ file, home, warn: (message) => warnings.push(message) });
+  assert.deepEqual(settings.segwi.repositories.map((repository) => [repository.name, repository.actions]), [["plain", ["build"]], ["old", ["build", "ask"]]]);
+  for (const key of ["permissions", "mcpPermissions", "branchPrefixes", "allowUnsandboxed", "allowedDomains"]) assert.ok(!(key in settings.segwi), key);
+  assert.ok(!("permissions" in settings.segwi.repositories[1]) && !("allowedDomains" in settings.segwi.repositories[1]));
+  assert.equal(warnings.length, 1);
+  assert.equal(warnings[0], `segwi ignores these keys in ${file}, which no longer do anything; delete them: segwi.permissions, segwi.mcpPermissions, `
+    + "segwi.branchPrefixes, segwi.allowUnsandboxed, segwi.allowedDomains, segwi.repositories[1].permissions, segwi.repositories[1].allowedDomains");
+
+  // A current config says nothing, and a key that never existed is still refused.
+  writeFileSync(file, JSON.stringify({ segwi: { enabled: true } }));
+  await readSettings({ file, home, warn: (message) => warnings.push(message) });
+  assert.equal(warnings.length, 1);
+  writeFileSync(file, JSON.stringify({ segwi: { sandbox: true } }));
+  await assert.rejects(readSettings({ file, home, warn: () => {} }), /segwi\.sandbox: unknown key/);
 });

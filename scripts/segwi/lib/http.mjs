@@ -104,9 +104,9 @@ export function createHandler({ store, settings, authenticate, runs, approvals, 
     ["POST", "/api/runs/:id/input", "input", async ({ params, body }) => ({ run: runs.send(params.id, body.text) })],
     ["POST", "/api/runs/:id/stop", "stop", async ({ params }) => ({ run: runs.stop(params.id) })],
     ["GET", "/api/approvals", "listApprovals", async ({ query }) => ({ approvals: approvals.list({ status: query.status }) })],
-    // Nothing here tells a phone from this machine: a forwarded address is easy to forge. A run can't
-    // answer its own approval because its commands run in the sandbox, which can't reach this port,
-    // and its browser is blocked from segwi's origins (see the sandbox test and runners/claude-code.mjs).
+    // Nothing here tells a phone from this machine: a forwarded address is easy to forge. A run's browser
+    // is refused (RUN_BROWSER_MARK) and MCP clients never get here, but a command a run runs is a process of
+    // yours, as in a session you start by hand, and could reach this port as you can (decision 0016).
     ["POST", "/api/approvals/:id", "decideApproval", async ({ params, body, identity }) => ({ approval: approvals.decide(params.id, body.decision, identity) })],
     ["GET", "/api/push/key", "none", async () => {
       const publicKey = push.publicKey();
@@ -195,7 +195,7 @@ export function createHandler({ store, settings, authenticate, runs, approvals, 
 
   return async function handler(req, res) {
     securityHeaders(res);
-    // A run's own browser runs outside the sandbox; it must never use the app, the API or MCP, or it could approve its own calls.
+    // A run's own browser must never use the app, the API or MCP, or it could approve its own calls.
     if (String(req.headers["user-agent"] ?? "").includes(RUN_BROWSER_MARK)) {
       audit(store, { actor: "anonymous", origin: "web", action: `${req.method} ${new URL(req.url ?? "/", "http://localhost").pathname.slice(0, 100)}`, outcome: "rejected", detail: "403 a run's own browser" });
       res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" }).end("A run's own browser can't use segwi.\n");

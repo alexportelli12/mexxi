@@ -7,7 +7,8 @@ sources:
   - docs/decisions/0011-segwi.md
   - docs/decisions/0012-segwi-permission-modes.md
   - docs/decisions/0013-segwi-run-browser-and-hosts.md
-reviewed: 2026-10-23
+  - docs/decisions/0016-segwi-runs-trusted-like-own-sessions.md
+reviewed: 2026-10-24
 ---
 
 # segwi
@@ -23,7 +24,7 @@ segwi is opt-in and off by default. With the `segwi` key unset, nothing about yo
 - Start a run in a repository you listed, with one of three actions: build (`/wettaq`), get ready (`/lesti`) or ask a question that changes nothing.
 - Follow the run as readable steps, with its branch, pull request link and verify result.
 - Reply when the agent asks you something, and stop the run when you want.
-- Answer an [approval](glossary.md#approval): a question about one command the agent is not pre-approved to run.
+- Answer an [approval](glossary.md#approval): a question about one call that Claude Code's auto mode leaves to you.
 - Get a push notification when a run needs you, finishes or fails.
 
 ## Turn it on
@@ -80,7 +81,7 @@ The web app has two modes, set in `segwi.auth.web.mode`. The server only ever li
 - **`localhost-only`** is the default. It trusts anyone using this machine, and it refuses any request that a proxy forwarded. Use it when you work at the machine itself.
 - **`tailscale-header`** trusts the identity header that `tailscale serve` adds, but only on loopback. List the identities you allow in `segwi.auth.web.allowed`, and set `segwi.auth.web.hostname` to this machine's tailnet name. segwi answers only to that name and to loopback names, so a page on another site can't reach it by pointing its own name at your machine. The server will not start with an empty list or without the name.
 
-segwi can't tell your phone from the machine it runs on by the request: a forwarded address is easy to forge, so it doesn't use one. What stops the agent from answering its own approval is the [sandbox](#what-keeps-a-run-safe). Every command the agent runs is inside it, and the sandbox has its own network, so it can't reach segwi's port at all. A test runs the real Claude Code to prove that. The agent's browser runs outside the sandbox. It marks every request it makes, and segwi refuses any request with that mark, however the address is written. The browser tools that run code, upload files or change what the browser may reach ask you first, and the one that runs code outside the browser is refused. Other programs you run yourself on this machine are not limited this way: segwi trusts your own user account.
+segwi can't tell your phone from the machine it runs on by the request: a forwarded address is easy to forge, so it doesn't use one. The agent's browser marks every request it makes, and segwi refuses any request with that mark, however the address is written. So the agent can't open the app and tap Approve. Other programs on this machine are not limited this way: segwi trusts your own user account, and a command the agent runs is one of them. [What keeps a run safe](#what-keeps-a-run-safe) says what that means.
 
 MCP clients never use the web sign-in. They always send a bearer token, described [below](#connect-an-mcp-client).
 
@@ -150,53 +151,35 @@ Each time the app opens, it sends this device's subscription to segwi again. If 
 
 ## What keeps a run safe
 
-segwi adds permissions around the agent, and mexxi's own rules still apply.
+A run has the same trust as a session you start yourself in a terminal on this machine. It runs as your user, in your repository's checkout, with Claude Code's auto mode and your own Claude Code settings. So mexxi's rules, its guard hook, its [loop breaker](glossary.md#loop-breaker) and its `guard.deny` list apply exactly as they do for you. segwi adds no sandbox and no allow list of its own. [Decision 0016](decisions/0016-segwi-runs-trusted-like-own-sessions.md) explains why.
 
-- **An allow list.** A normal run asks for nothing. The agent may use `ibni`, your repository's verify command, `vfk`, common `git` and `gh pr` commands, `npm run` and `npm test`, the usual `npx` build tools, and Playwright. It may read, edit and write files only under your worktree root and its temporary directory. Interpreters such as `python3`, network clients such as `curl`, `rm`, `kill`, `git push` and `gh api` are not on it. An ask run gets a shorter, read-only list: it may read files and run `git`, `gh` and `ibni` commands that only look. Anything that edits, installs, builds, commits or opens a pull request asks you first. segwi also tells the agent how to stay on the list. It reads and searches files with its own tools rather than `cat` or `ls`, and it passes a pull request's description as a file.
-- **A permissions mode.** `segwi.permissions` decides who judges what the allow list doesn't cover. The [three modes](#choose-a-permissions-mode) are described below.
-- **Approvals.** In strict mode anything else becomes an approval, and the run waits. The other modes raise fewer. You see exactly what would run: the whole command, or the whole text a file edit would write, with nothing removed or shortened, not even a secret. You also see its working directory, why the agent says it needs it, and a plain-words risk label. A call too long to show in full on a phone is denied without asking. Once you answer, segwi removes secrets from the stored copy. The default answer is Deny. A decision covers that one call only, and there is no "allow all". If nobody answers within `segwi.limits.approvalTimeoutMinutes`, it counts as a denial.
-- **The deny list.** The commands in `guard.deny` never become an approval. They are refused outright, as in every mexxi run, whatever the mode.
-- **The sandbox.** segwi turns on Claude Code's sandbox, with network limited to GitHub, the npm registry and [the hosts you add](#let-a-runs-checks-pass-in-the-sandbox). A run may write in the worktree root, its temporary directory and the git data that its commits need. It can never write to your own checkout of the repository, because a file planted there would later run as you. Only `ibni prepare` runs outside it, because it must update your checkout, and only as a Bash call of its own. It installs nothing there: segwi tells it to leave the install to `ibni setup`, which the run calls inside the sandbox, because an install runs the repository's own code. Claude Code takes a call out of the sandbox only when every command in it matches, so `echo …; ibni prepare …` stays inside and fails. segwi tells the agent to run it alone, and `ibni prepare` says so too when that happens. Every other `ibni` command runs inside, so `ibni publish` pushes through the sandbox's network. Use an HTTPS remote with a credential helper, such as the one `gh auth setup-git` sets up; an SSH remote can't push from inside. A run may create and commit to branches under `workflow.branchPrefix` only. If a repository's own instructions require another prefix, such as `security/`, list it in `segwi.branchPrefixes`. The sandbox lets a run write only those branches, so `ibni prepare` refuses any other `--prefix` in a run, before it makes a branch the run couldn't commit to. Don't list a prefix that holds branches you care about. The sandbox protects only the branches stored as files, so a run could rewrite one that git has packed into `packed-refs`. A run also can't change the other worktrees in the worktree root, your own sessions' included, or their branches, as they stand when it starts. Every git command in a run uses only your checkout's own hooks, so a hooks folder set in the repository, as husky does, doesn't run during a run. Inside the sandbox a run can't read your SSH and GPG keys, other credential files such as `~/.npmrc`, or segwi's own tokens and run data. It can still read GitHub CLI's login, because `gh pr view` needs it, and send what it reads to GitHub. On Linux it needs `bubblewrap` and `socat`. Without them Claude Code would run commands outside the sandbox and say nothing, so segwi refuses to start a run, and the health route and the app say why. The same happens when `bubblewrap` is installed but can't create a sandbox, and then they show its own error. Setting `segwi.allowUnsandboxed` lets runs start anyway. Don't, unless you accept that every allowed command then runs with all of your access.
+That means the agent can do what you can do on this machine. It can read your files, use your credentials and reach the network. Protect what matters outside the machine the way you would for your own sessions:
+
+- Turn on branch protection for each repository's default branch, so nothing reaches it without a pull request.
+- Give the GitHub CLI a token scoped to your own repositories, so a run can't reach anything else on GitHub.
+
+On top of that, segwi adds what a remote launcher needs:
+
+- **Tailnet-only access.** The server listens only on loopback, and remote access goes through `tailscale serve` to the identities you list.
+- **A token for MCP.** An MCP client must send the bearer token, and it can never answer an approval.
+- **Approvals only a person answers.** Auto mode's classifier, a second model, decides most calls. When it refuses several in a row, Claude Code asks you instead, through an approval in the web app. You see exactly what would run: the whole command, or the whole text a file edit would write, with nothing removed or shortened, not even a secret. You also see its working directory, why the agent says it needs it, and a plain-words risk label. A call too long to show in full on a phone is denied without asking. Once you answer, segwi removes secrets from the stored copy. The default answer is Deny. A decision covers that one call only, and there is no "allow all". If nobody answers within `segwi.limits.approvalTimeoutMinutes`, it counts as a denial.
 - **Caps.** `segwi.limits` bounds concurrent runs, runs per day, agent turns, idle time, total time, the approval wait and the length of a task or reply. A request over a cap gets a 429.
+- **An audit log.** Every API and MCP call, every approval and every stop is recorded in an append-only log. Secrets are removed from anything segwi stores or returns.
 
-### Choose a permissions mode
+Approvals stop the agent's browser and your MCP clients, not every program on this machine. A command the agent runs is a process of yours, so it could reach segwi's port as you can. Approvals keep an agent that follows its rules in check; they don't wall off one that breaks them.
 
-A run asks you about anything off the allow list, and most of what it asks about is harmless: a `cd` chained with `ls`, or a pull request body with a heading. `segwi.permissions` sets who decides instead, and `permissions` on a repository in `segwi.repositories` overrides it there. In every mode the sandbox, the deny list and the paths segwi denies stay the same. The file tools run outside the sandbox, so they are denied your keys and other secrets, your shell and git config, `~/.config`, `~/.local/bin` and `~/.claude`. They are also denied the mexxi clone and the checkout of every repository in `segwi.repositories`. That holds even for a file that doesn't exist yet, so a run can't create one. A `git push`, `gh api`, `gh repo`, `gh release` or `gh pr merge` always asks you; a run pushes its branch with `ibni publish`. When the repository's verify or setup command isn't a plain command, `ibni verify` or `ibni setup`, which runs it, asks you too. An ask run always uses strict, because it promises to change nothing. [Decision 0012](decisions/0012-segwi-permission-modes.md) explains why auto is the default.
+When auto mode, a `guard.deny` rule or mexxi's guard hook, the backup to mexxi's rules, refuses a call, the run shows a step. It reads "Refused:" followed by the command and the reason. The agent is told to stop and ask you rather than work around a refusal, so the run then shows **Needs your reply**. Each refusal is also counted in the audit log as `run.refused`.
 
-- **`auto`**, the default. Claude Code's auto mode classifier, a second model, reviews each call off the allow list. It refuses what looks risky or goes beyond the task. A refused run never retries in pieces; it stops and asks you, so the run shows **Needs your reply**. If the classifier refuses several calls in a row, Claude Code asks you through an approval again. You give up the final say on each call: a model decides, and it can be wrong either way. Its calls also add some cost.
-- **`sandboxed`**. Any command that runs inside the sandbox runs unasked, because the sandbox already bounds what it can write and reach. You still approve what would run outside it, such as a file tool writing outside your worktree root, or a browser tool off the list. You give up reviewing each command: anything the sandbox allows, such as deleting files in the worktree or sending what the run can read to GitHub, runs without a word. Pushes and GitHub API calls still ask.
-- **`strict`**. You approve every call off the allow list, inside the sandbox or not. You give up nothing, but a run waits on you often.
+An ask run promises to change nothing. It runs in auto mode too, without the tools that edit or write files, and it is told to change nothing.
 
-If you used segwi before these modes, your runs move from strict to auto. Set `segwi.permissions` to `strict` to keep the old behaviour.
-
-Each refusal shows on the run as a step, "Refused:" followed by the command and the reason, and is counted in the audit log as `run.refused`. That covers auto mode's refusals, the deny list's and mexxi's guard hook's.
-
-Every API and MCP call, every approval and every stop is recorded in an append-only audit log. Secrets are removed from anything segwi stores or returns.
-
-### Let a run's checks pass in the sandbox
-
-A verify command that passes on your machine can fail in a run, because the sandbox is tighter than your own account. segwi closes the gaps that don't loosen it. [Decision 0013](decisions/0013-segwi-run-browser-and-hosts.md) explains each choice.
-
-- **Hosts a check fetches.** A build that downloads Google Fonts into its pages needs `fonts.googleapis.com` and `fonts.gstatic.com`. List hosts in `segwi.allowedDomains` for every run, or in `allowedDomains` on one repository in `segwi.repositories`. A repository can't add hosts itself. segwi refuses local names such as `localhost`, because the sandbox's proxy runs outside it and could reach segwi. Never add a name that points at this machine or your network, nor a wildcard on a zone others control. A run can send what it reads to any host on the list, so add only what a check needs.
-- **A headless browser.** Karma and Playwright tests start Chromium, which can't start in the sandbox: its own sandbox needs user namespaces, which the run's sandbox refuses. Allowing them would let any command undo the sandbox's write rules. So a build or ready run gets `CHROME_BIN` set to segwi's browser launcher. It starts Playwright's `chrome-headless-shell` without Chromium's own sandbox, inside the run's sandbox, with its own config and cache folders. It also passes the sandbox proxy's login, which Chromium can't send. Install the browser once with `npx playwright install chromium`; without it, a run says that browser tests can't start. The agent is told to leave `CHROME_BIN` alone.
-- **Development dependencies.** segwi's service runs with `NODE_ENV=production`, and a run no longer inherits it, so `npm ci` installs a repository's test tools.
-
-Some tools still need help from the repository. firebase-tools sends even its calls between emulators through the sandbox's proxy, which refuses this machine. It also fails on exit when it can't save its settings in the read-only `~/.config`. A script that starts the emulators can clear `HTTPS_PROXY` and `HTTP_PROXY` and set `XDG_CONFIG_HOME` to a temporary folder.
-
-To see whether a repository's checks will pass, run the smoke check. It starts a real run with your config and a scripted model, so it costs nothing:
-
-```sh
-node scripts/segwi/smoke.mjs --repo my-app
-```
-
-It checks that the browser starts, reaches each host you added and can't reach others. When the repository has a `firebase.json`, it checks that the emulators start.
+segwi's own service runs with `NODE_ENV=production`, and a run doesn't inherit it, so `npm ci` installs a repository's test tools as it does in your terminal.
 
 ## The nightly canary
 
-Your coding agent's command line and output can change between versions, and a broken assumption would show up as a failed run on a day you needed it. The canary finds out first. `segwi canary` makes a scratch repository, starts a real `ask` run with the model in `segwi.canary.model`, and checks three things:
+Your coding agent's command line and output can change between versions, and a broken assumption would show up as a failed run on a day you needed it. The canary finds out first. `segwi canary` makes a scratch repository, starts a real `ask` run with the model in `segwi.canary.model`, and asks it to run the first command in `guard.deny`, with `--help` so it stays harmless if it ever ran. It checks three things:
 
-- A blocked `curl` raises an approval within a minute.
-- Denying that approval lets the run reach `completed` within four minutes.
+- That command is refused and shows on the run as a refusal step, so your deny list still holds in a run.
+- The run reaches `completed` within four minutes, and shows every kind of event a run shows: tool calls and their results, the refusal, a message and the result.
 - The adapter recognises every line the agent wrote.
 
 It writes the result to `~/.local/share/mexxi/state/segwi-canary.json`, and the health route shows it. A pass adds the agent's version to the versions segwi treats as tested, next to the reviewed list in the repository. A failure exits non-zero, names the agent's version in one line, and sends a `canary_failed` push if push is set up.

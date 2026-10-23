@@ -5,8 +5,9 @@ sources:
   - scripts/ibni/ibni.mjs
   - docs/decisions/0008-jev-shadow-metadata-only.md
   - docs/decisions/0011-segwi.md
+  - docs/decisions/0016-segwi-runs-trusted-like-own-sessions.md
   - docs/decisions/0015-tests-name-the-break-they-catch.md
-reviewed: 2026-10-23
+reviewed: 2026-10-24
 ---
 
 # Glossary
@@ -19,7 +20,7 @@ A specialist role, such as the code-reviewer, that a coding agent can hand part 
 
 ## approval
 
-A question segwi asks you when an agent wants to run something outside its allow list, such as a `curl` to the internet. The run's permissions mode decides which of those reach you. It shows the exact command, and only a person can answer it, in the web app. No answer within the time limit counts as a denial, so a run never gets more freedom by waiting. See [segwi](segwi.md).
+A question segwi asks you about one call in a run, when Claude Code's auto mode leaves the decision to you after refusing several calls in a row. It shows the exact command, and only a person can answer it, in the web app. No answer within the time limit counts as a denial, so a run never gets more freedom by waiting. See [segwi](segwi.md).
 
 ## baseline
 

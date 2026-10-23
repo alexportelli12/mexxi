@@ -1,5 +1,5 @@
 ---
-status: Accepted
+status: Accepted; its deferred setup for a launcher with a sandbox is superseded by 0016
 date: 2026-10-23
 ---
 

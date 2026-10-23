@@ -103,16 +103,7 @@ export interface EventMessage {
   step: Step | null;
 }
 
-/** Whether runs can be sandboxed. `required` is false only when the server allows unsandboxed runs. */
-export interface SandboxHealth {
-  available: boolean;
-  required: boolean;
-  problems: string[];
-}
-
 export interface Health {
   ok: boolean;
   limits: { taskMaxChars: number; inputMaxChars: number; idleTimeoutMinutes: number };
-  /** Absent from servers that predate the sandbox. */
-  sandbox?: SandboxHealth;
 }

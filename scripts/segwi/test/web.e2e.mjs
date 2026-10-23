@@ -204,28 +204,6 @@ e2e("file approvals show what would be written, readable on a phone", async () =
   await post(`/api/approvals/${notebook.id}`, { decision: "deny" });
 });
 
-e2e("without the sandbox, New run says runs can't start and Start stays off", async () => {
-  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: "block" });
-  const page = await context.newPage();
-  const sandbox = { available: false, required: true, problems: ["bwrap was not found"] };
-  await page.route("**/api/health", async (route) => {
-    const real = await (await route.fetch()).json();
-    await route.fulfill({ json: { ...real, sandbox } });
-  });
-  await page.goto(`${harness.url}/new`);
-  await page.getByTestId("sandbox-blocked").filter({ hasText: "Runs can't start until the sandbox works" }).waitFor();
-  await page.getByLabel("Task").fill("Anything at all");
-  assert.ok(await page.getByRole("button", { name: "Start" }).isDisabled());
-  sandbox.required = false;
-  await page.goto(`${harness.url}/runs`);
-  await page.getByTestId("sandbox-skipped").filter({ hasText: "Runs start without the sandbox" }).waitFor();
-  await context.close();
-  // Needs the server to report sandbox in /api/health.
-  const health = await api("/api/health");
-  assert.equal(typeof health.sandbox?.available, "boolean");
-  assert.equal(typeof health.sandbox?.required, "boolean");
-});
-
 e2e("stopping asks first, and Keep running is the focused choice", async () => {
   const target = await runWith("Replace the footer links");
   const { page, close } = await open(`/runs/${target.id}`);

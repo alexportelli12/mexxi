@@ -1,6 +1,6 @@
 import { Injectable, computed, inject, signal } from '@angular/core';
 import { Subject } from 'rxjs';
-import type { Approval, EventMessage, Run, RunMessage, SandboxHealth } from '../models';
+import type { Approval, EventMessage, Run, RunMessage } from '../models';
 import { needsCount } from './runs-order';
 import { ApiService } from './api';
 
@@ -48,12 +48,6 @@ export class LiveService {
   readonly reloads = new Subject<void>();
   /** The server's caps, for input counters; sensible defaults until health answers. */
   readonly limits = signal({ taskMaxChars: 8000, inputMaxChars: 4000, idleTimeoutMinutes: 30 });
-  /** Whether runs can start sandboxed; null until health answers (and from older servers). */
-  readonly sandbox = signal<SandboxHealth | null>(null);
-  /** Runs can't start at all: no sandbox, and the server requires one. */
-  readonly sandboxBlocked = computed(() => { const sandbox = this.sandbox(); return !!sandbox && !sandbox.available && sandbox.required; });
-  /** Runs start, but without the sandbox, because the server allows that. */
-  readonly sandboxSkipped = computed(() => { const sandbox = this.sandbox(); return !!sandbox && !sandbox.available && !sandbox.required; });
 
   private source: EventSource | null = null;
   private retry: ReturnType<typeof setTimeout> | null = null;
@@ -67,11 +61,10 @@ export class LiveService {
     this.open();
   }
 
-  /** Caps and sandbox state; read at the start and again after a reconnect, when the server may have changed. */
+  /** Caps; read at the start and again after a reconnect, when the server may have changed. */
   private loadHealth(): void {
     this.api.health().then((health) => {
       this.limits.set(health.limits);
-      this.sandbox.set(health.sandbox ?? null);
     }).catch(() => undefined);
   }
 
