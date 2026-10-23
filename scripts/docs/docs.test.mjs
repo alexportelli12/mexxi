@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { cp, mkdir, readFile, readdir, symlink, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { mkdtemp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
+import test, { after } from "node:test";
 import { fileURLToPath } from "node:url";
 import MiniSearch from "minisearch";
 import { buildDocs } from "./build.mjs";
@@ -17,11 +17,16 @@ import { readAllowed, trackedPaths } from "./lib/source.mjs";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const git = (cwd, ...args) => execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 
+// Each copy is about 15 MB, so they are removed once the file's tests finish.
+const copies = [];
+after(() => Promise.all(copies.map((directory) => rm(directory, { recursive: true, force: true }))));
+
 // A throwaway Git repository holding this repository's tracked files, with
 // node_modules linked so VitePress resolves. `extra` writes more files before
 // the commit; `untracked` writes files that must never be read.
 async function copyRepo({ extra = {}, untracked = {}, edit = {} } = {}) {
   const directory = await mkdtemp(path.join(os.tmpdir(), "mexxi-docs-"));
+  copies.push(directory);
   for (const file of trackedPaths(root)) {
     const source = path.join(root, file);
     try {
