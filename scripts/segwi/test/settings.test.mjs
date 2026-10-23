@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { ConfigError, resolveConfig } from "../../lib/config.mjs";
 import { dataDir, ensurePrivateDir } from "../lib/paths.mjs";
-import { permissionsFor, settingsFromConfig } from "../lib/settings.mjs";
+import { allowedDomainsFor, permissionsFor, settingsFromConfig } from "../lib/settings.mjs";
 import { openStore } from "../lib/store.mjs";
 
 const home = path.join(path.sep, "home", "someone");
@@ -64,6 +64,30 @@ test("the VAPID subject is empty by default, takes a real contact, and refuses p
   assert.throws(() => settingsFromConfig(withSubject("mailto:segwi@localhost")), /placeholder/);
   // The schema checks the shape; the clear message about placeholders comes from settings.
   await assert.rejects(resolveConfig({ segwi: { vapidSubject: "segwi@example.com" } }, { home }), /vapidSubject/);
+});
+
+test("a run reaches segwi.allowedDomains and its repository's own, and a local name, address or bare wildcard is refused", async () => {
+  const config = await resolveConfig({ segwi: { allowedDomains: ["fonts.googleapis.com"], repositories: [
+    { name: "fonts", path: "~/fonts", actions: ["build"], allowedDomains: ["fonts.gstatic.com", "fonts.googleapis.com", "*.example.org"] },
+    { name: "plain", path: "~/plain", actions: ["build"] },
+  ] } }, { home });
+  const { segwi } = settingsFromConfig(config, { home });
+  const [fonts, plain] = segwi.repositories;
+  assert.deepEqual(allowedDomainsFor({ segwi, repository: fonts }), ["fonts.googleapis.com", "fonts.gstatic.com", "*.example.org"]);
+  assert.deepEqual(allowedDomainsFor({ segwi, repository: plain }), ["fonts.googleapis.com"]);
+  assert.deepEqual((await resolveConfig({}, { home })).segwi.allowedDomains, []);
+
+  // The schema refuses what isn't a host name: addresses, ports, schemes, a bare or inner wildcard.
+  for (const bad of ["*", "127.0.0.1", "localhost", "fonts.googleapis.com:443", "https://fonts.googleapis.com", "fonts.*.com", "Fonts.Googleapis.com"]) {
+    await assert.rejects(resolveConfig({ segwi: { allowedDomains: [bad] } }, { home }), /allowedDomains/, bad);
+  }
+  // A name that resolves to this machine or its network would let the sandbox's proxy reach segwi's own port.
+  for (const local of ["my.localhost", "*.office.local", "printer.lan", "segwi.internal", "nas.home.arpa", "*.nip.io", "127.0.0.1.sslip.io", "localtest.me", "app.lvh.me"]) {
+    const shared = await resolveConfig({ segwi: { allowedDomains: [local] } }, { home });
+    assert.throws(() => settingsFromConfig(shared, { home }), (error) => error instanceof ConfigError && error.message.startsWith(`segwi.allowedDomains: "${local}"`), local);
+    const own = await resolveConfig({ segwi: { repositories: [{ name: "app", path: "~/app", actions: ["build"], allowedDomains: [local] }] } }, { home });
+    assert.throws(() => settingsFromConfig(own, { home }), /segwi\.repositories: app's allowedDomains/, local);
+  }
 });
 
 test("a run takes its repository's permissions mode, else segwi.permissions, and an ask run is always strict", async () => {

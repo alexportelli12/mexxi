@@ -76,3 +76,5 @@ Anthropic(?:'s)?
 gzip
 [Uu]ntrusted
 Wiktionary
+[Nn]amespaces?
+seccomp

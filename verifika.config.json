@@ -55,13 +55,13 @@
       "paths": ["README.md", "docs/**", "site/index.html", "skills/docs-writing/**", "scripts/docs/vale.mjs", ".vale.ini", ".vale/**"]
     },
     "segwi": {
-      "command": "node --test scripts/segwi/test/server.test.mjs scripts/segwi/test/config.test.mjs scripts/segwi/test/tokens.test.mjs scripts/segwi/test/check-design.test.mjs scripts/segwi/test/web-check.test.mjs scripts/segwi/test/bundle-size.test.mjs scripts/segwi/test/contract.test.mjs scripts/segwi/test/ibni-contract.test.mjs scripts/segwi/test/security.test.mjs scripts/segwi/test/steps.test.mjs scripts/segwi/test/settings.test.mjs scripts/segwi/test/approver.test.mjs scripts/segwi/test/auth.test.mjs scripts/segwi/test/approvals.test.mjs scripts/segwi/test/risk.test.mjs scripts/segwi/test/mcp.test.mjs scripts/segwi/test/token.test.mjs scripts/segwi/test/push.test.mjs scripts/segwi/test/static.test.mjs scripts/segwi/test/pwa.test.mjs scripts/segwi/test/canary.test.mjs scripts/segwi/test/audit.test.mjs",
+      "command": "node --test scripts/segwi/test/server.test.mjs scripts/segwi/test/config.test.mjs scripts/segwi/test/tokens.test.mjs scripts/segwi/test/check-design.test.mjs scripts/segwi/test/web-check.test.mjs scripts/segwi/test/bundle-size.test.mjs scripts/segwi/test/contract.test.mjs scripts/segwi/test/ibni-contract.test.mjs scripts/segwi/test/security.test.mjs scripts/segwi/test/steps.test.mjs scripts/segwi/test/settings.test.mjs scripts/segwi/test/approver.test.mjs scripts/segwi/test/auth.test.mjs scripts/segwi/test/approvals.test.mjs scripts/segwi/test/risk.test.mjs scripts/segwi/test/mcp.test.mjs scripts/segwi/test/token.test.mjs scripts/segwi/test/push.test.mjs scripts/segwi/test/static.test.mjs scripts/segwi/test/pwa.test.mjs scripts/segwi/test/canary.test.mjs scripts/segwi/test/audit.test.mjs scripts/segwi/test/browser.test.mjs",
       "paths": ["scripts/segwi/**", "scripts/ibni/**", "scripts/lib/config.mjs", "scripts/lib/redact.mjs", "scripts/lib/claude-settings.mjs", "scripts/lib/browser.mjs", "scripts/lib/secret-patterns.json", "config.schema.json", "site/tokens.css"],
       "exclude": ["scripts/segwi/web/**"]
     },
     "segwi-sandbox": {
       "command": "node --test scripts/segwi/test/sandbox.test.mjs",
-      "paths": ["scripts/segwi/lib/**", "scripts/segwi/runners/**", "scripts/segwi/server.mjs", "scripts/segwi/test/sandbox*.mjs", "scripts/segwi/test/fake-anthropic.mjs", "scripts/segwi/test/helpers.mjs", "scripts/lib/claude-settings.mjs", "scripts/lib/browser.mjs", "scripts/lib/redact.mjs", "scripts/lib/config.mjs"]
+      "paths": ["scripts/segwi/lib/**", "scripts/segwi/runners/**", "scripts/segwi/bin/**", "scripts/segwi/smoke-probe.mjs", "scripts/segwi/server.mjs", "scripts/segwi/test/sandbox*.mjs", "scripts/segwi/test/fake-anthropic.mjs", "scripts/segwi/test/helpers.mjs", "scripts/lib/claude-settings.mjs", "scripts/lib/browser.mjs", "scripts/lib/redact.mjs", "scripts/lib/config.mjs"]
     },
     "segwi-web": {
       "command": "node scripts/segwi/web-check.mjs",

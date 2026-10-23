@@ -74,13 +74,15 @@ export function sandboxPrerequisiteProblem() {
  * returns one. A "$cwd" key in the patch starts Claude Code in that directory instead of the repository. Without a
  * patch, Claude Code gets exactly what segwi renders and starts where segwi starts it.
  * `otherRepository` adds a second configured repository (`other-app`), passed to `prepare` and returned as `otherRepo`.
+ * `headlessShell` is the browser a build run's CHROME_BIN starts (see lib/headless-shell.mjs); without one it has none.
  * `segwi` overrides segwi's own settings, such as `{ permissions: "sandboxed", branchPrefixes: ["security/"] }`. Auto mode
  * needs Claude Code's real classifier, which the fake model can't play, so these runs are strict unless a test says otherwise.
  * @returns {Promise<{ results: Array<{ isError: boolean, text: string } | undefined>, approvals: object[], audit: object[],
  *   run: object, server: object, repo: string, worktreeRoot: string, home: string }>}
  *   `results[i]` is the tool result for script turn i. The segwi server is closed when the test ends.
  */
-export async function runScripted(t, { script, action = "ask", decide = () => "allow", prepare = async () => {}, settingsPatch = null, segwi = {}, otherRepository = false }) {
+export async function runScripted(t, { script, action = "ask", decide = () => "allow", prepare = async () => {}, settingsPatch = null, segwi = {}, otherRepository = false,
+  headlessShell = null }) {
   const context = {};
   const model = await startFakeAnthropic(script.map((turn) => (typeof turn === "function" ? () => turn(context) : turn)));
   t.after(() => model.close());
@@ -128,7 +130,8 @@ export async function runScripted(t, { script, action = "ask", decide = () => "a
   const hostDataDir = path.join(dataDir, "host");
   const patch = typeof settingsPatch === "function" ? settingsPatch({ repo, worktreeRoot, home, hostDataDir }) : settingsPatch;
   const host = patch ? { bin: process.execPath, binArgs: ["-e", PATCHED_CLAUDE, "--", JSON.stringify(patch)] } : { bin: "claude" };
-  const adapter = createClaudeCodeAdapter({ ...host, dataDir: hostDataDir, killGraceMs: [2000, 2000] });
+  // The run's home is a throwaway one, so the browser a test wants is named here rather than found there.
+  const adapter = createClaudeCodeAdapter({ ...host, dataDir: hostDataDir, killGraceMs: [2000, 2000], headlessShell: () => headlessShell });
   // The run finishes before Claude Code exits; the test waits for the exit so nothing still writes to the temporary folders.
   let exited;
   const hostExit = new Promise((resolve) => { exited = resolve; });

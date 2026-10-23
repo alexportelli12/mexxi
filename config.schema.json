@@ -262,6 +262,12 @@
           "items": { "type": "string", "pattern": "^([a-z0-9]+(-[a-z0-9]+)*/)+$" },
           "default": []
         },
+        "allowedDomains": {
+          "description": "Hosts every run may reach, besides GitHub and the npm registry, such as fonts.googleapis.com and fonts.gstatic.com for a build that inlines Google Fonts. A name, or *. and a name for its subdomains; IP addresses and well-known local names are refused, but any name whose address is this machine or your network would let a run reach it. Anything a run reads can be sent to these hosts, so add only what a verify command needs.",
+          "type": "array",
+          "items": { "type": "string", "pattern": "^(\\*\\.)?([a-z0-9]([a-z0-9-]*[a-z0-9])?\\.)+[a-z]{2,63}$" },
+          "default": []
+        },
         "repositories": {
           "description": "The only repositories a run may start in, each with a name, the path of its control checkout and the actions allowed there (build, ready or ask).",
           "type": "array",
@@ -272,7 +278,8 @@
               "name": { "description": "Short name shown in the app.", "type": "string", "pattern": "^[A-Za-z0-9._-]+$", "default": "my-app" },
               "path": { "description": "Control checkout of the repository.", "type": "string", "pattern": "^(~/|/)", "default": "~/workspace/my-app" },
               "actions": { "description": "What a run may do here: build runs /wettaq, ready runs /lesti, ask answers a question without changing anything.", "type": "array", "items": { "type": "string", "enum": ["build", "ready", "ask"] }, "default": ["build", "ready", "ask"] },
-              "permissions": { "description": "segwi.permissions for this repository's build and ready runs, such as strict for one you trust less. Empty uses segwi.permissions.", "type": "string", "enum": ["", "auto", "sandboxed", "strict"], "default": "" }
+              "permissions": { "description": "segwi.permissions for this repository's build and ready runs, such as strict for one you trust less. Empty uses segwi.permissions.", "type": "string", "enum": ["", "auto", "sandboxed", "strict"], "default": "" },
+              "allowedDomains": { "description": "Hosts this repository's runs may reach besides segwi.allowedDomains, in the same form.", "type": "array", "items": { "type": "string", "pattern": "^(\\*\\.)?([a-z0-9]([a-z0-9-]*[a-z0-9])?\\.)+[a-z]{2,63}$" }, "default": [] }
             }
           },
           "default": []

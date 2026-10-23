@@ -7,9 +7,11 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
+import { findHeadlessShell } from "../lib/headless-shell.mjs";
 import { request } from "./helpers.mjs";
 import { runScripted, sandboxPrerequisiteProblem } from "./sandbox-harness.mjs";
 
@@ -495,4 +497,25 @@ test("ibni prepare stays inside the sandbox with a command substitution, a redir
   // The second line ran after prepare failed inside.
   assert.match(results[4].text, /second-line/, report);
   assert.deepEqual(branchesOf(repo), ["main"], `no form made a branch: ${report}`);
+});
+
+// Found in your own home before a run swaps it for a throwaway one. CI installs Playwright's Chromium, which brings one.
+const headlessShell = findHeadlessShell({ home: os.homedir() });
+const PROBE = fileURLToPath(new URL("../smoke-probe.mjs", import.meta.url));
+
+test("a build run's CHROME_BIN starts a headless browser in the sandbox, which reaches the hosts config adds and no others", {
+  skip: skip || (!headlessShell && !required && "no chrome-headless-shell is installed (npx playwright install chromium)"), timeout: 240_000,
+}, async (t) => {
+  assert.ok(headlessShell, "SEGWI_REQUIRE_SANDBOX_TEST=1, but no chrome-headless-shell is installed");
+  const script = [bash(`node ${PROBE} browser`), bash(`node ${PROBE} domain example.org`), bash(`node ${PROBE} refused example.com`), { text: "Done." }];
+  const { results, approvals } = await runScripted(t, {
+    action: "build", script, headlessShell, segwi: { permissions: "sandboxed", allowedDomains: ["example.org"] },
+  });
+  const report = show(results, approvals);
+  // Unasked: each check runs inside the sandbox, with the sandbox's own limits and nothing more.
+  assert.deepEqual(approvals, [], report);
+  assert.match(results[0]?.text ?? "", /^ok browser$/m, report);
+  // The browser goes through the sandbox's proxy, which takes credentials Chromium can't send, by way of the relay.
+  assert.match(results[1]?.text ?? "", /^ok domain example\.org$/m, report);
+  assert.match(results[2]?.text ?? "", /^ok refused example\.com$/m, report);
 });
