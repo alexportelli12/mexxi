@@ -6,6 +6,7 @@ import { LiveService } from '../core/live';
 import type { Repo } from '../models';
 import { Banner } from '../ui/banner';
 import { Button } from '../ui/button';
+import { SandboxBanner } from '../ui/sandbox-banner';
 import { Skeleton } from '../ui/skeleton';
 import { Action, actionLabels, commandFor, titles, whatHappens } from '../words';
 
@@ -19,11 +20,12 @@ export function repoProblem(repo: Repo): string | null {
 }
 
 @Component({
-  imports: [Banner, Button, Skeleton],
+  imports: [Banner, Button, SandboxBanner, Skeleton],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <h1 class="text-2xl font-semibold">{{ title }}</h1>
 
+    <segwi-sandbox-banner />
     @if (error()) { <segwi-banner tone="error">{{ error() }}</segwi-banner> }
 
     @if (repos() === null) {
@@ -101,6 +103,8 @@ export class NewRunPage {
   protected readonly allowed = computed(() => ALL_ACTIONS.filter((option) => this.selected()?.actions.includes(option)));
   protected readonly canStart = computed(() => {
     const repo = this.selected();
+    // The server would refuse the run (409) anyway; the banner above says why.
+    if (this.live.sandboxBlocked()) return false;
     return !!repo && !repoProblem(repo) && this.action() !== '' && this.allowed().includes(this.action() as Action) && this.task().trim().length > 0;
   });
   protected readonly whatHappens = computed(() => (this.action() ? whatHappens(this.action() as Action, this.repoName()) : ''));
