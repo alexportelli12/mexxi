@@ -19,10 +19,15 @@ const execFileAsync = promisify(execFile);
 const serverEntry = fileURLToPath(new URL("../server.mjs", import.meta.url));
 const testedVersions = JSON.parse(readFileSync(new URL("./claude-code.tested.json", import.meta.url), "utf8"));
 
-// Concrete on purpose: with a vaguer prompt, a real build run edited files through heredocs and sed, and each edit waited on a person.
+// Concrete on purpose: with a vaguer prompt, a real build run edited files through heredocs and sed, and each edit
+// waited on a person. Later runs also waited on a cat and ls chain, which the allow list doesn't cover, and on an
+// inline multi-line PR body. The packed-refs line is there because the sandbox keeps that file read-only on purpose.
 const SYSTEM_PROMPT = "A person must approve any tool call outside this run's allow list, and the run waits until they answer from their phone. "
   + "Change files only with the Edit and Write tools, never with shell redirection, heredocs, tee or sed -i. "
+  + "Read, list and search files only with the Read, Glob and Grep tools, never with cat, head, ls, find or grep in Bash. "
   + "Keep each Bash call to plain commands, without variable assignments or subshells. "
+  + "Give gh pr create and gh pr edit their description with --body-file, after writing it with the Write tool, never inline with --body. "
+  + "git commit here prints \"Unable to create '.../packed-refs.lock': Read-only file system\" and still succeeds: that is expected, so leave it alone. "
   + "This holds even where other guidance suggests editing through the shell.";
 const ASK_PROMPT = " This run only answers a question: read what you need and change nothing.";
 const RESULT_DETAIL_MAX = 8000;
