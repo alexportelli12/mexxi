@@ -21,6 +21,11 @@
   --radius-card: var(--radius);
 }
 
+/* A routed page fills the shell's column with one rhythm: the host element has no layout of its own. */
+router-outlet + * {
+  @apply flex flex-col gap-5;
+}
+
 body {
   background: var(--bg);
   color: var(--text);
@@ -42,7 +47,24 @@ body {
   background: var(--bg);
   border-top: 1px solid var(--border);
 }
+/* Same offset, no height: the "Jump to latest" button rests on it when there is no bar. */
+.sticky-anchor {
+  position: sticky;
+  bottom: calc(4.1rem + env(safe-area-inset-bottom));
+  z-index: 10;
+  height: 0;
+}
+/* Sits on the top edge of whichever bar it is in, so it never covers a control, whatever the bar's height. */
+.jump-to-latest {
+  position: absolute;
+  right: 1rem;
+  bottom: calc(100% + 0.75rem);
+}
+.sticky-anchor .jump-to-latest {
+  bottom: 0.75rem;
+}
 @media (min-width: 1024px) {
+  .sticky-anchor,
   .sticky-bar {
     bottom: 0;
   }

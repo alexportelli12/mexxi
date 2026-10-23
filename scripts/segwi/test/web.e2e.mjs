@@ -48,9 +48,11 @@ test("a run started from New appears with its steps and waits for a reply", asyn
   const { page, close } = await open("/new");
   await page.getByLabel("Repository").selectOption("my-app");
   await page.getByRole("radio", { name: /Build/ }).check({ force: true });
-  assert.equal(await page.getByTestId("what-happens").textContent(), "Runs /wettaq in my-app on a new branch; you'll get a PR");
+  // The line re-renders after the change is detected, so wait for the text rather than reading it straight away.
+  const whatHappens = (text) => page.getByTestId("what-happens").filter({ hasText: text }).waitFor({ timeout: 5000 });
+  await whatHappens("Runs /wettaq in my-app on a new branch; you'll get a PR");
   await page.getByRole("radio", { name: /Ask/ }).check({ force: true });
-  assert.equal(await page.getByTestId("what-happens").textContent(), "Answers in my-app without changing anything");
+  await whatHappens("Answers in my-app without changing anything");
   await page.getByRole("radio", { name: /Build/ }).check({ force: true });
   await page.getByLabel("Task").fill("List the tracked files");
   await page.getByRole("button", { name: "Start" }).click();
@@ -67,6 +69,8 @@ test("scrolling up pauses following, Jump to latest resumes it", async () => {
   await page.getByText("Needs your reply").first().waitFor();
   await page.getByRole("button", { name: /file-30\.ts/ }).waitFor();
   const metrics = () => page.evaluate(() => ({ y: scrollY, atBottom: innerHeight + scrollY >= document.documentElement.scrollHeight - 160 }));
+  assert.equal(await page.getByRole("button", { name: "Jump to latest" }).count(), 0, "not on load, before anyone has scrolled");
+  await page.evaluate(() => scrollTo({ top: document.documentElement.scrollHeight, behavior: "instant" }));
   await page.evaluate(() => scrollTo({ top: 0, behavior: "instant" }));
   await page.getByRole("button", { name: "Jump to latest" }).waitFor();
   await page.getByRole("textbox", { name: "Your reply" }).fill("Keep going");
@@ -118,7 +122,7 @@ test("stopping asks first, and Keep running is the focused choice", async () => 
   await page.getByRole("button", { name: "Stop…" }).click();
   const dialog = page.getByRole("dialog", { name: "Stop this run?" });
   await dialog.waitFor();
-  assert.match(await dialog.textContent(), /Stop this run\? The agent stops now; its branch and any open PR stay\./);
+  assert.match(await dialog.textContent(), /The agent stops now; its branch and any open PR stay\./);
   assert.equal(await page.evaluate(() => document.activeElement?.textContent?.trim()), "Keep running");
   await page.keyboard.press("Escape");
   await dialog.waitFor({ state: "hidden" });
@@ -162,7 +166,7 @@ test("deep links load directly, and an unknown page says so", async () => {
   const direct = await open(`/runs/${target.id}`);
   await direct.page.getByRole("heading", { name: "Run", exact: true }).waitFor();
   await direct.page.getByText("Fix the flaky date test").first().waitFor();
-  await direct.page.getByRole("link", { name: /pull\/42/ }).first().waitFor();
+  await direct.page.getByRole("link", { name: "Pull request #42" }).first().waitFor();
   await direct.close();
   const approval = await waitFor(async () => (await approvals())[0], { what: "an approval" }).catch(() => null);
   if (approval) {

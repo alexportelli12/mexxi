@@ -26,6 +26,8 @@ const waiting = [];
 let available = 0;
 const segwiEnv = Object.keys(process.env).filter((key) => key.startsWith("SEGWI_"));
 const approverReplies = [];
+// Real Claude Code waits for MCP_TOOL_TIMEOUT (segwi sets it per run), not for the MCP SDK's 60 s default.
+const toolTimeout = Number(process.env.MCP_TOOL_TIMEOUT) > 0 ? Number(process.env.MCP_TOOL_TIMEOUT) : 2 * 60 * 60_000;
 const report = () => writeFileSync(reportFile, JSON.stringify({ args, stdin, segwiEnv, approverReplies }));
 report();
 
@@ -47,7 +49,7 @@ async function askApprover({ tool_name, input, tool_use_id }) {
   const { command, args: serverArgs, env } = JSON.parse(readFileSync(args[args.indexOf("--mcp-config") + 1], "utf8")).mcpServers.segwi;
   const client = new Client({ name: "fake-claude-code", version: "0.0.0" });
   await client.connect(new StdioClientTransport({ command, args: serverArgs, env: { ...getDefaultEnvironment(), ...env } }));
-  const reply = JSON.parse((await client.callTool({ name: "approve", arguments: { tool_name, input, tool_use_id } })).content[0].text);
+  const reply = JSON.parse((await client.callTool({ name: "approve", arguments: { tool_name, input, tool_use_id } }, undefined, { timeout: toolTimeout })).content[0].text);
   await client.close();
   approverReplies.push(reply);
   report();

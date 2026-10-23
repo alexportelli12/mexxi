@@ -27,7 +27,7 @@ import { CopyButton } from './copy-button';
 
       <div class="flex flex-col gap-2">
         <div class="flex items-center justify-between gap-2">
-          <h3 class="text-sm text-muted">{{ approval().tool === 'Bash' ? 'Command' : 'Call' }}</h3>
+          <h2 class="text-sm text-muted">{{ approval().tool === 'Bash' ? 'Command' : 'Call' }}</h2>
           <segwi-copy-button [text]="approval().exact" label="the command" />
         </div>
         <pre class="font-code max-h-60 overflow-auto rounded-card border border-border bg-bg p-3 text-sm whitespace-pre-wrap break-words" tabindex="0" [attr.aria-label]="'Exact ' + approval().tool + ' call'">{{ approval().exact }}</pre>
