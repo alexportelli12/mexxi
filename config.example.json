@@ -111,6 +111,7 @@
       "maxTurns": 6
     },
     "push": true,
+    "vapidSubject": "",
     "service": {
       "systemdUserUnit": false
     }

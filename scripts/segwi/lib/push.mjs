@@ -66,9 +66,26 @@ export function createPushService({ store, settings, stateDir, allowEndpoint = e
     }
   }
 
+  /** Everything a push is signed with, or null while push is off or not fully set up. */
+  function vapidDetails() {
+    const subject = settings.segwi.vapidSubject ?? "";
+    if (!settings.segwi.push || !subject) return null;
+    const keys = readVapid(stateDir);
+    return keys ? { subject, ...keys } : null;
+  }
+
   return {
     /** The public key a browser subscribes with, or null while push is off or not set up. */
-    publicKey: () => (settings.segwi.push ? readVapid(stateDir)?.publicKey ?? null : null),
+    publicKey: () => vapidDetails()?.publicKey ?? null,
+
+    /** What is missing before push works, in words for the person setting it up; null when nothing is. */
+    setupProblem() {
+      if (!settings.segwi.push) return "Push is turned off in segwi.push.";
+      const missing = [];
+      if (!readVapid(stateDir)) missing.push("run segwi vapid init");
+      if (!(settings.segwi.vapidSubject ?? "")) missing.push("set segwi.vapidSubject in config.json to a mailto: address or https:// URL you own");
+      return missing.length ? `Push isn't set up. To set it up, ${missing.join(", and ")}.` : null;
+    },
 
     subscribe({ endpoint, keys }, identity) {
       if (!allowEndpoint(endpoint)) throw new HttpError(400, "That push endpoint isn't allowed.");
@@ -82,7 +99,7 @@ export function createPushService({ store, settings, stateDir, allowEndpoint = e
     /** Sends one notification per subscription (`run` is null for `canary_failed`). Never throws into the run. */
     notify(kind, run) {
       try {
-        const vapid = settings.segwi.push ? readVapid(stateDir) : null;
+        const vapid = vapidDetails();
         if (!vapid || !NOTIFIED.has(kind) || (!run && kind !== "canary_failed")) return;
         const body = JSON.stringify(payloadFor(kind, run));
         const options = {

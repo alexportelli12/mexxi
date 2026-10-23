@@ -1,5 +1,6 @@
 // The service worker does one job: show a notification when the server pushes one,
-// and open the right screen when it is tapped. It has no fetch handler, so it never
+// open the right screen when it is tapped, and keep the server's copy of the push
+// subscription current when the browser replaces it. It has no fetch handler, so it never
 // caches or intercepts anything; offline use is not supported yet.
 
 const COPY = {
@@ -50,4 +51,36 @@ self.addEventListener('notificationclick', (event) => {
       return open.focus().then((client) => (client && 'navigate' in client ? client.navigate(url) : undefined));
     }),
   );
+});
+
+function keyBytes(base64Url) {
+  const padded = base64Url.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(base64Url.length / 4) * 4, '=');
+  return Uint8Array.from(atob(padded), (character) => character.charCodeAt(0));
+}
+
+// The browser can expire or replace a subscription at any time. Without this the server
+// would keep pushing to the old one and nothing would arrive. Only the same origin is
+// ever contacted, and only with the subscription's endpoint and keys.
+async function resubscribe(event) {
+  let subscription = event.newSubscription;
+  if (!subscription) {
+    let key = event.oldSubscription && event.oldSubscription.options && event.oldSubscription.options.applicationServerKey;
+    if (!key) {
+      const response = await fetch('/api/push/key', { credentials: 'same-origin' });
+      if (!response.ok) return;
+      key = keyBytes((await response.json()).publicKey);
+    }
+    subscription = await self.registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+  }
+  const { endpoint, keys } = subscription.toJSON();
+  await fetch('/api/push/subscriptions', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ endpoint, keys }),
+  });
+}
+
+self.addEventListener('pushsubscriptionchange', (event) => {
+  event.waitUntil(resubscribe(event).catch(() => undefined));
 });

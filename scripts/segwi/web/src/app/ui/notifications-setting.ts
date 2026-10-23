@@ -21,7 +21,7 @@ import { Sheet } from './sheet';
       @case ('denied') { <p class="mt-2 text-sm text-muted">Your browser blocks notifications for this site. Allow them in the browser's site settings, then reload this page.</p> }
       @case ('needs-home-screen') { <p class="mt-2 text-sm text-muted">{{ homeScreenHint }}</p> }
       @case ('unsupported') { <p class="mt-2 text-sm text-muted">This browser can't show notifications.</p> }
-      @case ('not-set-up') { <p class="mt-2 text-sm text-muted">The server has no push keys yet, so it can't send notifications.</p> }
+      @case ('not-set-up') { <p class="mt-2 text-sm text-muted">Push isn't set up on the server yet, so it can't send notifications.</p> }
     }
     @if (service.message()) { <p class="mt-2 text-sm text-failed" role="alert">{{ service.message() }}</p> }
 

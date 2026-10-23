@@ -12,18 +12,29 @@ function loadWorker(origin = 'https://app.example.com') {
   const shown: { title: string; options: Record<string, unknown> }[] = [];
   const opened: string[] = [];
   const navigated: string[] = [];
+  const fetches: { url: string; init?: RequestInit }[] = [];
+  const subscribed: unknown[] = [];
+  const fakeFetch = (url: string, init?: RequestInit) => {
+    fetches.push({ url, init });
+    const body = url === '/api/push/key' ? { publicKey: 'AQID' } : { id: 'sub' };
+    return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
+  };
+  const subscription = (endpoint: string) => ({ toJSON: () => ({ endpoint, keys: { p256dh: 'p', auth: 'a' }, expirationTime: null }) });
   const self = {
     location: { origin },
     addEventListener: (name: string, listener: Listener) => { listeners[name] = listener; },
-    registration: { showNotification: (title: string, options: Record<string, unknown>) => { shown.push({ title, options }); return Promise.resolve(); } },
+    registration: {
+      showNotification: (title: string, options: Record<string, unknown>) => { shown.push({ title, options }); return Promise.resolve(); },
+      pushManager: { subscribe: (options: unknown) => { subscribed.push(options); return Promise.resolve(subscription('https://fcm.googleapis.com/fcm/send/renewed')); } },
+    },
     clients: {
       matchAll: () => Promise.resolve(self.windows),
       openWindow: (url: string) => { opened.push(url); return Promise.resolve(); },
     },
     windows: [] as unknown[],
   };
-  const guard = new Function('self', `${swSource}\nreturn safeTarget;`)(self) as (url: unknown, origin: string) => string;
-  return { listeners, shown, opened, navigated, self, guard };
+  const guard = new Function('self', 'fetch', `${swSource}\nreturn safeTarget;`)(self, fakeFetch) as (url: unknown, origin: string) => string;
+  return { listeners, shown, opened, navigated, self, guard, fetches, subscribed, subscription };
 }
 
 const waitable = () => {
@@ -72,6 +83,35 @@ describe('service worker', () => {
     worker.self.windows = [client];
     await click('https://evil.example/runs/abc');
     expect(worker.navigated).toEqual(['/runs']);
+  });
+
+  it('posts a replaced subscription to the server when the browser hands over the new one', async () => {
+    const worker = loadWorker();
+    const event = { newSubscription: worker.subscription('https://fcm.googleapis.com/fcm/send/new'), oldSubscription: null, ...waitable() };
+    worker.listeners['pushsubscriptionchange'](event);
+    await event.box.promise;
+    expect(worker.subscribed).toEqual([]);
+    expect(worker.fetches).toHaveLength(1);
+    expect(worker.fetches[0].url).toBe('/api/push/subscriptions');
+    expect(worker.fetches[0].init).toMatchObject({ method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } });
+    expect(JSON.parse(worker.fetches[0].init!.body as string)).toEqual({ endpoint: 'https://fcm.googleapis.com/fcm/send/new', keys: { p256dh: 'p', auth: 'a' } });
+  });
+
+  it('subscribes again with the old options when there is no new subscription, or with the server key', async () => {
+    const worker = loadWorker();
+    const key = new Uint8Array([9, 9]).buffer;
+    const event = { oldSubscription: { options: { applicationServerKey: key } }, ...waitable() };
+    worker.listeners['pushsubscriptionchange'](event);
+    await event.box.promise;
+    expect(worker.subscribed).toEqual([{ userVisibleOnly: true, applicationServerKey: key }]);
+    expect(JSON.parse(worker.fetches[0].init!.body as string).endpoint).toBe('https://fcm.googleapis.com/fcm/send/renewed');
+
+    const bare = loadWorker();
+    const second = { ...waitable() };
+    bare.listeners['pushsubscriptionchange'](second);
+    await second.box.promise;
+    expect(bare.fetches.map((entry) => entry.url)).toEqual(['/api/push/key', '/api/push/subscriptions']);
+    expect([...(bare.subscribed[0] as { applicationServerKey: Uint8Array }).applicationServerKey]).toEqual([1, 2, 3]);
   });
 
   it('has no fetch handler', () => {

@@ -151,7 +151,7 @@ test("a broken host fails loudly: exit code, one stderr line, ok false, the heal
   const dataDir = tempDir(t, "segwi-cn-data-");
   const configDir = tempDir(t, "segwi-cn-config-");
   const configFile = path.join(configDir, "config.json");
-  writeFileSync(configFile, JSON.stringify({ segwi: { enabled: true, canary: { model: "haiku" } } }));
+  writeFileSync(configFile, JSON.stringify({ segwi: { enabled: true, canary: { model: "haiku" }, vapidSubject: "mailto:segwi-tests@example.com" } }));
 
   // A person subscribed in the real database, and push is set up.
   initVapid(stateDir);

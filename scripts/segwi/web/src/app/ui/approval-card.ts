@@ -1,8 +1,9 @@
-import { ChangeDetectionStrategy, Component, ElementRef, afterNextRender, computed, inject, input, signal, viewChild } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, ElementRef, afterNextRender, computed, inject, input, signal, viewChild } from '@angular/core';
 import { RouterLink } from '@angular/router';
 import { ApiError, ApiService } from '../core/api';
 import { now } from '../core/clock';
 import { DecisionResult, LiveService } from '../core/live';
+import { ApprovalTapGuard } from '../core/tap-guard';
 import { untilTime } from '../core/time';
 import type { Approval } from '../models';
 import { Button } from './button';
@@ -42,16 +43,20 @@ import { CopyButton } from './copy-button';
         }
       </dl>
 
-      @if (result()) {
-        <p class="flex min-h-11 items-center font-medium" role="status" [class.text-done]="result() === 'allowed'" [class.text-muted]="result() !== 'allowed'">{{ resultText() }}</p>
-      } @else {
-        <p class="text-sm text-muted">Denied automatically in {{ expiry() }}</p>
-        @if (error()) { <p class="text-sm text-failed" role="alert">{{ error() }}</p> }
-        <div class="flex items-center justify-between gap-6">
-          <button #deny segwi-button type="button" [disabled]="busy()" (click)="answer('deny')">Deny</button>
-          <button segwi-button variant="primary" type="button" [disabled]="busy()" (click)="answer('allow')">Approve</button>
+      <!-- The answer takes the controls' place in the same grid cell, so an answered card keeps its height while it lingers. -->
+      <div class="grid">
+        <div class="col-start-1 row-start-1 flex flex-col gap-4" [class.invisible]="!!result()" [attr.aria-hidden]="result() ? 'true' : null" data-testid="approval-controls">
+          <p class="text-sm text-muted">Denied automatically in {{ expiry() }}</p>
+          @if (error()) { <p class="text-sm text-failed" role="alert">{{ error() }}</p> }
+          <div class="flex items-center justify-between gap-6">
+            <button #deny segwi-button type="button" [disabled]="busy() || !!result()" (click)="answer('deny', $event)">Deny</button>
+            <button segwi-button variant="primary" type="button" [disabled]="busy() || !!result()" (click)="answer('allow', $event)">Approve</button>
+          </div>
         </div>
-      }
+        @if (result()) {
+          <p class="col-start-1 row-start-1 flex min-h-11 items-center self-center font-medium" role="status" [class.text-done]="result() === 'allowed'" [class.text-muted]="result() !== 'allowed'">{{ resultText() }}</p>
+        }
+      </div>
     </segwi-card>
   `,
 })
@@ -63,6 +68,8 @@ export class ApprovalCard {
 
   private readonly api = inject(ApiService);
   private readonly live = inject(LiveService);
+  private readonly tapGuard = inject(ApprovalTapGuard);
+  private readonly destroyRef = inject(DestroyRef);
   protected readonly busy = signal(false);
   protected readonly error = signal('');
   private readonly deny = viewChild('deny', { read: ElementRef<HTMLButtonElement> });
@@ -75,12 +82,29 @@ export class ApprovalCard {
   });
 
   constructor() {
+    const host = inject(ElementRef<HTMLElement>).nativeElement as HTMLElement;
     afterNextRender(() => {
       if (this.focusDeny()) this.deny()?.nativeElement.focus({ preventScroll: false });
+      this.watchHeight(host);
     });
   }
 
-  protected async answer(decision: 'allow' | 'deny'): Promise<void> {
+  /** A card that grows or shrinks moves every card below it, so it tells the tap guard. */
+  private watchHeight(host: HTMLElement): void {
+    if (typeof ResizeObserver === 'undefined') return;
+    let height = host.getBoundingClientRect().height;
+    const observer = new ResizeObserver(() => {
+      const next = host.getBoundingClientRect().height;
+      if (next !== height) this.tapGuard.moved();
+      height = next;
+    });
+    observer.observe(host);
+    this.destroyRef.onDestroy(() => observer.disconnect());
+  }
+
+  protected async answer(decision: 'allow' | 'deny', event: MouseEvent | null = null): Promise<void> {
+    // A tap that lands just after the cards moved was probably meant for another card.
+    if (!this.tapGuard.accepts(event)) return;
     this.busy.set(true);
     this.error.set('');
     try {

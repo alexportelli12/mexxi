@@ -171,38 +171,79 @@ test("the public key route says when push isn't set up and serves the key once i
   t.after(() => server.close());
   const missing = await request(server, "GET", "/api/push/key");
   assert.equal(missing.status, 404);
-  assert.equal(missing.json.error, "Push isn't set up. Run segwi vapid init.");
+  assert.equal(missing.json.error, "Push isn't set up. To set it up, run segwi vapid init.");
   const publicKey = initVapid(stateDir);
   assert.deepEqual((await request(server, "GET", "/api/push/key")).json, { publicKey });
 });
 
-test("vapid init writes a private file, refuses a second run without --force, and prints only the public key", (t) => {
+test("without segwi.vapidSubject push counts as not set up: the key route says so and nothing is sent", async (t) => {
+  const stateDir = tempDir(t, "segwi-state-");
+  initVapid(stateDir);
+  const push = await standIn(t);
+  const settings = makeSettings({ repos: [{ name: "my-app", path: makeRepo(t), actions: ["build", "ready", "ask"] }] });
+  settings.segwi.vapidSubject = "";
+  process.env.FAKE_HOST_TOKEN = TOKEN;
+  t.after(() => { delete process.env.FAKE_HOST_TOKEN; });
+  const server = await startServer({
+    settings, dataDir: tempDir(t, "segwi-data-"), runner: fakeAdapter(t, "error-result").adapter, ibni, staticRoot: null, stateDir,
+    pushOptions: { allowEndpoint: () => true, agent: push.agent },
+  });
+  t.after(() => server.close());
+  const missing = await request(server, "GET", "/api/push/key");
+  assert.equal(missing.status, 404);
+  assert.match(missing.json.error, /segwi\.vapidSubject/);
+  assert.doesNotMatch(missing.json.error, /vapid init/, "the keys exist, so only the subject is missing");
+  await request(server, "POST", "/api/push/subscriptions", { body: { endpoint: push.endpoint, keys: makeSubscriber().keys } });
+  const started = await request(server, "POST", "/api/runs", { body: { repo: "my-app", action: "build", task: "Break" } });
+  await waitFor(() => server.store.getRun(started.json.run.id).status === "failed", { what: "the failure" });
+  await server.push.idle();
+  assert.equal(push.posts.length, 0);
+});
+
+test("the configured subject signs every push", async (t) => {
+  const stateDir = tempDir(t, "segwi-state-");
+  initVapid(stateDir);
+  const push = await standIn(t);
+  const { server } = await boot(t, "error-result", push, stateDir);
+  await request(server, "POST", "/api/runs", { body: { repo: "my-app", action: "build", task: "Break" } });
+  await waitFor(() => push.posts.length === 1, { what: "the failure push" });
+  await server.push.idle();
+  const token = push.posts[0].headers.authorization.match(/^vapid t=([\w-]+\.[\w-]+\.[\w-]+)/)[1];
+  const claims = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8"));
+  assert.equal(claims.sub, "mailto:segwi-tests@example.com");
+});
+
+test("vapid init writes a private file, refuses a second run without --force, and prints only the public key", async (t) => {
   const stateDir = tempDir(t, "segwi-state-");
   const dataDir = tempDir(t, "segwi-data-");
   const capture = () => { const out = { text: "" }; return { out, stream: { write: (chunk) => { out.text += chunk; } } }; };
-  const run = (...args) => {
+  const run = async (settings, ...args) => {
     const [stdout, stderr] = [capture(), capture()];
     const previous = process.exitCode;
-    runVapid(["init", "--state-dir", stateDir, "--data-dir", dataDir, ...args], { stdout: stdout.stream, stderr: stderr.stream });
+    await runVapid(["init", "--state-dir", stateDir, "--data-dir", dataDir, ...args], { stdout: stdout.stream, stderr: stderr.stream, settings });
     const code = process.exitCode;
     process.exitCode = previous;
     return { stdout: stdout.out.text, stderr: stderr.out.text, code };
   };
-  const first = run();
+  const unset = makeSettings({ repos: [] });
+  unset.segwi.vapidSubject = "";
+  const first = await run(unset);
   const file = path.join(stateDir, "segwi-vapid.json");
   const stored = JSON.parse(readFileSync(file, "utf8"));
   assert.equal(statSync(file).mode & 0o777, 0o600);
   assert.equal(first.stdout, `${stored.publicKey}\n`);
   assert.ok(!first.stdout.includes(stored.privateKey) && !first.stderr.includes(stored.privateKey));
-  assert.equal(stored.subject, "mailto:segwi@localhost");
+  assert.deepEqual(Object.keys(stored).sort(), ["privateKey", "publicKey"], "the subject is config, not part of the keys");
+  assert.match(first.stderr, /set segwi\.vapidSubject/);
 
-  const second = run();
+  const second = await run(unset);
   assert.equal(second.code, 2);
   assert.match(second.stderr, /breaks every existing push subscription/);
   assert.equal(second.stdout, "");
   assert.deepEqual(readVapid(stateDir), stored);
 
-  const forced = run("--force");
+  const forced = await run(makeSettings({ repos: [] }), "--force");
+  assert.doesNotMatch(forced.stderr, /vapidSubject/, "no hint once the subject is set");
   assert.notEqual(forced.stdout.trim(), stored.publicKey);
   assert.equal(readVapid(stateDir).publicKey, forced.stdout.trim());
 });

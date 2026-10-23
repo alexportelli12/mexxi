@@ -41,6 +41,11 @@ export class LiveService {
   readonly events = new Subject<EventMessage>();
   /** Every status change, so an open run can reload itself. */
   readonly runUpdates = new Subject<RunMessage>();
+  /**
+   * Fires when events may have been missed: the stream came back after a drop, or the server
+   * sent `reset` because too many were missed to replay. An open run detail reloads on it.
+   */
+  readonly reloads = new Subject<void>();
   /** The server's caps, for input counters; sensible defaults until health answers. */
   readonly limits = signal({ taskMaxChars: 8000, inputMaxChars: 4000, idleTimeoutMinutes: 30 });
 
@@ -99,8 +104,10 @@ export class LiveService {
       this.connection.set('live');
       this.attempt = 0;
       this.everConnected = true;
-      if (wasDown) void this.refresh();
+      if (wasDown) this.reloadAll();
     });
+    // The server could not replay what was missed, so nothing on screen can be trusted to be current.
+    source.addEventListener('reset', () => this.reloadAll());
     source.addEventListener('run', (event) => this.onRun(JSON.parse((event as MessageEvent<string>).data) as RunMessage));
     source.addEventListener('event', (event) => this.onEvent(JSON.parse((event as MessageEvent<string>).data) as EventMessage));
     source.addEventListener('error', () => {
@@ -112,6 +119,12 @@ export class LiveService {
         this.open();
       }, backoffFor(this.attempt++));
     });
+  }
+
+  /** Reloads the lists and tells any open screen to reload what it shows. */
+  private reloadAll(): void {
+    void this.refresh();
+    this.reloads.next();
   }
 
   private onRun(message: RunMessage): void {

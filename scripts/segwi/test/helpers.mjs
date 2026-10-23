@@ -42,7 +42,7 @@ export function makeSettings({ repos, auth = {}, limits = {}, host = "127.0.0.1"
         concurrentRuns: 2, runsPerDay: 20, maxTurns: 80, idleTimeoutMinutes: 30, hardTimeoutMinutes: 120,
         approvalTimeoutMinutes: 60, taskMaxChars: 8000, inputMaxChars: 4000, ...limits,
       },
-      push: true,
+      push: true, vapidSubject: "mailto:segwi-tests@example.com",
     },
     deny: ["npm publish", "git push --force"], worktreeRoot, browser: { playwrightMcpVersion: "0.0.1", executablePath: null, outputDir: worktreeRoot },
   };

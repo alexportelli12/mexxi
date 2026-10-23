@@ -213,7 +213,8 @@ export class RunDetailPage {
     this.live.runUpdates.pipe(takeUntilDestroyed(destroyRef)).subscribe((message) => {
       if (message.runId === this.id()) void this.load();
     });
-    
+    // After a drop or a server reset the steps on screen may have gaps; fetch the run again.
+    this.live.reloads.pipe(takeUntilDestroyed(destroyRef)).subscribe(() => void this.load());
   }
 
   protected async load(): Promise<void> {

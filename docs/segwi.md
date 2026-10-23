@@ -126,13 +126,25 @@ Run output that segwi returns is labelled as untrusted and has secrets removed, 
 
 ## Get push notifications
 
-Push needs a key pair that signs each message. Create it once, then restart segwi:
+Push lets your phone tell you when a run needs you, so you don't have to keep the app open. It needs two things: a key pair that signs each message, and a contact address that push services can reach about it. Create the keys once:
 
 ```bash
 segwi vapid init
 ```
 
+Then set `segwi.vapidSubject` in `config.json` to a `mailto:` address or an `https://` URL you own:
+
+```json
+{
+  "segwi": { "vapidSubject": "mailto:you@example.com" }
+}
+```
+
+Restart segwi after both steps. Until both are done, push counts as not set up: segwi sends nothing, and the app says push isn't set up. Push services such as Apple's refuse placeholder contacts, so segwi refuses them too when it reads its settings. That covers an address at `localhost`, a host name without a dot, a `.local` or `.test` name, and an IP address.
+
 Open the app on your phone and allow notifications when it asks. A notification names only the run, the repository and the new status, never the task or any output. On iOS, add the app to the Home Screen first, because Safari sends push only to installed apps. Each run keeps one notification, so a later event replaces the earlier one.
+
+Each time the app opens, it sends this device's subscription to segwi again. If you replaced the keys with `segwi vapid init --force`, it subscribes again with the new key, so notifications keep arriving. The app does the same when the browser renews a subscription on its own.
 
 ## What keeps a run safe
 

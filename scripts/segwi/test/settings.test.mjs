@@ -51,3 +51,17 @@ test("the store versions its schema and keeps run ids, event sequences and clien
   assert.deepEqual(store.listEvents("r1", 1).map((event) => event.data.text), ["b"]);
   store.close();
 });
+
+test("the VAPID subject is empty by default, takes a real contact, and refuses placeholders push services reject", async () => {
+  const withSubject = (vapidSubject) => ({ ...withRepos0([]), workflow: { ports: {} }, segwi: { repositories: [], vapidSubject } });
+  assert.equal((await resolveConfig({}, { home })).segwi.vapidSubject, "");
+  for (const good of ["", "mailto:me@example.com", "https://example.com", "https://ops.example.org/contact"]) {
+    assert.equal(settingsFromConfig(withSubject(good)).segwi.vapidSubject, good);
+  }
+  for (const bad of ["mailto:segwi@localhost", "mailto:me@box", "https://localhost", "https://printer.local", "https://db.internal", "https://a.test", "https://127.0.0.1", "mailto:me@[::1]", "http://example.com", "mailto:nobody"]) {
+    assert.throws(() => settingsFromConfig(withSubject(bad)), (error) => error instanceof ConfigError && error.message.startsWith(`segwi.vapidSubject: "${bad}"`), bad);
+  }
+  assert.throws(() => settingsFromConfig(withSubject("mailto:segwi@localhost")), /placeholder/);
+  // The schema checks the shape; the clear message about placeholders comes from settings.
+  await assert.rejects(resolveConfig({ segwi: { vapidSubject: "segwi@example.com" } }, { home }), /vapidSubject/);
+});

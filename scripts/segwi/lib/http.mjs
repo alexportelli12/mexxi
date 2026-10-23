@@ -110,7 +110,7 @@ export function createHandler({ store, settings, authenticate, runs, approvals, 
     ["POST", "/api/approvals/:id", "decideApproval", async ({ params, body, identity }) => ({ approval: approvals.decide(params.id, body.decision, identity) })],
     ["GET", "/api/push/key", "none", async () => {
       const publicKey = push.publicKey();
-      if (!publicKey) throw new HttpError(404, "Push isn't set up. Run segwi vapid init.");
+      if (!publicKey) throw new HttpError(404, push.setupProblem() ?? "Push isn't set up.");
       return { publicKey };
     }],
     ["POST", "/api/push/subscriptions", "pushSubscription", async ({ body, identity }) => {

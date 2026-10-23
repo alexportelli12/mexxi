@@ -312,6 +312,13 @@
           }
         },
         "push": { "description": "Send a push notification when a run needs you, finishes or fails.", "type": "boolean", "default": true },
+        "vapidSubject": {
+          "description": "Contact address sent with every push, as a mailto: address or an https:// URL you own. Empty leaves push off.",
+          "why": "Push services refuse a push without a real contact they can reach about it, and refuse placeholders such as an address at localhost.",
+          "type": "string",
+          "pattern": "^(|https://\\S+|mailto:\\S+@\\S+)$",
+          "default": ""
+        },
         "service": {
           "description": "Running segwi in the background.",
           "type": "object",
