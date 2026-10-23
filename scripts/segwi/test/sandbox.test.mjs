@@ -39,6 +39,14 @@ test("a sandboxed run can't reach segwi's port, directly or through the sandbox'
   assert.deepEqual(healthRequests(audit), [], "segwi saw no request from the run");
 });
 
+test("inside the sandbox a command off the allow list still waits for a person, and a denial stops it", { skip, timeout: 180_000 }, async (t) => {
+  const marker = ({ worktreeRoot }) => ({ tool: "Bash", input: { command: `touch ${worktreeRoot}/segwi-unasked`, description: "Write a marker" } });
+  const { results, approvals } = await runScripted(t, { script: [marker, { text: "Done." }], decide: () => "deny" });
+  assert.equal(approvals.length, 1, "touch is off the allow list, so the sandbox doesn't let it run unasked");
+  assert.match(approvals[0].exact, /^touch .*segwi-unasked$/);
+  assert.equal(results[0]?.isError, true, results[0]?.text);
+});
+
 test("control: with only the sandbox turned off, the same command reaches segwi once a person allows it", { skip, timeout: 180_000 }, async (t) => {
   const { results, audit, approvals, run } = await runScripted(t, { script: [direct, { text: "Done." }], settingsPatch: { sandbox: { enabled: false } } });
 

@@ -118,6 +118,7 @@ for (const runner of RUNNERS) {
     assert.equal(settings.permissions.disableBypassPermissionsMode, "disable");
     assert.equal(settings.sandbox.enabled, true);
     assert.equal(settings.sandbox.allowUnsandboxedCommands, false);
+    assert.equal(settings.sandbox.autoAllowBashIfSandboxed, false);
     assert.deepEqual(settings.sandbox.filesystem.allowWrite, [spec.worktreeRoot]);
     assert.ok(!("disableAllHooks" in settings));
     const mcp = JSON.parse(readFileSync(path.join(runDir, "mcp.json"), "utf8"));

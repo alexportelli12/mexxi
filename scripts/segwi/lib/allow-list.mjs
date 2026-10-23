@@ -57,6 +57,8 @@ export function renderSettings({ worktreeRoot, verifyCommand, tempDir, denyPatte
     },
     sandbox: {
       enabled: true,
+      // Claude Code otherwise runs every sandboxed Bash command unasked, so the allow list would never be read.
+      autoAllowBashIfSandboxed: false,
       allowUnsandboxedCommands: false,
       filesystem: { allowWrite: [worktreeRoot] },
       network: { allowedDomains: SANDBOX_DOMAINS },
