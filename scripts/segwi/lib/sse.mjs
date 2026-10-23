@@ -1,6 +1,7 @@
 // One server-sent-events stream for every run. Message ids are the events
 // table's ids, so a client that reconnects with Last-Event-ID is replayed what
-// it missed (up to 1000 events) before going live.
+// it missed before going live. If it missed more than 1000 events, it gets no
+// replay but one `reset` message carrying the latest id, and reloads everything.
 const REPLAY_CAP = 1000;
 
 function format({ id, name, data }) {
@@ -27,7 +28,11 @@ export function createBroker({ store, heartbeatMs = 20_000 }) {
       const last = Number.parseInt(String(req.headers["last-event-id"] ?? ""), 10);
       res.write(": connected\n\n");
       // Replay and subscription happen in one synchronous step, so nothing is missed or doubled.
-      if (Number.isInteger(last) && last >= 0) store.eventsAfter(last, REPLAY_CAP).forEach((row) => res.write(format(messageFor(row))));
+      if (Number.isInteger(last) && last >= 0) {
+        const missed = store.eventsAfter(last, REPLAY_CAP + 1);
+        if (missed.length > REPLAY_CAP) res.write(format({ id: store.latestEventId(), name: "reset", data: { reason: "truncated" } }));
+        else missed.forEach((row) => res.write(format(messageFor(row))));
+      }
       clients.add(res);
       res.on("close", () => clients.delete(res));
     },

@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { BindRefusedError, PortCollisionError } from "../lib/bind.mjs";
 import { AuthConfigError } from "../lib/auth.mjs";
 import { startServer } from "../lib/serve.mjs";
+import { createBroker } from "../lib/sse.mjs";
 import { openStore } from "../lib/store.mjs";
 import { fakeAdapter, fixturesDir, makeRepo, makeSettings, tempDir, waitFor } from "./helpers.mjs";
 
@@ -476,4 +477,30 @@ test("concurrent starts with one clientId make one run: the first gets 201, the 
   assert.deepEqual(responses.map((response) => response.status).sort(), [200, 200, 200, 200, 201]);
   assert.equal(new Set(responses.map((response) => response.json.run.id)).size, 1);
   assert.equal(server.store.listRuns().length, 1);
+});
+
+test("an SSE reconnect that missed more than 1000 events gets one reset with the latest id instead of a replay", (t) => {
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const broker = createBroker({ store });
+  t.after(() => broker.close());
+  store.createRun({ id: "r1", repo: "my-app", action: "ask", task: "x" });
+  const ids = Array.from({ length: 1002 }, (_, index) => store.addEvent("r1", "text", { text: `event ${index}` }).id);
+  const connect = (lastEventId) => {
+    let text = "";
+    const res = { writeHead() {}, write(chunk) { text += chunk; }, on() {}, end() {} };
+    broker.handle({ headers: { "last-event-id": String(lastEventId) } }, res);
+    return { text: () => text };
+  };
+  const messages = (text) => text.split("\n\n").filter((block) => block.startsWith("id: "));
+
+  const exactlyCap = connect(ids[1]); // 1000 missed: replayed in full
+  assert.equal(messages(exactlyCap.text()).length, 1000);
+  assert.ok(!exactlyCap.text().includes("event: reset"));
+
+  const overCap = connect(ids[0]); // 1001 missed: no replay, one reset
+  assert.deepEqual(messages(overCap.text()), [`id: ${ids.at(-1)}\nevent: reset\ndata: {"reason":"truncated"}`]);
+  const live = store.addEvent("r1", "text", { text: "after" });
+  broker.publish(live);
+  assert.match(overCap.text(), new RegExp(`id: ${live.id}\\nevent: event\\n`), "then it goes live");
 });

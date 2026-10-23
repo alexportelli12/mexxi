@@ -168,6 +168,7 @@ export function openStore(file, { now = () => new Date() } = {}) {
     },
     listEvents: (runId, since = 0, limit = 1000) => statements.runEvents.all(runId, since, limit).map(eventFromRow),
     eventsAfter: (id, limit = 1000) => statements.eventsAfter.all(id, limit).map(eventFromRow),
+    latestEventId: () => db.prepare("SELECT COALESCE(MAX(id), 0) AS id FROM events").get().id,
 
     /** Only the hash of a run's secret is stored; the secret itself lives in the run's MCP config. */
     setRunSecretHash: (runId, hash) => statements.setSecret.run(hash, runId),
