@@ -144,7 +144,7 @@ here. Selective runs are implementation feedback; the verify command remains
 the only delivery gate. `ibni` installs each worktree's dependencies and runs
 that gate itself (`ibni verify`), and `record-evidence` and `publish` accept
 only a passing run it recorded on the exact tree being delivered (decision
-0013). The lifecycle commands separately enforce workspace and Git safety.
+0014). The lifecycle commands separately enforce workspace and Git safety.
 
 Metrics such as CRAP score and duplication are bounded signals, not global
 ideology. Prefer scoped or differential enforcement where practical, calibrate

@@ -42,7 +42,7 @@ async function gatingCommand(root, metadata, headSha) {
 // session still owns the worktree, with the tree exactly as it was when the run
 // started: a commit or an edit during the run leaves the result unrecorded.
 // Only the start and the end are compared, so an edit undone before the run
-// ends goes unnoticed (decision 0013 accepts that).
+// ends goes unnoticed (decision 0014 accepts that).
 async function recordVerification(cwd, sessionId, started, verification) {
   return withRepositoryLock(started.repository.commonDirectory, async () => {
     const session = await ownedSession(cwd, sessionId);

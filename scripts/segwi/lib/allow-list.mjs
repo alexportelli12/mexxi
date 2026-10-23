@@ -188,10 +188,12 @@ export function askRules({ verifyCommand, setupCommand }) {
 /**
  * `denyRead` are the secrets nothing in the sandbox needs: keys and credentials in the home directory, and
  * segwi's own state and data (its tokens, push key, run secrets and pending approvals). Only existing paths.
+ * `allowedDomains` are the hosts your config adds to the network allow list (segwi.allowedDomains and the
+ * repository's own), never anything the repository names.
  */
 export function renderSettings({ action, worktreeRoot, verifyCommand, setupCommand = null, tempDir, repoPath, gitCommonDir = path.join(repoPath, ".git"), branchPrefix = "agent/",
   branchPrefixes = [], permissions = "strict", controlEntries = [], existingGit = [], denyRead = [], protectedFiles = [], protectedFolders = [],
-  controlCheckouts = [], denyPatterns }) {
+  controlCheckouts = [], allowedDomains = [], denyPatterns }) {
   const prefixes = writablePrefixes(branchPrefix, branchPrefixes);
   return {
     permissions: {
@@ -212,7 +214,7 @@ export function renderSettings({ action, worktreeRoot, verifyCommand, setupComma
       // command stays inside: the run can point its own worktree at a git config of its choosing.
       ...(action === "ask" ? {} : { excludedCommands: ["ibni prepare *"] }),
       filesystem: filesystemRules({ action, worktreeRoot, tempDir, repoPath, gitCommonDir, prefixes, controlEntries, existingGit, denyRead }),
-      network: { allowedDomains: SANDBOX_DOMAINS },
+      network: { allowedDomains: [...new Set([...SANDBOX_DOMAINS, ...allowedDomains])] },
     },
   };
 }

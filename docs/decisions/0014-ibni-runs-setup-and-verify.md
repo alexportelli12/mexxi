@@ -3,7 +3,7 @@ status: Accepted
 date: 2026-10-23
 ---
 
-# 0013. ibni installs dependencies and runs the verify command
+# 0014. ibni installs dependencies and runs the verify command
 
 Supersedes [0004](0004-isolated-worktree-per-task.md) and [0010](0010-repository-names-its-verify-command.md).
 

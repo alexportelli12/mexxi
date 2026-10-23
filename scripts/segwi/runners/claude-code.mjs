@@ -14,6 +14,7 @@ import { playwrightArguments } from "../../lib/browser.mjs";
 import { branchFolder, gitWritePaths, isPlainVerifyCommand, renderSettings, VERIFY_NOT_ALLOWED, writablePrefixes } from "../lib/allow-list.mjs";
 import { RUN_BROWSER_MARK } from "../lib/auth.mjs";
 import { canaryTestedVersions } from "../lib/canary-state.mjs";
+import { BROWSER_LAUNCHER, findHeadlessShell, HEADLESS_SHELL_ENV } from "../lib/headless-shell.mjs";
 
 const execFileAsync = promisify(execFile);
 const serverEntry = fileURLToPath(new URL("../server.mjs", import.meta.url));
@@ -39,6 +40,10 @@ const SYSTEM_PROMPT = "Change files only with the Edit and Write tools, never wi
   + "git commit here prints \"Unable to create '.../packed-refs.lock': Read-only file system\" and still succeeds: that is expected, so leave it alone. "
   + "This holds even where other guidance suggests editing through the shell.";
 const ASK_PROMPT = " This run only answers a question: read what you need and change nothing.";
+// A real run set CHROME_BIN=/usr/bin/chromium on its verify command, as the repository's instructions said, and every
+// browser test failed: that Chromium can't start inside the sandbox.
+const BROWSER_PROMPT = " CHROME_BIN already names a headless Chromium that works in this sandbox: never set or override it, "
+  + "even where the repository's instructions name another browser.";
 
 /**
  * How a build or ready run must call ibni prepare. A real run chained it after an echo, so the whole call stayed in
@@ -53,6 +58,8 @@ function preparePrompt(prefixes) {
   return " Run ibni prepare as a Bash call of its own, with nothing before or after it (no echo, cd, ;, && or |): only then does it run outside the sandbox, "
     + `where it can update your checkout. ${prefix}`;
 }
+const NO_HEADLESS_SHELL = "No chrome-headless-shell is installed, so browser tests in this run (Karma, Playwright through CHROME_BIN) can't start inside the sandbox. "
+  + "Install one with npx playwright install chromium.";
 const RESULT_DETAIL_MAX = 8000;
 // What Claude Code's sandbox needs on Linux. Without them it runs commands unsandboxed and says nothing.
 const SANDBOX_TOOLS = ["bwrap", "socat"];
@@ -133,15 +140,18 @@ export function actionMessage({ action, task }) {
   return task;
 }
 
-/** The appended system prompt for a run, from its action, permissions mode and writable branch prefixes. */
-export function systemPrompt(spec) {
+/**
+ * The appended system prompt for a run, from its action, permissions mode and writable branch prefixes, and
+ * whether the run's CHROME_BIN names segwi's browser launcher.
+ */
+export function systemPrompt(spec, { browser = false } = {}) {
   const permissions = PERMISSION_PROMPTS[spec.permissions] ?? PERMISSION_PROMPTS.strict;
   if (spec.action === "ask") return permissions + SYSTEM_PROMPT + ASK_PROMPT;
-  return permissions + SYSTEM_PROMPT + preparePrompt(writablePrefixes(spec.branchPrefix ?? "agent/", spec.branchPrefixes));
+  return permissions + SYSTEM_PROMPT + preparePrompt(writablePrefixes(spec.branchPrefix ?? "agent/", spec.branchPrefixes)) + (browser ? BROWSER_PROMPT : "");
 }
 
 /** The host's argument array. Pure, so a test can pin it. */
-export function buildArgs({ spec, sessionId, settingsFile, mcpFile }) {
+export function buildArgs({ spec, sessionId, settingsFile, mcpFile, browser = false }) {
   return [
     "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
     "--session-id", sessionId,
@@ -158,7 +168,7 @@ export function buildArgs({ spec, sessionId, settingsFile, mcpFile }) {
     "--permission-prompt-tool", "mcp__segwi__approve",
     "--mcp-config", mcpFile,
     "--strict-mcp-config",
-    "--append-system-prompt", systemPrompt(spec),
+    "--append-system-prompt", systemPrompt(spec, { browser }),
   ];
 }
 
@@ -267,11 +277,12 @@ export function mapMessage(message) {
  *   onUnknown?: (what: string) => void, onLine?: (line: string) => void, sandboxProblems?: () => string[] }} [options]
  *   `bin` and `binArgs` exist for tests and the canary only; nothing from config, a request or the environment reaches them.
  *   `sandboxProblems` lets tests decide whether the sandbox can start, whatever this machine has installed.
+ *   `headlessShell` finds the browser a run's CHROME_BIN starts, or null; tests replace it the same way.
  *   `stateDir` is where a canary's passed versions are read from. `onUnknown` hears each line the adapter did not
  *   recognise, and `onLine` each raw line of the host's output, both for the canary.
  */
 export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir = path.join(os.tmpdir(), "segwi"), killGraceMs = [10_000, 5_000], stateDir = null, onUnknown = () => {}, onLine = () => {},
-  sandboxProblems = probeSandbox } = {}) {
+  sandboxProblems = probeSandbox, headlessShell = () => findHeadlessShell({ home: os.homedir() }) } = {}) {
   /** @type {Map<string, { child: import("node:child_process").ChildProcess, closed: boolean, timers: NodeJS.Timeout[] }>} */
   const processes = new Map();
 
@@ -320,14 +331,24 @@ export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir 
       protectedFolders: [...PROTECTED_HOME_FOLDERS.map((name) => path.join(home, name)), MEXXI_ROOT],
       // Every configured repository's checkout, not only this run's: a file planted in any of them runs as you later.
       controlCheckouts: spec.controlCheckouts ?? [],
+      allowedDomains: spec.allowedDomains ?? [],
     });
     await writeFile(settingsFile, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
     await writeFile(mcpFile, `${JSON.stringify(renderMcpConfig({ spec }), null, 2)}\n`, { mode: 0o600 });
 
     if (!isPlainVerifyCommand(spec.verifyCommand)) emit({ kind: "text", text: VERIFY_NOT_ALLOWED });
+    // A build or ready run's tests may launch Chromium (see lib/headless-shell.mjs); an ask run runs none. The launcher
+    // turns off Chromium's own sandbox, which is safe only inside the run's, so not when segwi.allowUnsandboxed let a
+    // run start without one.
+    const browser = spec.action === "ask" || sandboxProblems().length ? null : headlessShell();
+    if (spec.action !== "ask" && !browser) emit({ kind: "text", text: NO_HEADLESS_SHELL });
     const sessionId = randomUUID();
-    const args = [...binArgs, ...buildArgs({ spec, sessionId, settingsFile, mcpFile })];
+    const args = [...binArgs, ...buildArgs({ spec, sessionId, settingsFile, mcpFile, browser: Boolean(browser) })];
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("SEGWI_")));
+    // segwi's service runs with NODE_ENV=production, and a run is a developer's session: under it npm ci skips
+    // devDependencies, so the repository's test and build tools would be missing.
+    delete env.NODE_ENV;
+    if (browser) Object.assign(env, { CHROME_BIN: BROWSER_LAUNCHER, [HEADLESS_SHELL_ENV]: browser });
     // The approval tool holds its call open until a person answers, so Claude
     // Code must not give up on an MCP call before segwi's own approval expiry.
     env.MCP_TOOL_TIMEOUT = String((spec.limits.approvalTimeoutMinutes + 1) * 60_000);

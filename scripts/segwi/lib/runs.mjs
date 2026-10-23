@@ -8,7 +8,7 @@ import { audit } from "./audit.mjs";
 import { checkoutProblem, checkoutState } from "./checkout.mjs";
 import { HttpError } from "./errors.mjs";
 import { parsePrepareOutput } from "./ibni-link.mjs";
-import { permissionsFor } from "./settings.mjs";
+import { allowedDomainsFor, permissionsFor } from "./settings.mjs";
 import { assertWithinCaps, createWatchdog } from "./limits.mjs";
 import { StepFolder } from "./steps.mjs";
 import { FINAL } from "./store.mjs";
@@ -196,6 +196,7 @@ export function createRunService({ store, settings, runner, ibni, broker, server
           tailnetName: settings.segwi.auth.web.mode === "tailscale-header" ? settings.segwi.auth.web.hostname : undefined,
           branchPrefix: settings.branchPrefix, branchPrefixes: settings.segwi.branchPrefixes ?? [], controlCheckouts: repositories.map((candidate) => candidate.path),
           permissions: permissionsFor({ segwi: settings.segwi, repository, action: input.action }),
+          allowedDomains: allowedDomainsFor({ segwi: settings.segwi, repository }),
         }, emitterFor(id));
       } catch (error) {
         setStatus(id, "failed", `The agent could not start: ${error.message}`);

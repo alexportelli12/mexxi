@@ -1,4 +1,4 @@
-// Dependency setup for a workspace (decision 0013). The command is `setup` in
+// Dependency setup for a workspace (decision 0014). The command is `setup` in
 // the base commit's .mexxi.json, or the one install command a root lockfile
 // names. A lockfile is mapped by its name to a fixed command and never read,
 // so nothing in it can change what runs; anything ambiguous installs nothing.

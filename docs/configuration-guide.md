@@ -15,7 +15,7 @@ reviewed: 2026-10-23
 mexxi works without any configuration. You change it when your setup differs from the defaults: another forge, fewer agents, a stricter guard. Settings live in two files, so that how you work never has to be committed to a repository, and what a repository needs travels with it.
 
 - **`~/.config/mexxi/config.json`** is how you work, on your machine: which agents to install for, which models to use, which commands the guard watches for. Nobody else sees it, and a `git pull` of mexxi never conflicts with it. [Decision 0002](decisions/0002-one-config-rendered-host-files.md) explains why.
-- **`.mexxi.json`**, committed to a repository, is what that repository needs, whoever runs the task: its verify command, its setup command, its CI check, its forge. It is read from the default branch, so a task branch cannot change the rules it is checked by. [Decision 0010](decisions/0010-repository-names-its-verify-command.md) and [decision 0013](decisions/0013-ibni-runs-setup-and-verify.md) explain why.
+- **`.mexxi.json`**, committed to a repository, is what that repository needs, whoever runs the task: its verify command, its setup command, its CI check, its forge. It is read from the default branch, so a task branch cannot change the rules it is checked by. [Decision 0010](decisions/0010-repository-names-its-verify-command.md) and [decision 0014](decisions/0014-ibni-runs-setup-and-verify.md) explain why.
 
 After changing `config.json`, run `node scripts/install.mjs` again from your mexxi clone, so the agents pick up the change. A change to `.mexxi.json` takes effect once it is on the default branch.
 
@@ -81,6 +81,14 @@ A [segwi](segwi.md) run asks you only about what its allow list and [permissions
 
 ```json
 { "segwi": { "branchPrefixes": ["security/"], "repositories": [{ "name": "my-app", "path": "~/workspace/my-app", "actions": ["build", "ask"], "permissions": "strict" }] } }
+```
+
+### Let a segwi run's build reach a host it needs
+
+A run's network reaches only GitHub and the npm registry, so a build that downloads Google Fonts into its pages fails there. Add the hosts to the one repository that needs them, then check with `node scripts/segwi/smoke.mjs --repo my-app` ([more](segwi.md#let-a-runs-checks-pass-in-the-sandbox)):
+
+```json
+{ "segwi": { "repositories": [{ "name": "my-app", "path": "~/workspace/my-app", "actions": ["build"], "allowedDomains": ["fonts.googleapis.com", "fonts.gstatic.com"] }] } }
 ```
 
 ### Use another verify command, or reuse a CI run that already passed

@@ -1,4 +1,4 @@
-// The verify gate (decision 0013): record-evidence and publish accept a tree
+// The verify gate (decision 0014): record-evidence and publish accept a tree
 // only when ibni verify itself recorded a passing run on exactly that tree.
 
 const verifyAction = (sessionId, then) => `run ibni verify --session ${sessionId} in the background and wait for its result; once it passes, ${then}.`;
