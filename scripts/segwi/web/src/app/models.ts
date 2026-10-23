@@ -39,12 +39,21 @@ export interface RunDetail extends Run {
   steps: Step[];
 }
 
+/** What an Edit, Write or NotebookEdit call would put in the file, raw and complete. */
+export type ApprovalContent =
+  | { kind: 'write'; text: string }
+  | { kind: 'edit'; oldText: string; newText: string; replaceAll: boolean }
+  | { kind: 'notebook'; cellId: string | null; editMode: string | null; cellType: string | null; text: string };
+
 export interface Approval {
   id: string;
   runId: string;
   repo: string;
   tool: string;
+  /** The raw command, file path, URL or call: never redacted or cut. */
   exact: string;
+  /** Null for calls that change no file; absent from servers that predate it. */
+  content?: ApprovalContent | null;
   cwd: string;
   why: string;
   risk: string;

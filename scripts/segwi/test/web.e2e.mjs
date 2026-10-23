@@ -109,10 +109,51 @@ test("Approve is a deliberate tap, and the title counts what needs you", async (
   const waiting = async () => (await approvals()).length + (await runs()).filter((entry) => entry.status === "needs_input").length;
   assert.ok((await waiting()) >= 2);
   await waitFor(async () => (await page.title()) === `(${await waiting()}) segwi`, { what: "the title to match the count" });
+  // Taps are ignored for 500 ms after the cards move, so let them settle first.
+  await page.waitForTimeout(600);
   await page.locator(`#approval-${approval.id}`).getByRole("button", { name: "Approve" }).click();
   await page.locator(`#approval-${approval.id}`).getByText("Allowed", { exact: true }).waitFor();
   await waitFor(async () => (await api("/api/approvals?status=allowed")).approvals.some((entry) => entry.id === approval.id));
   await waitFor(async () => (await page.title()) === `(${await waiting()}) segwi`, { what: "the title after the decision" });
+  await close();
+});
+
+test("a tap that lands just as the cards move does nothing", async () => {
+  const run = await post("/api/runs", { repo: "my-app", action: "build", task: "Check what example.com serves, tapped too soon" });
+  const approval = await waitFor(async () => (await approvals()).find((entry) => entry.runId === run.run.id), { what: "the approval" });
+  const { page, close } = await open("/approvals");
+  const card = page.locator(`#approval-${approval.id}`);
+  await card.waitFor();
+  await page.waitForTimeout(600);
+  // Another approval arrives and the list changes under the finger.
+  const other = await post("/api/runs", { repo: "my-app", action: "build", task: "Check what example.com serves, arriving" });
+  await waitFor(async () => (await approvals()).some((entry) => entry.runId === other.run.id), { what: "the second approval" });
+  await page.locator(`#approval-${(await approvals()).find((entry) => entry.runId === other.run.id).id}`).waitFor();
+  await card.getByRole("button", { name: "Approve" }).click();
+  await page.waitForTimeout(300);
+  assert.ok((await approvals()).some((entry) => entry.id === approval.id), "the early tap did not approve");
+  await page.waitForTimeout(400);
+  await card.getByRole("button", { name: "Approve" }).click();
+  await card.getByText("Allowed", { exact: true }).waitFor();
+  await close();
+});
+
+test("an approval shows control and bidi characters as marked codes, whole, and copies the raw command", async () => {
+  const run = await post("/api/runs", { repo: "my-app", action: "build", task: "Print hidden characters in a status line" });
+  const approval = await waitFor(async () => (await approvals()).find((entry) => entry.runId === run.run.id), { what: "the approval" });
+  const { page, close } = await open(`/approvals/${approval.id}`);
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
+  const card = page.locator(`#approval-${approval.id}`);
+  await card.waitFor();
+  const block = card.getByTestId("approval-exact");
+  // Needs the server to send exact raw (no control characters stripped, nothing cut).
+  assert.deepEqual(await block.locator("[data-escape]").allTextContents(), ["\\x1b", "\\x1b", "U+202E", "U+202C", "U+2066", "U+2069", "\\r"]);
+  assert.ok((await block.textContent()).endsWith("Zq9".repeat(1000)), "the 3000-character token is shown whole");
+  assert.match(await card.getByTestId("hidden-characters").textContent(), /hidden or control characters/);
+  await card.getByRole("button", { name: "Copy the command" }).click();
+  assert.equal(await page.evaluate(() => navigator.clipboard.readText()), approval.exact);
+  assert.equal(approval.exact, 'printf "\u001b[2K\u001b[1Gok"; echo \u202Etxt.exe\u202C \u2066x\u2069\r TOKEN=' + "Zq9".repeat(1000));
+  await post(`/api/approvals/${approval.id}`, { decision: "deny" });
   await close();
 });
 

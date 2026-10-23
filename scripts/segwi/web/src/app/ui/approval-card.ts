@@ -5,15 +5,20 @@ import { now } from '../core/clock';
 import { DecisionResult, LiveService } from '../core/live';
 import { ApprovalTapGuard } from '../core/tap-guard';
 import { untilTime } from '../core/time';
+import { escapeCount, visibleSegments } from '../core/visible-text';
 import type { Approval } from '../models';
 import { Button } from './button';
 import { Card } from './card';
 import { CopyButton } from './copy-button';
+import { VisibleText } from './visible-text';
+
+/** What `exact` holds for each tool, as its heading. */
+const EXACT_LABELS: Record<string, string> = { Bash: 'Command', Edit: 'File', Write: 'File', NotebookEdit: 'File', Read: 'File', WebFetch: 'URL' };
 
 /** One approval: what exactly would run, where, why, and the two answers. Enter never approves. */
 @Component({
   selector: 'segwi-approval-card',
-  imports: [Button, Card, CopyButton, RouterLink],
+  imports: [Button, Card, CopyButton, RouterLink, VisibleText],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '[id]': '"approval-" + approval().id', class: 'block' },
   template: `
@@ -28,10 +33,14 @@ import { CopyButton } from './copy-button';
 
       <div class="flex flex-col gap-2">
         <div class="flex items-center justify-between gap-2">
-          <h2 class="text-sm text-muted">{{ approval().tool === 'Bash' ? 'Command' : 'Call' }}</h2>
-          <segwi-copy-button [text]="approval().exact" label="the command" />
+          <h2 class="text-sm text-muted">{{ exactLabel() }}</h2>
+          <segwi-copy-button [text]="approval().exact" [label]="'the ' + exactLabel().toLowerCase()" />
         </div>
-        <pre class="font-code max-h-60 overflow-auto rounded-card border border-border bg-bg p-3 text-sm whitespace-pre-wrap break-words" tabindex="0" [attr.aria-label]="'Exact ' + approval().tool + ' call'">{{ approval().exact }}</pre>
+        @if (hiddenCount()) {
+          <p class="text-sm text-needs-you" data-testid="hidden-characters">{{ hiddenNote() }}</p>
+        }
+        <!-- Shown whole: a scrolling box, never cut, with hidden characters as chips. -->
+        <pre class="font-code max-h-60 overflow-auto rounded-card border border-border bg-bg p-3 text-sm whitespace-pre-wrap break-words" tabindex="0" data-testid="approval-exact" [attr.aria-label]="'Exact ' + approval().tool + ' call'"><segwi-visible-text [text]="approval().exact" /></pre>
       </div>
 
       <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[15px]">
@@ -39,7 +48,7 @@ import { CopyButton } from './copy-button';
         <dd class="font-code text-sm break-all">{{ approval().cwd }}</dd>
         @if (approval().why) {
           <dt class="text-muted">Why</dt>
-          <dd>{{ approval().why }}</dd>
+          <dd class="min-w-0 break-words whitespace-pre-wrap" data-testid="approval-why"><segwi-visible-text [text]="approval().why" /></dd>
         }
       </dl>
 
@@ -73,6 +82,12 @@ export class ApprovalCard {
   protected readonly busy = signal(false);
   protected readonly error = signal('');
   private readonly deny = viewChild('deny', { read: ElementRef<HTMLButtonElement> });
+  protected readonly exactLabel = computed(() => EXACT_LABELS[this.approval().tool] ?? 'Call');
+  protected readonly hiddenCount = computed(() => escapeCount(visibleSegments(this.approval().exact)) + escapeCount(visibleSegments(this.approval().why ?? '')));
+  protected readonly hiddenNote = computed(() => {
+    const count = this.hiddenCount();
+    return `${count} hidden or control character${count === 1 ? '' : 's'} shown as marked codes. Copy gives the exact text.`;
+  });
   protected readonly expiry = computed(() => untilTime(this.approval().expiresAt, now()));
   protected readonly resultText = computed(() => {
     const result = this.result();

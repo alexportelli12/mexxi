@@ -57,4 +57,27 @@ describe('ApprovalCard', () => {
     button(element, 'Deny').dispatchEvent(new MouseEvent('click', { detail: 0, bubbles: true }));
     expect(decide).toHaveBeenCalledWith('ap1', 'deny');
   });
+
+  it('shows exact and why whole, with hidden characters as chips, and copies the raw string', async () => {
+    const opaque = 'x'.repeat(3000);
+    const exact = `printf "\u001b[2K" \u202Etxt.exe TOKEN=${opaque}`;
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const { element } = await render({ exact, why: 'Check\u200B it' });
+    const block = element.querySelector('[data-testid="approval-exact"]')!;
+    expect([...block.querySelectorAll('[data-escape]')].map((chip) => chip.textContent)).toEqual(['\\x1b', 'U+202E']);
+    expect(block.textContent).toBe(`printf "\\x1b[2K" U+202Etxt.exe TOKEN=${opaque}`);
+    expect(element.querySelector('[data-testid="approval-why"] [data-escape]')?.textContent).toBe('U+200B');
+    expect(element.querySelector('[data-testid="hidden-characters"]')?.textContent).toContain('3 hidden or control characters');
+    button(element, 'Copy').click();
+    await Promise.resolve();
+    expect(writeText).toHaveBeenCalledWith(exact);
+  });
+
+  it('names what exact is for each tool', async () => {
+    expect((await render({ tool: 'Bash' })).element.querySelector('h2')?.textContent).toBe('Command');
+    expect((await render({ tool: 'Write', exact: '/w/a.ts' })).element.querySelector('h2')?.textContent).toBe('File');
+    expect((await render({ tool: 'WebFetch' })).element.querySelector('h2')?.textContent).toBe('URL');
+    expect((await render({ tool: 'mcp__x__y' })).element.querySelector('h2')?.textContent).toBe('Call');
+  });
 });
