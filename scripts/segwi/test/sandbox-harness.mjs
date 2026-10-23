@@ -73,11 +73,14 @@ export function sandboxPrerequisiteProblem() {
  * reads them, for example `{ sandbox: { enabled: false } }`, or a function of `{ repo, worktreeRoot, home, hostDataDir }` that
  * returns one. A "$cwd" key in the patch starts Claude Code in that directory instead of the repository. Without a
  * patch, Claude Code gets exactly what segwi renders and starts where segwi starts it.
+ * `otherRepository` adds a second configured repository (`other-app`), passed to `prepare` and returned as `otherRepo`.
+ * `segwi` overrides segwi's own settings, such as `{ permissions: "sandboxed", branchPrefixes: ["security/"] }`. Auto mode
+ * needs Claude Code's real classifier, which the fake model can't play, so these runs are strict unless a test says otherwise.
  * @returns {Promise<{ results: Array<{ isError: boolean, text: string } | undefined>, approvals: object[], audit: object[],
  *   run: object, server: object, repo: string, worktreeRoot: string, home: string }>}
  *   `results[i]` is the tool result for script turn i. The segwi server is closed when the test ends.
  */
-export async function runScripted(t, { script, action = "ask", decide = () => "allow", prepare = async () => {}, settingsPatch = null }) {
+export async function runScripted(t, { script, action = "ask", decide = () => "allow", prepare = async () => {}, settingsPatch = null, segwi = {}, otherRepository = false }) {
   const context = {};
   const model = await startFakeAnthropic(script.map((turn) => (typeof turn === "function" ? () => turn(context) : turn)));
   t.after(() => model.close());
@@ -97,7 +100,8 @@ export async function runScripted(t, { script, action = "ask", decide = () => "a
     writeFileSync(path.join(configDir, "commands", "wettaq.md"), "$ARGUMENTS\n");
     writeFileSync(path.join(home, "mexxi-config.json"), JSON.stringify({ paths: { worktreeRoot } }));
   }
-  await prepare({ repo, worktreeRoot, home });
+  const otherRepo = otherRepository ? makeRepo(t) : null;
+  await prepare({ repo, worktreeRoot, home, otherRepo });
 
   // The adapter hands Claude Code this process's environment, so the run's environment is set here for the run's length.
   const env = {
@@ -133,12 +137,13 @@ export async function runScripted(t, { script, action = "ask", decide = () => "a
     if (event.kind === "exit") exited();
     emit(event);
   });
-  const settings = makeSettings({ repos: [{ name: "my-app", path: repo, actions: [action] }], worktreeRoot });
+  const repos = [{ name: "my-app", path: repo, actions: [action] }, ...(otherRepo ? [{ name: "other-app", path: otherRepo, actions: ["build"] }] : [])];
+  const settings = makeSettings({ repos, worktreeRoot, segwi });
   const server = await startServer({ settings, dataDir, runner: adapter, ibni: noIbni, staticRoot: null });
   t.after(() => server.close());
   // Once in a while Claude Code's last session writes race the first removal of its home; this one runs after the server is closed.
   t.after(() => rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
-  Object.assign(context, { segwiPort: server.port, repo, worktreeRoot, home, hostDataDir, result: (index) => model.toolResults()[toolUseId(index)] });
+  Object.assign(context, { segwiPort: server.port, repo, otherRepo, worktreeRoot, home, hostDataDir, result: (index) => model.toolResults()[toolUseId(index)] });
 
   const started = await request(server, "POST", "/api/runs", { body: { repo: "my-app", action, task: "Follow the script." } });
   if (started.status !== 201 && started.status !== 200) throw new Error(`segwi refused the run: ${started.status} ${started.text}`);
@@ -163,6 +168,6 @@ export async function runScripted(t, { script, action = "ask", decide = () => "a
   const toolResults = model.toolResults();
   return {
     results: script.map((_, index) => toolResults[toolUseId(index)]),
-    approvals, audit: server.store.listAudit(1000), run: finished, server, repo, worktreeRoot, home, hostDataDir, model,
+    approvals, audit: server.store.listAudit(1000), run: finished, server, repo, otherRepo, worktreeRoot, home, hostDataDir, model,
   };
 }

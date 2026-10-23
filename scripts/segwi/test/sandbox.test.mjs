@@ -9,6 +9,8 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
+import { request } from "./helpers.mjs";
 import { runScripted, sandboxPrerequisiteProblem } from "./sandbox-harness.mjs";
 
 const problem = sandboxPrerequisiteProblem();
@@ -306,4 +308,191 @@ test("the file tools can't write the control checkout below its top level or thr
   assert.match(results[8].text, /"operation":"record-evidence"/, report);
   assert.ok(!existsSync(path.join(repo, ".git", "opencode-implementation.lock")), "no lock was left in the git directory");
   assert.deepEqual(controlState(repo), UNTOUCHED);
+});
+
+// --- ibni prepare outside the sandbox, and the branches a run may write ---
+// A real build run on verifika chained prepare after an echo. Claude Code takes a call out of the sandbox only when
+// every command in it matches an excludedCommands entry, so that whole call ran sandboxed and failed at the lock.
+
+const branchesOf = (repo) => git(repo, "for-each-ref", "--format=%(refname:short)", "refs/heads").split("\n").sort();
+
+test("ibni prepare runs outside the sandbox in each allowed form, and a call that chains it stays inside", { skip, timeout: 180_000 }, async (t) => {
+  const script = [
+    bash("ibni prepare --slug plain"),
+    bash('ibni prepare --slug "quoted"'),
+    bash("ibni prepare --slug listed --prefix security"),
+    bash("ibni prepare --prefix security --slug reordered"),
+    bash("echo $IBNI_LAUNCH_CHECKOUT; ibni prepare --slug chained --prefix security"),
+    bash("ibni prepare --slug unlisted --prefix fix"),
+    { text: "Done." },
+  ];
+  // Every approval is allowed, so the chained call runs once a person says yes, and only the sandbox decides where.
+  const { results, approvals, repo } = await runScripted(t, { action: "build", script, segwi: { branchPrefixes: ["security/"] } });
+  const report = show(results, approvals);
+
+  // Each plain form updated the checkout's git directory, which only a call outside the sandbox can write.
+  const branches = [0, 1, 2, 3].map((index) => {
+    assert.equal(results[index]?.isError, false, `turn ${index}: ${report}`);
+    return JSON.parse(results[index].text).branch;
+  });
+  assert.deepEqual(branches, ["agent/plain", "agent/quoted", "security/listed", "security/reordered"]);
+  assert.deepEqual(approvals.map((approval) => approval.exact), [script[4].input.command], `only the chained call asked: ${report}`);
+  // The chained call stayed inside, so it couldn't take the lock, and ibni says which form works.
+  assert.equal(results[4]?.isError, true, report);
+  assert.match(results[4].text, /can't write the repository's git directory \(EROFS: .*opencode-implementation\.lock\)/, report);
+  assert.match(results[4].text, /a Bash call of its own/, report);
+  // A prefix the sandbox won't let the run write later is refused before a branch exists.
+  assert.equal(results[5]?.isError, true, report);
+  assert.match(results[5].text, /--prefix fix isn't one this run can write/, report);
+  assert.deepEqual(branchesOf(repo), [...branches, "main"].sort());
+});
+
+test("a run commits on a segwi.branchPrefixes branch, and can't write a branch under any other prefix", { skip, timeout: 180_000 }, async (t) => {
+  const script = [
+    bash("ibni prepare --slug audit-fix --prefix security"),
+    (context) => bash(`cd ${worktreeOf(context)}`),
+    (context) => ({ tool: "Write", input: { file_path: path.join(worktreeOf(context), "note.txt"), content: "note\n" } }),
+    bash("git add note.txt"),
+    bash('git commit -q -m "on a listed prefix"'),
+    bash("git branch fix/sneaky"),
+    bash("git branch agent/allowed"),
+    { text: "Done." },
+  ];
+  const { results, approvals, repo } = await runScripted(t, { action: "build", script, segwi: { branchPrefixes: ["security/"] } });
+  const report = show(results, approvals);
+  for (const index of [0, 2, 3, 4]) assert.equal(results[index]?.isError, false, `turn ${index}: ${report}`);
+  assert.equal(git(repo, "log", "-1", "--format=%s", "security/audit-fix"), "on a listed prefix");
+  // git branch is off the allow list: a person allowed both, and the sandbox let only the rendered prefixes through.
+  assert.equal(results[5]?.isError, true, report);
+  assert.match(results[5].text, /cannot lock ref 'refs\/heads\/fix\/sneaky': unable to create directory/, report);
+  assert.equal(results[6]?.isError, false, report);
+  assert.deepEqual(branchesOf(repo), ["agent/allowed", "main", "security/audit-fix"]);
+});
+
+// --- the permissions modes ---
+// The shapes of the approvals real runs raised (the PR lists them), with this run's paths.
+const realRunShapes = ({ repo, worktreeRoot }) => [
+  `cd ${worktreeRoot} && ls && git --version`,
+  `pwd; git -C ${repo} status --short --branch; ibni prepare --help`,
+  "echo $IBNI_LAUNCH_CHECKOUT; ibni prepare --slug audit-fix --prefix security",
+  // An inline body with a Markdown heading, as the real one had: a line starting with # is what made it ask.
+  'gh pr create --title "Docs" --body "First line.\n\n## Decisions\n- Documented the routes."',
+].map(bash);
+
+test("sandboxed mode runs the commands that asked in real runs unasked, while a call outside the sandbox still asks and a deny rule still refuses", { skip, timeout: 240_000 }, async (t) => {
+  const shapes = [0, 1, 2, 3].map((index) => (context) => realRunShapes(context)[index]);
+  const outside = ({ home }) => ({ tool: "Write", input: { file_path: path.join(home, "outside.txt"), content: "x\n" } });
+  const script = [...shapes, outside, bash("npm publish"), { text: "Done." }];
+  // security/ is listed, as verifika's would be, so the chained prepare gets as far as the lock.
+  const segwi = { branchPrefixes: ["security/"] };
+  const sandboxed = await runScripted(t, { action: "build", script, decide: () => "deny", segwi: { ...segwi, permissions: "sandboxed" } });
+  const report = show(sandboxed.results, sandboxed.approvals);
+  assert.deepEqual(sandboxed.approvals.map((approval) => approval.tool), ["Write"], `only the file write outside the sandbox asked: ${report}`);
+  assert.equal(sandboxed.results[0]?.isError, false, report);
+  // Still sandboxed, so the chained prepare fails as it did on verifika, now with the form that works.
+  assert.match(sandboxed.results[2]?.text ?? "", /a Bash call of its own/, report);
+  assert.ok(!existsSync(path.join(sandboxed.home, "outside.txt")), report);
+  assert.match(sandboxed.results[5]?.text ?? "", /has been denied/, report);
+  const { steps } = (await request(sandboxed.server, "GET", `/api/runs/${sandboxed.run.id}`)).json.run;
+  assert.deepEqual(steps.filter((step) => step.type === "refusal").map((step) => step.detail), ["Refused: npm publish — a deny rule"]);
+  assert.equal(sandboxed.audit.filter((row) => row.action === "run.refused").length, 1);
+
+  // Control: strict mode, today's behaviour, asks for every one of them.
+  const strict = await runScripted(t, { action: "build", script: [...shapes, { text: "Done." }], decide: () => "deny", segwi });
+  assert.equal(strict.approvals.length, 4, show(strict.results, strict.approvals));
+});
+
+// The file tools run outside the sandbox, so in auto mode only a deny rule, not a person, keeps them from files
+// that later run as you. Here every approval is allowed (except one into this checkout), so only a deny rule refuses.
+const MEXXI_ROOT = path.resolve(fileURLToPath(new URL("../../../", import.meta.url)));
+
+test("the file tools can't write your keys, shell or git config, agent config or mexxi itself, even when a person allows it", { skip, timeout: 180_000 }, async (t) => {
+  const prepare = ({ home }) => {
+    writeFileSync(path.join(home, ".bashrc"), "# rc\n");
+    writeFileSync(path.join(home, ".gitconfig"), "[user]\n");
+    mkdirSync(path.join(home, ".ssh"), { mode: 0o700 });
+    mkdirSync(path.join(home, ".config"));
+  };
+  const write = (target) => (context) => ({ tool: "Write", input: { file_path: target(context), content: `${PLANTED}\n` } });
+  const script = [
+    write(({ home }) => path.join(home, ".bashrc")),
+    write(({ home }) => path.join(home, ".gitconfig")),
+    write(({ home }) => path.join(home, ".ssh", "authorized_keys")),
+    write(({ home }) => path.join(home, ".config", "systemd", "user", "planted.service")),
+    write(({ home }) => path.join(home, ".claude", "settings.json")),
+    write(() => path.join(MEXXI_ROOT, "scripts", `${PLANTED}.mjs`)),
+    { text: "Done." },
+  ];
+  // A write into this checkout is never allowed here, so a missing rule fails the test instead of planting a file.
+  const decide = (approval) => (approval.exact.includes(MEXXI_ROOT) ? "deny" : "allow");
+  const { results, approvals, home } = await runScripted(t, { action: "build", script, decide, prepare });
+  const report = show(results, approvals);
+  for (const index of [0, 1, 2, 3, 4, 5]) assert.match(results[index]?.text ?? "", /denied/, `turn ${index}: ${report}`);
+  assert.deepEqual(approvals, [], `a deny rule refused each one before a person was asked: ${report}`);
+  assert.equal(readFileSync(path.join(home, ".bashrc"), "utf8"), "# rc\n");
+  assert.ok(!existsSync(path.join(home, ".ssh", "authorized_keys")) && !existsSync(path.join(MEXXI_ROOT, "scripts", `${PLANTED}.mjs`)), report);
+});
+
+test("in sandboxed mode a push or a GitHub API call still asks, though it would run inside the sandbox", { skip, timeout: 180_000 }, async (t) => {
+  const script = [bash("git push origin HEAD:main"), bash("gh api repos/someone/something"), bash("echo still-unasked"), { text: "Done." }];
+  const { results, approvals } = await runScripted(t, { action: "build", script, decide: () => "deny", segwi: { permissions: "sandboxed" } });
+  const report = show(results, approvals);
+  assert.deepEqual(approvals.map((approval) => approval.exact), ["git push origin HEAD:main", "gh api repos/someone/something"], report);
+  assert.equal(results[2]?.isError, false, report);
+});
+
+// Every configured repository's checkout is yours, not only the run's own: a file planted in another one runs as you
+// the next time you work there. The file tools run outside the sandbox, so only a deny rule keeps them out.
+for (const permissions of ["sandboxed", "auto"]) {
+  test(`in ${permissions} mode the file tools can't write another configured repository's checkout`, { skip, timeout: 180_000 }, async (t) => {
+    const manifest = '{ "name": "other-app" }\n';
+    const prepare = ({ otherRepo }) => writeFileSync(path.join(otherRepo, "package.json"), manifest);
+    const script = [
+      // The Edit tool refuses a file it hasn't read before it checks any permission, so it reads it first.
+      ({ otherRepo }) => ({ tool: "Read", input: { file_path: path.join(otherRepo, "package.json") } }),
+      ({ otherRepo }) => ({ tool: "Edit", input: { file_path: path.join(otherRepo, "package.json"), old_string: "other-app", new_string: PLANTED } }),
+      ({ otherRepo }) => ({ tool: "Write", input: { file_path: path.join(otherRepo, "src", `${PLANTED}.js`), content: "x\n" } }),
+      { text: "Done." },
+    ];
+    const { results, approvals, otherRepo } = await runScripted(t, { action: "build", script, prepare, otherRepository: true, segwi: { permissions } });
+    const report = show(results, approvals);
+    for (const index of [1, 2]) assert.match(results[index]?.text ?? "", /denied/, `turn ${index}: ${report}`);
+    // The read may ask; the writes never do: a deny rule refuses them before a person or the classifier is asked.
+    assert.deepEqual(approvals.filter((approval) => approval.tool !== "Read"), [], report);
+    assert.equal(readFileSync(path.join(otherRepo, "package.json"), "utf8"), manifest);
+    assert.ok(!existsSync(path.join(otherRepo, "src")), report);
+  });
+}
+
+test("the file tools can't create a protected home file or folder that doesn't exist yet, and the sandbox still starts", { skip, timeout: 180_000 }, async (t) => {
+  const write = (target) => (context) => ({ tool: "Write", input: { file_path: target(context), content: `${PLANTED}\n` } });
+  const targets = [".zshenv", ".bash_profile", ".gitconfig", path.join(".local", "bin", "planted"), path.join(".config", "planted", "x"), path.join(".claude", "CLAUDE.md")];
+  const script = [...targets.map((name) => write(({ home }) => path.join(home, name))), bash("echo still-sandboxed"), { text: "Done." }];
+  const { results, approvals, home } = await runScripted(t, { action: "build", script });
+  const report = show(results, approvals);
+  targets.forEach((name, index) => assert.match(results[index]?.text ?? "", /denied/, `${name}: ${report}`));
+  assert.deepEqual(approvals, [], report);
+  for (const name of targets) assert.ok(!existsSync(path.join(home, name)), `${name}: ${report}`);
+  assert.deepEqual(results[targets.length], { isError: false, text: "still-sandboxed" }, report);
+});
+
+test("ibni prepare stays inside the sandbox with a command substitution, a redirect or a second line", { skip, timeout: 180_000 }, async (t) => {
+  const forms = [
+    'ibni prepare --slug "$(id)"',
+    // Unquoted, id's output splits into several arguments, so ibni stops at them before it reaches the lock.
+    "ibni prepare --slug `id`",
+    "ibni prepare --slug `id -u`",
+    "ibni prepare --slug x > /tmp/out",
+    "ibni prepare --slug x\necho second-line",
+  ];
+  // Every approval is allowed, so only the sandbox decides where each one ran.
+  const { results, approvals, repo } = await runScripted(t, { action: "build", script: [...forms.map(bash), { text: "Done." }] });
+  const report = show(results, approvals);
+  // Inside, prepare can't take the git directory's lock, and the shell can't open the redirect's file; outside it could.
+  for (const index of [0, 2, 3, 4]) assert.match(results[index]?.text ?? "", /EROFS|read-only file system/i, `${forms[index]}: ${report}`);
+  assert.match(results[1]?.text ?? "", /invalid argument/, report);
+  for (const index of [0, 1, 2, 3]) assert.equal(results[index]?.isError, true, `${forms[index]}: ${report}`);
+  // The second line ran after prepare failed inside.
+  assert.match(results[4].text, /second-line/, report);
+  assert.deepEqual(branchesOf(repo), ["main"], `no form made a branch: ${report}`);
 });

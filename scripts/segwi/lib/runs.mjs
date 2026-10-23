@@ -8,6 +8,7 @@ import { audit } from "./audit.mjs";
 import { checkoutProblem, checkoutState } from "./checkout.mjs";
 import { HttpError } from "./errors.mjs";
 import { parsePrepareOutput } from "./ibni-link.mjs";
+import { permissionsFor } from "./settings.mjs";
 import { assertWithinCaps, createWatchdog } from "./limits.mjs";
 import { StepFolder } from "./steps.mjs";
 import { FINAL } from "./store.mjs";
@@ -106,7 +107,10 @@ export function createRunService({ store, settings, runner, ibni, broker, server
       state.prepareCalls.add(data.toolUseId);
     }
     const row = store.addEvent(runId, kind, data);
-    broker.publish(row, state.folder.add(row));
+    const step = state.folder.add(row);
+    broker.publish(row, step);
+    // Counted in the audit log too, so refusals across runs can be counted by action.
+    if (kind === "refusal") audit(store, { actor: "system", origin: "system", action: "run.refused", target: runId, outcome: "rejected", detail: step.detail });
     if (run.status !== "needs_approval") watchdog.touch(runId);
     if (kind === "step" && data.phase === "result" && state.prepareCalls.has(data.toolUseId)) {
       const prepared = parsePrepareOutput(data.detail, settings.worktreeRoot);
@@ -185,7 +189,8 @@ export function createRunService({ store, settings, runner, ibni, broker, server
           worktreeRoot: settings.worktreeRoot, verifyCommand,
           denyPatterns: settings.deny, browser: settings.browser, serverUrl: serverUrl(), bindPort: Number(new URL(serverUrl() || "http://127.0.0.1").port) || undefined, runSecret,
           tailnetName: settings.segwi.auth.web.mode === "tailscale-header" ? settings.segwi.auth.web.hostname : undefined,
-          branchPrefix: settings.branchPrefix,
+          branchPrefix: settings.branchPrefix, branchPrefixes: settings.segwi.branchPrefixes ?? [], controlCheckouts: repositories.map((candidate) => candidate.path),
+          permissions: permissionsFor({ segwi: settings.segwi, repository, action: input.action }),
         }, emitterFor(id));
       } catch (error) {
         setStatus(id, "failed", `The agent could not start: ${error.message}`);

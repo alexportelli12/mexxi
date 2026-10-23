@@ -208,6 +208,36 @@ test("takes the branch prefix from config.json unless --prefix overrides it", as
   assert.equal(explicit.json.branch, "fix/explicit");
 });
 
+test("under IBNI_BRANCH_PREFIXES, prepare takes only a listed prefix and refuses any other before making a branch", async (t) => {
+  const fixture = await createFixture(t);
+  // segwi lists workflow.branchPrefix and segwi.branchPrefixes, one per line: its sandbox can write only those refs.
+  const env = { IBNI_BRANCH_PREFIXES: "agent/\nsecurity/" };
+  const configured = await lifecycle(fixture, fixture.control, "prepare", { slug: "configured" }, [0], env);
+  assert.equal(configured.json.branch, "agent/configured");
+  const listed = await lifecycle(fixture, fixture.control, "prepare", { slug: "listed", prefix: "security" }, [0], env);
+  assert.equal(listed.json.branch, "security/listed");
+  const branches = async () => (await git(fixture.control, "for-each-ref", "--format=%(refname)", "refs/heads")).stdout;
+  const before = await branches();
+  const refused = await lifecycle(fixture, fixture.control, "prepare", { slug: "refused", prefix: "fix" }, [2], env);
+  assert.match(refused.stderr, /--prefix fix isn't one this run can write/);
+  assert.match(refused.stderr, /segwi\.branchPrefixes/);
+  assert.equal(await branches(), before, "no branch was made");
+});
+
+test("prepare says how to run it when it can't write the git directory, as inside segwi's sandbox", async (t) => {
+  const fixture = await createFixture(t);
+  const gitDirectory = path.join(fixture.control, ".git");
+  await chmod(gitDirectory, 0o555);
+  // Restored here, not in t.after: the fixture's own cleanup, registered first, runs first.
+  const prepare = (env) => lifecycle(fixture, fixture.control, "prepare", { slug: "read-only" }, [2], env);
+  const [plain, segwi] = await Promise.all([prepare({}), prepare({ IBNI_LAUNCH_CHECKOUT: fixture.control })]).finally(() => chmod(gitDirectory, 0o755));
+  assert.match(segwi.stderr, /can't write the repository's git directory \(EACCES: .*opencode-implementation\.lock\)/);
+  assert.match(segwi.stderr, /a Bash call of its own/);
+  // Outside a segwi run the error is left as it was.
+  assert.match(plain.stderr, /EACCES: permission denied, mkdir/);
+  assert.doesNotMatch(plain.stderr, /a Bash call of its own/);
+});
+
 test("refuses retired worktree-root variables and invalid configuration before touching Git", async (t) => {
   const fixture = await createFixture(t);
   for (const name of ["IMPLEMENTATION_WORKTREE_ROOT", "OPENCODE_WORKTREE_ROOT"]) {

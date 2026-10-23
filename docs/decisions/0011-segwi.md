@@ -1,5 +1,5 @@
 ---
-status: Accepted
+status: Accepted; its "Strict permissions" point is superseded by 0012
 date: 2026-10-22
 ---
 

@@ -108,6 +108,6 @@ From the repository's default branch, type this in your agent's chat to ask [`/w
 /wettaq show the last sync time on the settings page
 ```
 
-The agent works on its own and asks you only about product decisions it cannot settle from the code. [How a run works](how-a-run-works.md) walks through what happens next, and [Reviewing a mexxi pull request](reviewing-a-pull-request.md) covers what you check when the pull request arrives.
+The agent works on its own and asks you only about product decisions it cannot settle from the code. To start and follow runs from your phone instead, set up [segwi](segwi.md). [How a run works](how-a-run-works.md) walks through what happens next, and [Reviewing a mexxi pull request](reviewing-a-pull-request.md) covers what you check when the pull request arrives.
 
 You rarely run `ibni` yourself. Each task's worktree is kept after its pull request opens, for follow-up changes. A kept worktree and its record are called a [workspace](glossary.md#workspace). Once the pull request merges, the next task you start removes it. `ibni list` shows the kept workspaces, and `ibni cleanup` shows what it would remove. The [CLI reference](cli/index.md) lists the few subcommands you might run, and why each exists.

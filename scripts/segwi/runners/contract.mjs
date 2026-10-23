@@ -7,6 +7,7 @@ import { z } from "zod";
  *   runId: string, repoPath: string, action: "build"|"ready"|"ask", task: string, model?: string,
  *   limits: { maxTurns: number }, worktreeRoot: string, verifyCommand: string,
  *   denyPatterns: string[], browser: object, serverUrl?: string, bindPort?: number, tailnetName?: string, branchPrefix?: string, runSecret?: string,
+ *   permissions?: "auto"|"sandboxed"|"strict", branchPrefixes?: string[], controlCheckouts?: string[],
  * }} RunSpec
  * @typedef {{ id: string, capabilities: { input: boolean, approvals: boolean, cost: boolean },
  *   detect(): Promise<{ available: boolean, version: string|null, testedVersions: string[], problems: string[], sandbox: { available: boolean, problems: string[] } }>,
@@ -31,6 +32,8 @@ export const runEventSchema = z.union([
   z.strictObject({
     kind: z.literal("step"), phase: z.literal("result"), toolUseId: z.string().min(1), ok: z.boolean(), detail: z.string(),
   }),
+  // Something other than a person refused a call (a classifier, a deny rule or a hook); it follows the call's result.
+  z.strictObject({ kind: z.literal("refusal"), toolUseId: z.string().min(1), reason: z.string().min(1) }),
   z.strictObject({ kind: z.literal("needs-input"), prompt: z.string().optional() }),
   z.strictObject({ kind: z.literal("approval"), approvalId: z.string().min(1) }),
   z.strictObject({

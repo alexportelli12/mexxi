@@ -75,6 +75,14 @@ To keep production deploys for a human, add your deploy command to the guard's l
 { "guard": { "deny": ["npm publish", "gh pr merge", "gh release create", "git push --force", "git push -f", "npm run deploy"] } }
 ```
 
+### Choose how often a segwi run asks you
+
+A [segwi](segwi.md) run asks you only about what its allow list and [permissions mode](segwi.md#choose-a-permissions-mode) leave to you. Auto mode is the default. To approve every call yourself in one repository you trust less, and let one whose instructions require `security/` branches use them:
+
+```json
+{ "segwi": { "branchPrefixes": ["security/"], "repositories": [{ "name": "my-app", "path": "~/workspace/my-app", "actions": ["build", "ask"], "permissions": "strict" }] } }
+```
+
 ### Use another verify command, or reuse a CI run that already passed
 
 In the repository's `.mexxi.json`:

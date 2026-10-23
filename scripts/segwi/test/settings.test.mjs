@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { ConfigError, resolveConfig } from "../../lib/config.mjs";
 import { dataDir, ensurePrivateDir } from "../lib/paths.mjs";
-import { settingsFromConfig } from "../lib/settings.mjs";
+import { permissionsFor, settingsFromConfig } from "../lib/settings.mjs";
 import { openStore } from "../lib/store.mjs";
 
 const home = path.join(path.sep, "home", "someone");
@@ -64,4 +64,17 @@ test("the VAPID subject is empty by default, takes a real contact, and refuses p
   assert.throws(() => settingsFromConfig(withSubject("mailto:segwi@localhost")), /placeholder/);
   // The schema checks the shape; the clear message about placeholders comes from settings.
   await assert.rejects(resolveConfig({ segwi: { vapidSubject: "segwi@example.com" } }, { home }), /vapidSubject/);
+});
+
+test("a run takes its repository's permissions mode, else segwi.permissions, and an ask run is always strict", async () => {
+  const config = await resolveConfig({ segwi: { permissions: "sandboxed", repositories: [
+    { name: "own", path: "~/own", actions: ["build", "ask"], permissions: "strict" },
+    { name: "inherits", path: "~/inherits", actions: ["build", "ready", "ask"] },
+  ] } }, { home });
+  const { segwi } = settingsFromConfig(config, { home });
+  const [own, inherits] = segwi.repositories;
+  assert.equal(permissionsFor({ segwi, repository: own, action: "build" }), "strict");
+  assert.equal(permissionsFor({ segwi, repository: inherits, action: "build" }), "sandboxed");
+  assert.equal(permissionsFor({ segwi, repository: inherits, action: "ready" }), "sandboxed");
+  assert.equal(permissionsFor({ segwi: { ...segwi, permissions: "auto" }, repository: inherits, action: "ask" }), "strict");
 });

@@ -4,7 +4,7 @@ export type RunStatus =
   | 'queued' | 'running' | 'needs_input' | 'needs_approval'
   | 'completed' | 'failed' | 'stopped' | 'timed_out';
 
-export type StepType = 'edit' | 'command' | 'test' | 'read' | 'message';
+export type StepType = 'edit' | 'command' | 'test' | 'read' | 'message' | 'refusal';
 
 export interface Step {
   id: string;

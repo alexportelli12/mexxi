@@ -1,6 +1,6 @@
 // Folds stored run events into the readable steps the app shows: edit, command,
-// test, read and message. A tool_result attaches its outcome to the step of the
-// call it answers.
+// test, read, message and refusal. A tool_result attaches its outcome to the step
+// of the call it answers.
 import path from "node:path";
 import { cleanText } from "./clean.mjs";
 
@@ -63,6 +63,10 @@ export class StepFolder {
         return step;
       }
       return null;
+    } else if (row.kind === "refusal") {
+      // Its own step, so a refused call shows as refused and why, not as one more failed command.
+      const text = `Refused: ${this.byTool.get(row.data.toolUseId)?.title ?? "a call"} — ${row.data.reason}`;
+      step = { ...base, id: `r${row.seq}`, type: "refusal", title: cleanText(text, TITLE_MAX), detail: cleanText(text, DETAIL_MAX), ok: false };
     }
     if (step) this.steps.push(step);
     return step;

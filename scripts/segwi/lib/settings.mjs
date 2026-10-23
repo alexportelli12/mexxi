@@ -5,6 +5,7 @@ import path from "node:path";
 import { ConfigError, expandHome, loadConfig } from "../../lib/config.mjs";
 
 export const ACTIONS = ["build", "ready", "ask"];
+export const PERMISSION_MODES = ["auto", "sandboxed", "strict"];
 const REPO_NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/;
 // Names that never reach a real mailbox or site. Push services (Apple's in particular) refuse
 // a VAPID subject on them, so segwi refuses it first, with a clearer message.
@@ -37,11 +38,12 @@ export function vapidSubjectProblem(subject) {
 }
 
 /**
- * @typedef {{ name: string, path: string, actions: string[] }} Repository
+ * @typedef {{ name: string, path: string, actions: string[], permissions?: string }} Repository
  * @typedef {{
  *   segwi: { enabled: boolean, bind: { host: string, port: number }, runner: string, repositories: Repository[],
  *            auth: { web: { mode: string, header: string, allowed: string[], hostname: string } },
- *            limits: Record<string, number>, push: boolean, vapidSubject: string, allowUnsandboxed: boolean },
+ *            limits: Record<string, number>, push: boolean, vapidSubject: string, allowUnsandboxed: boolean,
+ *            permissions: string, branchPrefixes: string[] },
  *   deny: string[], worktreeRoot: string, browser: object }} Settings
  */
 
@@ -62,6 +64,16 @@ export function settingsFromConfig(config, { home = os.homedir() } = {}) {
   const subjectProblem = vapidSubjectProblem(segwi.vapidSubject ?? "");
   if (subjectProblem) throw new ConfigError(`segwi.vapidSubject: "${segwi.vapidSubject}" ${subjectProblem}`);
   return { segwi, deny: [...config.guard.deny], worktreeRoot: config.paths.worktreeRoot, browser: config.browser, workflowPorts: config.workflow.ports, branchPrefix: config.workflow.branchPrefix };
+}
+
+/**
+ * The permissions mode a run uses (see segwi.permissions): its repository's own, else segwi.permissions. An ask
+ * run is always strict: it promises to change nothing, and auto mode approves file edits where a run starts,
+ * which for an ask run is your checkout.
+ */
+export function permissionsFor({ segwi, repository, action }) {
+  if (action === "ask") return "strict";
+  return repository?.permissions || segwi.permissions || "strict";
 }
 
 export async function readSettings({ file, home = os.homedir() } = {}) {
