@@ -39,6 +39,8 @@ export function allowRules({ worktreeRoot, verifyCommand, tempDir }) {
     ...GH.map((sub) => prefix(`gh ${sub}`)),
     ...NPM.map((sub) => prefix(`npm ${sub}`)),
     "Bash(npm install)",
+    // mexxi's command-fixer mod prefixes a piped verify with this, so the exact command (never a prefix) is allowed.
+    "Bash(set -o pipefail)",
     ...NPX.map((tool) => prefix(`npx ${tool}`)),
     ...["node --test", "ocr delegate", "ffmpeg", "mkdir"].map(prefix),
     "mcp__playwright__*",

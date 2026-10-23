@@ -17,8 +17,11 @@ const execFileAsync = promisify(execFile);
 const serverEntry = fileURLToPath(new URL("../server.mjs", import.meta.url));
 const testedVersions = JSON.parse(readFileSync(new URL("./claude-code.tested.json", import.meta.url), "utf8"));
 
-const SYSTEM_PROMPT = "A person answers any call outside the allow list from a phone, so prefer the file tools and the listed commands. "
-  + "That keeps approvals for the genuinely unusual.";
+// Concrete on purpose: with a vaguer prompt, a real build run edited files through heredocs and sed, and each edit waited on a person.
+const SYSTEM_PROMPT = "A person must approve any tool call outside this run's allow list, and the run waits until they answer from their phone. "
+  + "Change files only with the Edit and Write tools, never with shell redirection, heredocs, tee or sed -i. "
+  + "Keep each Bash call to plain commands, without variable assignments or subshells. "
+  + "This holds even where other guidance suggests editing through the shell.";
 const ASK_PROMPT = " This run only answers a question: read what you need and change nothing.";
 const RESULT_DETAIL_MAX = 8000;
 const INPUT_KEYS = ["command", "description", "file_path", "path", "pattern", "url", "query", "skill", "subagent_type", "prompt"];
