@@ -2,6 +2,7 @@
 // adapter and small waiting helpers.
 import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -69,4 +70,23 @@ export async function waitFor(check, { timeoutMs = 10_000, intervalMs = 20, what
 export function ensureDir(dir) {
   mkdirSync(dir, { recursive: true });
   return dir;
+}
+
+/** One request to a running test server. A POST carries a same-origin header and JSON unless told otherwise. */
+export function request(server, method, urlPath, { headers = {}, body, origin = true } = {}) {
+  return new Promise((resolve, reject) => {
+    const payload = body === undefined ? undefined : JSON.stringify(body);
+    const base = { ...(method === "POST" && origin ? { Origin: `http://127.0.0.1:${server.port}` } : {}), ...(payload !== undefined ? { "Content-Type": "application/json" } : {}) };
+    const req = http.request({ host: "127.0.0.1", port: server.port, method, path: urlPath, headers: { ...base, ...headers } }, (res) => {
+      let text = "";
+      res.on("data", (chunk) => { text += chunk; });
+      res.on("end", () => {
+        let parsed = null;
+        try { parsed = JSON.parse(text); } catch { /* not JSON */ }
+        resolve({ status: res.statusCode, headers: res.headers, text, json: parsed });
+      });
+    });
+    req.on("error", reject);
+    req.end(payload);
+  });
 }

@@ -40,7 +40,7 @@ test("the data directory follows XDG and is private", () => {
 
 test("the store versions its schema and keeps run ids, event sequences and client ids unique", () => {
   const store = openStore(":memory:");
-  assert.equal(store.db.prepare("PRAGMA user_version").get().user_version, 1);
+  assert.equal(store.db.prepare("PRAGMA user_version").get().user_version, 2);
   store.createRun({ id: "r1", repo: "a", action: "ask", task: "t", clientId: "c1" });
   assert.throws(() => store.createRun({ id: "r2", repo: "a", action: "ask", task: "t", clientId: "c1" }));
   const first = store.addEvent("r1", "text", { text: "a" });

@@ -6,7 +6,7 @@ import os from "node:os";
 import { isLoopbackAddress } from "./bind.mjs";
 import { HttpError } from "./errors.mjs";
 
-const PROXY_HEADERS = ["tailscale-user-login", "tailscale-user-name", "x-forwarded-for", "forwarded"];
+export const PROXY_HEADERS = ["tailscale-user-login", "tailscale-user-name", "x-forwarded-for", "forwarded"];
 const LOOPBACK_NAMES = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
 export class AuthConfigError extends Error {}

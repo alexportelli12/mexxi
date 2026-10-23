@@ -6,6 +6,7 @@ import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { audit } from "./audit.mjs";
+import { createApprovalService } from "./approvals.mjs";
 import { assertAuthConfig, createAuthenticator } from "./auth.mjs";
 import { assertLoopbackBind, assertPortOutsideWorkflow } from "./bind.mjs";
 import { createHandler } from "./http.mjs";
@@ -21,10 +22,10 @@ const DEFAULT_STATIC = path.join(here, "..", "web", "dist", "web", "browser");
 const version = JSON.parse(readFileSync(path.join(here, "..", "..", "..", "package.json"), "utf8")).version ?? "0.0.0";
 
 /**
- * @param {{ settings: object, dataDir: string, runner?: object, ibni?: object, staticRoot?: string|null }} options
- *   `runner` and `ibni` are injected by tests; the CLI uses the configured runner and the real ibni.
+ * @param {{ settings: object, dataDir: string, runner?: object, ibni?: object, staticRoot?: string|null, approvalTimeoutMs?: number }} options
+ *   `runner`, `ibni` and `approvalTimeoutMs` are injected by tests; the CLI uses the configured runner and the real ibni.
  */
-export async function startServer({ settings, dataDir, runner, ibni = createIbniLink(), staticRoot = DEFAULT_STATIC }) {
+export async function startServer({ settings, dataDir, runner, ibni = createIbniLink(), staticRoot = DEFAULT_STATIC, approvalTimeoutMs }) {
   ensurePrivateDir(dataDir);
   const store = openStore(path.join(dataDir, "segwi.db"));
   const { bind, auth, runner: runnerId } = settings.segwi;
@@ -41,9 +42,10 @@ export async function startServer({ settings, dataDir, runner, ibni = createIbni
   const broker = createBroker({ store });
   let serverUrl = "";
   const runs = createRunService({ store, settings, runner: theRunner, ibni, broker, serverUrl: () => serverUrl });
+  const approvals = createApprovalService({ store, settings, runs, broker, timeoutMs: approvalTimeoutMs });
   runs.recover();
   const handler = createHandler({
-    store, settings, authenticate: createAuthenticator(auth.web), runs, broker,
+    store, settings, authenticate: createAuthenticator(auth.web), runs, approvals, broker,
     staticRoot: staticRoot && readableDir(staticRoot) ? staticRoot : null, version,
   });
   const server = http.createServer((req, res) => void handler(req, res));
@@ -56,11 +58,12 @@ export async function startServer({ settings, dataDir, runner, ibni = createIbni
   audit(store, { actor: "system", origin: "system", action: "server.start", outcome: "ok", detail: `listening on ${bind.host}:${port}` });
   let closed = false;
   return {
-    port, url: serverUrl, store, runs,
+    port, url: serverUrl, store, runs, approvals,
     async close() {
       if (closed) return;
       closed = true;
       runs.shutdown();
+      approvals.shutdown();
       broker.close();
       server.closeAllConnections();
       await new Promise((resolve) => server.close(resolve));

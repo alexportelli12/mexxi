@@ -19,6 +19,7 @@ const testedVersions = JSON.parse(readFileSync(new URL("./claude-code.tested.jso
 
 const SYSTEM_PROMPT = "A person answers any call outside the allow list from a phone, so prefer the file tools and the listed commands. "
   + "That keeps approvals for the genuinely unusual.";
+const ASK_PROMPT = " This run only answers a question: read what you need and change nothing.";
 const RESULT_DETAIL_MAX = 8000;
 const INPUT_KEYS = ["command", "description", "file_path", "path", "pattern", "url", "query", "skill", "subagent_type", "prompt"];
 
@@ -46,7 +47,9 @@ export function buildArgs({ spec, sessionId, settingsFile, mcpFile }) {
     "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
     "--session-id", sessionId,
     "--setting-sources", "user",
-    "--permission-mode", spec.action === "ask" ? "plan" : "default",
+    // Not plan mode for ask: it lets network commands such as curl run unasked
+    // and switches to a larger model than --model names (see the plan's Spike results).
+    "--permission-mode", "default",
     "--settings", settingsFile,
     "--max-turns", String(spec.limits.maxTurns),
     ...(spec.model ? ["--model", spec.model] : []),
@@ -54,7 +57,7 @@ export function buildArgs({ spec, sessionId, settingsFile, mcpFile }) {
     "--permission-prompt-tool", "mcp__segwi__approve",
     "--mcp-config", mcpFile,
     "--strict-mcp-config",
-    "--append-system-prompt", SYSTEM_PROMPT,
+    "--append-system-prompt", spec.action === "ask" ? SYSTEM_PROMPT + ASK_PROMPT : SYSTEM_PROMPT,
   ];
 }
 
@@ -163,6 +166,9 @@ export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir 
     const sessionId = randomUUID();
     const args = [...binArgs, ...buildArgs({ spec, sessionId, settingsFile, mcpFile })];
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("SEGWI_")));
+    // The approval tool holds its call open until a person answers, so Claude
+    // Code must not give up on an MCP call before segwi's own approval expiry.
+    env.MCP_TOOL_TIMEOUT = String((spec.limits.approvalTimeoutMinutes + 1) * 60_000);
     const child = spawn(bin, args, { cwd: spec.repoPath, env, stdio: ["pipe", "pipe", "pipe"] });
     const entry = { child, closed: false, timers: [] };
     processes.set(spec.runId, entry);

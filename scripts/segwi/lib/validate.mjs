@@ -28,6 +28,12 @@ export function schemas(settings) {
     }),
     events: z.strictObject({ since: z.coerce.number().int().min(0).optional() }),
     audit: z.strictObject({ limit: z.coerce.number().int().min(1).max(200).optional() }),
+    listApprovals: z.strictObject({ status: z.enum(["pending", "allowed", "denied", "expired"]).optional() }),
+    decideApproval: z.strictObject({ decision: z.enum(["allow", "deny"]) }),
+    internalApproval: z.strictObject({
+      runId: z.string().min(1).max(64), toolName: z.string().min(1).max(200),
+      input: z.record(z.string(), z.unknown()), toolUseId: z.string().min(1).max(200),
+    }),
     none: z.strictObject({}),
   };
 }

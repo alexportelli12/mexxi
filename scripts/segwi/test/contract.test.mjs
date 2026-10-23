@@ -13,7 +13,7 @@ const TASK = "What files are in this repository? Answer in one line.";
 function specFor(repoPath, overrides = {}) {
   const settings = makeSettings({ repos: [] });
   return {
-    runId: "run-1", repoPath, action: "ask", task: TASK, limits: { maxTurns: 6 }, worktreeRoot: settings.worktreeRoot,
+    runId: "run-1", repoPath, action: "ask", task: TASK, limits: { maxTurns: 6, approvalTimeoutMinutes: 60 }, worktreeRoot: settings.worktreeRoot,
     verifyCommand: "npm run verify", denyPatterns: settings.deny, browser: settings.browser, serverUrl: "http://127.0.0.1:1", runSecret: "per-run-secret",
     ...overrides,
   };
@@ -67,13 +67,14 @@ for (const runner of RUNNERS) {
     assert.match(sessionId, /^[0-9a-f-]{36}$/);
     assert.deepEqual(args, [
       "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
-      "--session-id", sessionId, "--setting-sources", "user", "--permission-mode", "plan",
+      "--session-id", sessionId, "--setting-sources", "user", "--permission-mode", "default",
       "--settings", path.join(runDir, "settings.json"), "--max-turns", "6", "--model", "haiku",
       "--add-dir", spec.worktreeRoot, "--permission-prompt-tool", "mcp__segwi__approve",
       "--mcp-config", path.join(runDir, "mcp.json"), "--strict-mcp-config",
       "--append-system-prompt", args.at(-1),
     ]);
-    assert.equal(args.at(-1).split(/(?<=\.)\s+/).length, 2, "two sentences");
+    assert.equal(args.at(-1).split(/(?<=\.)\s+/).length, 3, "two sentences on approvals, and one saying an ask run changes nothing");
+    assert.match(args.at(-1), /change nothing\.$/);
   });
 
   test(`${runner.id}: no caller-supplied value reaches the command line or the environment`, async (t) => {

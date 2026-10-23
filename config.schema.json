@@ -244,6 +244,7 @@
           }
         },
         "runner": { "description": "Which coding agent segwi starts. Only Claude Code exists so far.", "type": "string", "enum": ["claude-code"], "default": "claude-code" },
+        "model": { "description": "Model every run uses, such as sonnet. Empty uses your coding agent's own default, which may cost more than a run needs.", "type": "string", "pattern": "^[A-Za-z0-9._-]*$", "default": "" },
         "repositories": {
           "description": "The only repositories a run may start in, each with a name, the path of its control checkout and the actions allowed there (build, ready or ask).",
           "type": "array",

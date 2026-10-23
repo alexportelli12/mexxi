@@ -1,6 +1,6 @@
 // The run lifecycle: validate-then-start, event handling, status changes, reply
 // and stop. Routes call this; it never touches HTTP.
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { statusAfterResult } from "../runners/contract.mjs";
@@ -14,6 +14,8 @@ import { FINAL } from "./store.mjs";
 
 const RESTART_REASON = "segwi restarted while this run was active";
 const DAY_CACHE_MS = 60_000;
+
+export const hashSecret = (secret) => createHash("sha256").update(secret).digest("hex");
 
 /** The run as the API shows it: no host session id, no filesystem path. */
 export function publicRun(run) {
@@ -38,6 +40,8 @@ export function createRunService({ store, settings, runner, ibni, broker, server
   const live = new Map();
   const watchdog = createWatchdog(limits, (runId, reason) => void timeOut(runId, reason));
   let healthCache = null;
+  /** @type {Array<(runId: string) => void>} */
+  const finishListeners = [];
 
   function setStatus(runId, status, reason = null, fields = {}) {
     const run = store.updateRun(runId, { status, reason, ...fields, ...(FINAL.has(status) ? { endedAt: new Date().toISOString() } : {}) });
@@ -46,6 +50,7 @@ export function createRunService({ store, settings, runner, ibni, broker, server
     if (FINAL.has(status)) {
       watchdog.clear(runId);
       runner.close?.(runId);
+      finishListeners.forEach((listener) => listener(runId));
     }
     return run;
   }
@@ -88,7 +93,7 @@ export function createRunService({ store, settings, runner, ibni, broker, server
     }
     const row = store.addEvent(runId, kind, data);
     broker.publish(row, state.folder.add(row));
-    watchdog.touch(runId);
+    if (run.status !== "needs_approval") watchdog.touch(runId);
     if (kind === "step" && data.phase === "result" && state.prepareCalls.has(data.toolUseId)) {
       const prepared = parsePrepareOutput(data.detail, settings.worktreeRoot);
       if (prepared) {
@@ -138,14 +143,15 @@ export function createRunService({ store, settings, runner, ibni, broker, server
       const id = randomUUID();
       store.createRun({ id, repo: input.repo, action: input.action, task: input.task, clientId: input.clientId ?? null });
       broker.publish(store.addEvent(id, "status", { status: "queued", reason: null, branch: null, prUrl: null, verify: null }));
-      const runSecret = randomBytes(24).toString("hex");
+      const runSecret = randomBytes(32).toString("hex");
+      store.setRunSecretHash(id, hashSecret(runSecret));
       const verifyCommand = await verifyCommandFor(repository.path);
       live.set(id, { folder: new StepFolder({ root: repository.path, verifyCommand }), chain: Promise.resolve(), prepareCalls: new Set(), ibniSession: null, runSecret, repoPath: repository.path });
       setStatus(id, "running");
       watchdog.watch(id);
       try {
         await runner.start({
-          runId: id, repoPath: repository.path, action: input.action, task: input.task, limits: { maxTurns: limits.maxTurns },
+          runId: id, repoPath: repository.path, action: input.action, task: input.task, limits: { maxTurns: limits.maxTurns, approvalTimeoutMinutes: limits.approvalTimeoutMinutes }, model: settings.segwi.model || undefined,
           worktreeRoot: settings.worktreeRoot, verifyCommand,
           denyPatterns: settings.deny, browser: settings.browser, serverUrl: serverUrl(), bindPort: Number(new URL(serverUrl() || "http://127.0.0.1").port) || undefined, runSecret,
         }, emitterFor(id));
@@ -190,6 +196,25 @@ export function createRunService({ store, settings, runner, ibni, broker, server
       if (FINAL.has(run.status)) throw new HttpError(409, `The run is already ${run.status}.`);
       runner.stop(id);
       return publicRun(setStatus(id, "stopped", "Stopped by you"));
+    },
+
+    /** Called with the run id whenever a run reaches a final status (approvals expire then). */
+    onFinish: (listener) => finishListeners.push(listener),
+
+    /** A person is being asked: the run waits, and idleness is not counted. */
+    markWaiting(id) {
+      const run = store.getRun(id);
+      if (!run || FINAL.has(run.status) || run.status === "needs_approval") return;
+      setStatus(id, "needs_approval");
+      watchdog.pause(id);
+    },
+
+    /** The last pending approval was answered: the run goes on. */
+    markResumed(id) {
+      const run = store.getRun(id);
+      if (!run || run.status !== "needs_approval") return;
+      setStatus(id, "running");
+      watchdog.touch(id);
     },
 
     /** Marks runs a previous process left active as failed. */

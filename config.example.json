@@ -85,6 +85,7 @@
       "port": 4280
     },
     "runner": "claude-code",
+    "model": "",
     "repositories": [],
     "auth": {
       "web": {

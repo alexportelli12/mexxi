@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // segwi's entry point: the subcommand table, help and dispatch. Each phase
 // fills in more commands, and help marks the ones that don't work yet.
+import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 /** @type {Record<string, { summary: string, why: string, implemented?: boolean }>} */
@@ -37,18 +38,46 @@ export function help() {
   return lines.join("\n");
 }
 
-async function serve() {
+/** `--config <file>` and `--data-dir <dir>` are the operator's flags, never request input. */
+function serveFlags(args) {
+  const flags = {};
+  for (let index = 0; index < args.length; index += 2) {
+    const name = args[index];
+    const value = args[index + 1];
+    if ((name !== "--config" && name !== "--data-dir") || !value) throw new Error(`serve accepts --config <file> and --data-dir <dir>, not "${[name, value].filter(Boolean).join(" ")}"`);
+    flags[name === "--config" ? "config" : "dataDir"] = value;
+  }
+  return flags;
+}
+
+async function serve(args) {
   const { readSettings } = await import("./lib/settings.mjs");
   const { startServer } = await import("./lib/serve.mjs");
   const { dataDir } = await import("./lib/paths.mjs");
-  const settings = await readSettings();
+  let flags;
+  try {
+    flags = serveFlags(args);
+  } catch (error) {
+    process.stderr.write(`segwi: ${error.message}\n`);
+    process.exitCode = 2;
+    return;
+  }
+  let settings;
+  try {
+    settings = await readSettings(flags.config ? { file: path.resolve(flags.config) } : {});
+  } catch (error) {
+    process.stderr.write(`segwi: ${error.message}\n`);
+    process.exitCode = 2;
+    return;
+  }
   if (!settings.segwi.enabled) {
     process.stderr.write("segwi: segwi.enabled is false in config.json, so the server will not start.\n");
     process.exitCode = 2;
     return;
   }
   try {
-    const { url } = await startServer({ settings, dataDir: dataDir() });
+    const { url, close } = await startServer({ settings, dataDir: flags.dataDir ? path.resolve(flags.dataDir) : dataDir() });
+    for (const signal of ["SIGINT", "SIGTERM"]) process.once(signal, () => void close().finally(() => process.exit(0)));
     process.stdout.write(`segwi listening on ${url}\n`);
   } catch (error) {
     process.stderr.write(`segwi: ${error.message}\n`);
@@ -67,8 +96,8 @@ export async function main(args = process.argv.slice(2)) {
     process.exitCode = 2;
     return;
   }
-  if (first === "serve") return serve();
-  if (first === "approver") return (await import("./lib/approver.mjs")).runApprover();
+  if (first === "serve") return serve(args.slice(1));
+  if (first === "approver") return (await import("./lib/approver.mjs")).runApprover(args.slice(1));
   process.stderr.write(`segwi ${first}: not yet implemented\n`);
   process.exitCode = 2;
   return undefined;

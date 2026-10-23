@@ -14,7 +14,7 @@ export function assertWithinCaps(store, limits, now = new Date()) {
 }
 
 /**
- * One idle timer (reset by activity) and one hard timer per run. `onTimeout`
+ * One idle timer (reset by activity, paused while a person is asked) and one hard timer per run. `onTimeout`
  * receives the run id and the plain reason.
  */
 export function createWatchdog(limits, onTimeout) {
@@ -38,5 +38,10 @@ export function createWatchdog(limits, onTimeout) {
     }
     timers.set(runId, entry);
   }
-  return { watch: arm, touch: arm, clear, stopAll: () => [...timers.keys()].forEach(clear) };
+  // Waiting on a person is not idleness: the idle timer stops, the hard one runs on.
+  function pause(runId) {
+    const entry = timers.get(runId);
+    if (entry) clearTimeout(entry.idle);
+  }
+  return { watch: arm, touch: arm, pause, clear, stopAll: () => [...timers.keys()].forEach(clear) };
 }
