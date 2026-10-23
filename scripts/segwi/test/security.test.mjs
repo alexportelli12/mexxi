@@ -100,6 +100,30 @@ test("tailscale-header: a missing header is 401, an unlisted login 403, a listed
   assert.equal(server.store.listAudit(1)[0].actor, "you@example.com");
 });
 
+test("tailscale-header: only loopback names and the configured tailnet name are accepted as Host, so DNS rebinding gets 403", async (t) => {
+  const { server } = await boot(t, { auth: { mode: "tailscale-header", allowed: ["you@example.com"] } });
+  const identity = { "Tailscale-User-Login": "you@example.com" };
+  // A page on evil.example that rebound its name to 127.0.0.1: its own name as Host and Origin, and a real identity.
+  const rebound = { ...identity, Host: "evil.example", Origin: "http://evil.example" };
+  assert.equal((await request(server, "GET", "/api/repos", { headers: rebound })).status, 403);
+  const post = await request(server, "POST", "/api/runs", { headers: rebound, body: { repo: "my-app", action: "ask", task: "x" } });
+  assert.equal(post.status, 403);
+  assert.match(post.json.error, /neither a loopback name nor segwi.auth.web.hostname/);
+  assert.equal((await request(server, "GET", "/", { headers: rebound })).status, 403, "the app shell too");
+  for (const host of ["my-machine.example.ts.net.evil.example", "evil.my-machine.example.ts.net", "100.64.0.7"]) {
+    assert.equal((await request(server, "GET", "/api/repos", { headers: { ...identity, Host: host } })).status, 403, host);
+  }
+  for (const host of ["my-machine.example.ts.net", "MY-MACHINE.example.ts.net.", "my-machine.example.ts.net:443", "127.0.0.1", "localhost:4280", "[::1]"]) {
+    assert.equal((await request(server, "GET", "/api/repos", { headers: { ...identity, Host: host } })).status, 200, host);
+  }
+  assert.equal(server.store.listRuns().length, 0);
+});
+
+test("tailscale-header mode refuses to start without a tailnet name", async (t) => {
+  const settings = makeSettings({ repos: [], auth: { mode: "tailscale-header", allowed: ["you@example.com"], hostname: "" } });
+  await assert.rejects(startServer({ settings, dataDir: tempDir(t, "segwi-data-"), runner: fakeAdapter(t, "ask-completed").adapter, staticRoot: null }), /auth.web.hostname is empty/);
+});
+
 test("writes need the app's own origin and a JSON content type", async (t) => {
   const { server } = await boot(t);
   const attempts = [

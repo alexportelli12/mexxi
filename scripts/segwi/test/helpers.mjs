@@ -8,6 +8,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createClaudeCodeAdapter } from "../runners/claude-code.mjs";
 
+/** The tailnet name tests configure; a request must use it, or a loopback name, as Host. */
+export const TAILNET_NAME = "my-machine.example.ts.net";
 export const fakeHost = fileURLToPath(new URL("./fake-host.mjs", import.meta.url));
 export const fixturesDir = fileURLToPath(new URL("./fixtures/", import.meta.url));
 
@@ -35,7 +37,7 @@ export function makeSettings({ repos, auth = {}, limits = {}, host = "127.0.0.1"
     segwi: {
       enabled: true, bind: { host, port: 0 }, runner: "claude-code",
       repositories: repos,
-      auth: { web: { mode: "localhost-only", header: "Tailscale-User-Login", allowed: [], ...auth } },
+      auth: { web: { mode: "localhost-only", header: "Tailscale-User-Login", allowed: [], hostname: TAILNET_NAME, ...auth } },
       limits: {
         concurrentRuns: 2, runsPerDay: 20, maxTurns: 80, idleTimeoutMinutes: 30, hardTimeoutMinutes: 120,
         approvalTimeoutMinutes: 60, taskMaxChars: 8000, inputMaxChars: 4000, ...limits,

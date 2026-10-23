@@ -64,7 +64,7 @@ Turn `service.systemdUserUnit` or `enabled` off and the next install stops and r
 The web app has two modes, set in `segwi.auth.web.mode`. The server only ever listens on loopback. It refuses to start on any other address, because it can start agents that run commands on your machine.
 
 - **`localhost-only`** is the default. It trusts anyone using this machine, and it refuses any request that a proxy forwarded. Use it when you work at the machine itself.
-- **`tailscale-header`** trusts the identity header that `tailscale serve` adds, but only on loopback. List the identities you allow in `segwi.auth.web.allowed`. An empty list means nobody can sign in, so the server will not start with it.
+- **`tailscale-header`** trusts the identity header that `tailscale serve` adds, but only on loopback. List the identities you allow in `segwi.auth.web.allowed`, and set `segwi.auth.web.hostname` to this machine's tailnet name. segwi answers only to that name and to loopback names, so a page on another site can't reach it by pointing its own name at your machine. The server will not start with an empty list or without the name.
 
 In `tailscale-header` mode, segwi refuses to take an approval from the machine the agent runs on. Otherwise the agent could open the app in its own browser and answer its own question. Answer from your phone or another device. The agent's own browser is also blocked from reaching segwi.
 
@@ -72,7 +72,7 @@ MCP clients never use the web sign-in. They always send a bearer token, describe
 
 ## Reach it from your phone
 
-[Tailscale](https://tailscale.com/) gives your devices a private network, and `tailscale serve` shares one local port with it over HTTPS. Set `segwi.auth.web.mode` to `tailscale-header`, list your Tailscale login in `allowed`, restart segwi, and run:
+[Tailscale](https://tailscale.com/) gives your devices a private network, and `tailscale serve` shares one local port with it over HTTPS. Set `segwi.auth.web.mode` to `tailscale-header`, list your Tailscale login in `allowed`, set `hostname` to the name `tailscale serve status` shows, such as `my-machine.example.ts.net`, restart segwi, and run:
 
 ```bash
 tailscale serve --bg http://127.0.0.1:4280

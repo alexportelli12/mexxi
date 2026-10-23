@@ -92,7 +92,8 @@
       "web": {
         "mode": "localhost-only",
         "header": "Tailscale-User-Login",
-        "allowed": []
+        "allowed": [],
+        "hostname": ""
       }
     },
     "limits": {

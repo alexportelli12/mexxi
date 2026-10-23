@@ -11,7 +11,7 @@ const REPO_NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/;
  * @typedef {{ name: string, path: string, actions: string[] }} Repository
  * @typedef {{
  *   segwi: { enabled: boolean, bind: { host: string, port: number }, runner: string, repositories: Repository[],
- *            auth: { web: { mode: string, header: string, allowed: string[] } },
+ *            auth: { web: { mode: string, header: string, allowed: string[], hostname: string } },
  *            limits: Record<string, number>, push: boolean },
  *   deny: string[], worktreeRoot: string, browser: object }} Settings
  */

@@ -11,7 +11,8 @@ test("segwi is off by default, loopback-only, with the plan's caps", async () =>
   assert.deepEqual(segwi.bind, { host: "127.0.0.1", port: 4280 });
   assert.equal(segwi.runner, "claude-code");
   assert.deepEqual(segwi.repositories, []);
-  assert.deepEqual(segwi.auth.web, { mode: "localhost-only", header: "Tailscale-User-Login", allowed: [] });
+  assert.deepEqual(segwi.auth.web, { mode: "localhost-only", header: "Tailscale-User-Login", allowed: [], hostname: "" });
+  assert.equal(segwi.allowUnsandboxed, false);
   assert.equal(segwi.limits.concurrentRuns, 2);
   assert.equal(segwi.limits.approvalTimeoutMinutes, 60);
   assert.equal(segwi.push, true);

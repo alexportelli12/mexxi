@@ -278,7 +278,8 @@
               "properties": {
                 "mode": { "description": "localhost-only trusts anyone on this machine. tailscale-header trusts the identity header that tailscale serve sets, and only on loopback.", "type": "string", "enum": ["localhost-only", "tailscale-header"], "default": "localhost-only" },
                 "header": { "description": "Request header that carries the signed-in identity in tailscale-header mode.", "type": "string", "minLength": 1, "default": "Tailscale-User-Login" },
-                "allowed": { "description": "Identities allowed in tailscale-header mode. Empty means nobody.", "type": "array", "items": { "type": "string", "minLength": 1 }, "default": [] }
+                "allowed": { "description": "Identities allowed in tailscale-header mode. Empty means nobody.", "type": "array", "items": { "type": "string", "minLength": 1 }, "default": [] },
+                "hostname": { "description": "This machine's name on your tailnet, such as my-machine.example.ts.net, as tailscale serve status shows it. In tailscale-header mode segwi answers only to it and to loopback names, so a web page on another site can't reach segwi by pointing its own name at this machine (DNS rebinding). Required in that mode.", "type": "string", "pattern": "^$|^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$", "default": "" }
               }
             }
           }
