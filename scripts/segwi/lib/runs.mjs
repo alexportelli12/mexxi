@@ -185,6 +185,7 @@ export function createRunService({ store, settings, runner, ibni, broker, server
           worktreeRoot: settings.worktreeRoot, verifyCommand,
           denyPatterns: settings.deny, browser: settings.browser, serverUrl: serverUrl(), bindPort: Number(new URL(serverUrl() || "http://127.0.0.1").port) || undefined, runSecret,
           tailnetName: settings.segwi.auth.web.mode === "tailscale-header" ? settings.segwi.auth.web.hostname : undefined,
+          branchPrefix: settings.branchPrefix,
         }, emitterFor(id));
       } catch (error) {
         setStatus(id, "failed", `The agent could not start: ${error.message}`);

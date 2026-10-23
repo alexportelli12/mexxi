@@ -61,15 +61,16 @@ export function sandboxPrerequisiteProblem() {
 
 /**
  * Runs one `ask` or `build` run of the real `claude` against a fake model that plays `script`. A turn may be a
- * function of `{ segwiPort, repo, worktreeRoot, home, result }`, called when the model reaches it; `result(i)` is
- * the tool result of an earlier turn i.
+ * function of `{ segwiPort, repo, worktreeRoot, home, hostDataDir, result }`, called when the model reaches it;
+ * `hostDataDir` is the adapter's data folder (runs/<id>/ holds the rendered settings and MCP config) and
+ * `result(i)` is the tool result of an earlier turn i.
  * A build run gets what it needs to reach the model and run `ibni prepare`: a stub /wettaq command that passes
  * the task on, a bare local origin for the repository, this checkout's ibni first on PATH and an ibni config whose
  * worktree root is the run's.
  * `decide(approval)` answers each approval segwi raises ("allow" or "deny"; allow by default).
  * `prepare({ repo, worktreeRoot, home })` runs before the run starts, to lay out files.
  * `settingsPatch` is for control runs and experiments: it is merged into segwi's rendered settings before Claude Code
- * reads them, for example `{ sandbox: { enabled: false } }`, or a function of `{ repo, worktreeRoot, home }` that
+ * reads them, for example `{ sandbox: { enabled: false } }`, or a function of `{ repo, worktreeRoot, home, hostDataDir }` that
  * returns one. A "$cwd" key in the patch starts Claude Code in that directory instead of the repository. Without a
  * patch, Claude Code gets exactly what segwi renders and starts where segwi starts it.
  * @returns {Promise<{ results: Array<{ isError: boolean, text: string } | undefined>, approvals: object[], audit: object[],
@@ -120,9 +121,10 @@ export async function runScripted(t, { script, action = "ask", decide = () => "a
   });
 
   const dataDir = tempDir(t, "segwi-sbx-data-");
-  const patch = typeof settingsPatch === "function" ? settingsPatch({ repo, worktreeRoot, home }) : settingsPatch;
+  const hostDataDir = path.join(dataDir, "host");
+  const patch = typeof settingsPatch === "function" ? settingsPatch({ repo, worktreeRoot, home, hostDataDir }) : settingsPatch;
   const host = patch ? { bin: process.execPath, binArgs: ["-e", PATCHED_CLAUDE, "--", JSON.stringify(patch)] } : { bin: "claude" };
-  const adapter = createClaudeCodeAdapter({ ...host, dataDir: path.join(dataDir, "host"), killGraceMs: [2000, 2000] });
+  const adapter = createClaudeCodeAdapter({ ...host, dataDir: hostDataDir, killGraceMs: [2000, 2000] });
   // The run finishes before Claude Code exits; the test waits for the exit so nothing still writes to the temporary folders.
   let exited;
   const hostExit = new Promise((resolve) => { exited = resolve; });
@@ -136,7 +138,7 @@ export async function runScripted(t, { script, action = "ask", decide = () => "a
   t.after(() => server.close());
   // Once in a while Claude Code's last session writes race the first removal of its home; this one runs after the server is closed.
   t.after(() => rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
-  Object.assign(context, { segwiPort: server.port, repo, worktreeRoot, home, result: (index) => model.toolResults()[toolUseId(index)] });
+  Object.assign(context, { segwiPort: server.port, repo, worktreeRoot, home, hostDataDir, result: (index) => model.toolResults()[toolUseId(index)] });
 
   const started = await request(server, "POST", "/api/runs", { body: { repo: "my-app", action, task: "Follow the script." } });
   if (started.status !== 201 && started.status !== 200) throw new Error(`segwi refused the run: ${started.status} ${started.text}`);
@@ -161,6 +163,6 @@ export async function runScripted(t, { script, action = "ask", decide = () => "a
   const toolResults = model.toolResults();
   return {
     results: script.map((_, index) => toolResults[toolUseId(index)]),
-    approvals, audit: server.store.listAudit(1000), run: finished, server, repo, worktreeRoot, home, model,
+    approvals, audit: server.store.listAudit(1000), run: finished, server, repo, worktreeRoot, home, hostDataDir, model,
   };
 }

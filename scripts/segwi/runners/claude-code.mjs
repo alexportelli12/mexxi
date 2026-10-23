@@ -4,14 +4,14 @@
 // reaches the command line: the task goes to stdin, the rest comes from config.
 import { execFile, spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { accessSync, constants, readFileSync, readdirSync } from "node:fs";
+import { accessSync, constants, existsSync, readFileSync, readdirSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { playwrightArguments } from "../../lib/browser.mjs";
-import { isPlainVerifyCommand, renderSettings, VERIFY_NOT_ALLOWED } from "../lib/allow-list.mjs";
+import { gitWritePaths, isPlainVerifyCommand, renderSettings, VERIFY_NOT_ALLOWED } from "../lib/allow-list.mjs";
 import { RUN_BROWSER_MARK } from "../lib/auth.mjs";
 import { canaryTestedVersions } from "../lib/canary-state.mjs";
 
@@ -28,6 +28,8 @@ const ASK_PROMPT = " This run only answers a question: read what you need and ch
 const RESULT_DETAIL_MAX = 8000;
 // What Claude Code's sandbox needs on Linux. Without them it runs commands unsandboxed and says nothing.
 const SANDBOX_TOOLS = ["bwrap", "socat"];
+// Credentials nothing inside the sandbox needs; gh's own config stays readable, because gh pr view needs it.
+const SECRET_PATHS = [".ssh", ".gnupg", ".aws", ".netrc", ".git-credentials", ".claude/.credentials.json", ".claude.json"];
 const INPUT_KEYS = ["command", "description", "file_path", "path", "pattern", "url", "query", "skill", "subagent_type", "prompt"];
 
 function onPath(name) {
@@ -208,9 +210,15 @@ export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir 
     const settingsFile = path.join(runDir, "settings.json");
     const mcpFile = path.join(runDir, "mcp.json");
     const tempDir = `/tmp/claude-${process.getuid?.() ?? 0}`;
+    const commonDir = await gitCommonDir(spec.repoPath);
+    const branchPrefix = spec.branchPrefix ?? "agent/";
+    // The sandbox can only open a path that exists, and ibni prepare makes the first branch under the prefix later.
+    if (spec.action !== "ask") await Promise.all(gitWritePaths(commonDir, branchPrefix).map((dir) => mkdir(dir, { recursive: true })));
+    const home = os.homedir();
+    const secrets = [...SECRET_PATHS.map((name) => path.join(home, name)), dataDir, ...(stateDir ? [stateDir] : [])].filter((file) => existsSync(file));
     const settings = renderSettings({
       action: spec.action, worktreeRoot: spec.worktreeRoot, verifyCommand: spec.verifyCommand, denyPatterns: spec.denyPatterns, repoPath: spec.repoPath,
-      tempDir, gitCommonDir: await gitCommonDir(spec.repoPath), controlEntries: readdirSync(spec.repoPath),
+      tempDir, gitCommonDir: commonDir, branchPrefix, controlEntries: readdirSync(spec.repoPath), denyRead: secrets,
     });
     await writeFile(settingsFile, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
     await writeFile(mcpFile, `${JSON.stringify(renderMcpConfig({ spec }), null, 2)}\n`, { mode: 0o600 });
@@ -224,6 +232,9 @@ export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir 
     env.MCP_TOOL_TIMEOUT = String((spec.limits.approvalTimeoutMinutes + 1) * 60_000);
     // The sandbox can't write the home npm cache, so npm keeps one in the run's temporary directory.
     env.npm_config_cache = path.join(tempDir, "npm-cache");
+    // Every git command in the run, ibni's outside the sandbox too, uses only your own hooks: a hooks path set to
+    // a folder in the repository (as husky does) would run hooks the agent can edit, outside the sandbox under ibni.
+    Object.assign(env, { GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.hooksPath", GIT_CONFIG_VALUE_0: path.join(commonDir, "hooks") });
     // A build or ready run starts outside the control checkout (see allow-list.mjs), so ibni prepare is told where it is.
     const startDir = spec.action === "ask" ? spec.repoPath : spec.worktreeRoot;
     if (spec.action !== "ask") {

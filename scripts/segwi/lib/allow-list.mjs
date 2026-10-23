@@ -88,24 +88,36 @@ export function allowRules({ action, worktreeRoot, verifyCommand, tempDir, repoP
 }
 
 /**
+ * The parts of the control checkout's git directory a run's commits and fetches in its linked worktree write:
+ * objects, its own branches, remote and tag refs, reflogs and worktree metadata. Not HEAD, the index,
+ * packed-refs, info, config, hooks or the default branch: rewriting those would bring planted code into your
+ * checkout the next time you, or ibni prepare, update it. The adapter creates any that don't exist yet.
+ */
+export function gitWritePaths(gitCommonDir, branchPrefix) {
+  return [
+    "objects", path.join("refs", "heads", branchPrefix.replace(/\/+$/, "")), path.join("refs", "remotes"), path.join("refs", "tags"),
+    path.join("logs", "refs"), "worktrees",
+  ].map((part) => path.join(gitCommonDir, part));
+}
+
+/**
  * Where a run may write. The control checkout (the clone you work in, `repoPath`) is never one of those
  * places: a file planted there runs later as you, outside any sandbox. A build or ready run starts in the
- * worktree root instead, because Claude Code always lets a run write where it starts. Its commits in a linked
- * worktree still need the checkout's git directory (objects, refs, worktree metadata, ibni's lock), so that is
- * writable, except the config, hooks and submodules, through which git would run code. `controlEntries` are the
- * checkout's top-level names, denied one by one, because denying the checkout itself would also deny its git
- * directory. `ibni prepare` alone runs outside the sandbox: it must fast-forward the checkout, and it runs
- * before the agent has written anything. Claude Code frees only a single plain command this way, never a
- * compound one. An ask run starts in the checkout and writes nothing there.
+ * worktree root instead, because Claude Code always lets a run write where it starts, and may write only the
+ * git data its worktree needs (gitWritePaths). `controlEntries` are the checkout's top-level names, denied
+ * one by one alongside git's config, hooks and submodules, because denying the checkout itself would also
+ * deny the git directory. ibni runs outside the sandbox (see renderSettings). An ask run starts in the
+ * checkout and writes nothing there.
  */
-function filesystemRules({ action, worktreeRoot, tempDir, repoPath, gitCommonDir, controlEntries = [] }) {
-  if (action === "ask") return { allowWrite: [tempDir], denyWrite: [repoPath] };
+function filesystemRules({ action, worktreeRoot, tempDir, repoPath, gitCommonDir, branchPrefix, controlEntries = [], denyRead = [] }) {
+  if (action === "ask") return { allowWrite: [tempDir], denyWrite: [repoPath], denyRead };
   return {
-    allowWrite: [worktreeRoot, tempDir, gitCommonDir],
+    allowWrite: [worktreeRoot, tempDir, ...gitWritePaths(gitCommonDir, branchPrefix)],
     denyWrite: [
       ...["config", "hooks", "modules"].map((name) => path.join(gitCommonDir, name)),
       ...controlEntries.filter((name) => path.join(repoPath, name) !== gitCommonDir).map((name) => path.join(repoPath, name)),
     ],
+    denyRead,
   };
 }
 
@@ -117,11 +129,19 @@ function filesystemRules({ action, worktreeRoot, tempDir, repoPath, gitCommonDir
  */
 const controlDenyRules = (repoPath) => [`Edit(/${repoPath}/*)`];
 
-export function renderSettings({ action, worktreeRoot, verifyCommand, tempDir, repoPath, gitCommonDir = path.join(repoPath, ".git"), controlEntries = [], denyPatterns }) {
+/** The Read tool runs outside the sandbox, so denyRead alone doesn't stop it; each secret path is denied to it too. */
+const secretReadRules = (paths) => paths.flatMap((file) => [`Read(/${file})`, `Read(/${file}/**)`]);
+
+/**
+ * `denyRead` are the secrets nothing in the sandbox needs: keys and credentials in the home directory, and
+ * segwi's own state and data (its tokens, push key, run secrets and pending approvals). Only existing paths.
+ */
+export function renderSettings({ action, worktreeRoot, verifyCommand, tempDir, repoPath, gitCommonDir = path.join(repoPath, ".git"), branchPrefix = "agent/",
+  controlEntries = [], denyRead = [], denyPatterns }) {
   return {
     permissions: {
       allow: allowRules({ action, worktreeRoot, verifyCommand, tempDir, repoPath }),
-      deny: [...denyRules(denyPatterns), ...OUTPUT_DENY, ...BROWSER_DENY, ...controlDenyRules(repoPath)],
+      deny: [...denyRules(denyPatterns), ...OUTPUT_DENY, ...BROWSER_DENY, ...controlDenyRules(repoPath), ...secretReadRules(denyRead)],
       disableBypassPermissionsMode: "disable",
     },
     sandbox: {
@@ -129,8 +149,10 @@ export function renderSettings({ action, worktreeRoot, verifyCommand, tempDir, r
       // Claude Code otherwise runs every sandboxed Bash command unasked, so the allow list would never be read.
       autoAllowBashIfSandboxed: false,
       allowUnsandboxedCommands: false,
-      ...(action === "ask" ? {} : { excludedCommands: ["ibni prepare *"] }),
-      filesystem: filesystemRules({ action, worktreeRoot, tempDir, repoPath, gitCommonDir, controlEntries }),
+      // ibni is mexxi's own lifecycle tool, and it writes where a run may not: it fast-forwards the checkout and
+      // locks its git directory. Claude Code runs only a single plain ibni command outside, never a compound one.
+      ...(action === "ask" ? {} : { excludedCommands: ["ibni *"] }),
+      filesystem: filesystemRules({ action, worktreeRoot, tempDir, repoPath, gitCommonDir, branchPrefix, controlEntries, denyRead }),
       network: { allowedDomains: SANDBOX_DOMAINS },
     },
   };

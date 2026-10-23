@@ -1,7 +1,7 @@
 // The shared runner contract: every adapter is driven against recorded host
 // output replayed by the fake host. Add a runner to RUNNERS to hold it to the same rules.
 import assert from "node:assert/strict";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { assertRunEvent, statusAfterResult } from "../runners/contract.mjs";
@@ -107,7 +107,7 @@ for (const runner of RUNNERS) {
     const rendered = JSON.parse(readFileSync(path.join(dir, "data", "runs", spec.runId, "settings.json"), "utf8"));
     const { allow } = rendered.permissions;
     // An ask run starts in the checkout and may write nothing there.
-    assert.deepEqual(rendered.sandbox.filesystem, { allowWrite: [`/tmp/claude-${process.getuid()}`], denyWrite: [repo] });
+    assert.deepEqual({ ...rendered.sandbox.filesystem, denyRead: undefined }, { allowWrite: [`/tmp/claude-${process.getuid()}`], denyWrite: [repo], denyRead: undefined });
     assert.ok(!("excludedCommands" in rendered.sandbox));
     assert.ok(allow.includes("Bash(git status:*)") && allow.includes("Bash(gh pr view:*)") && allow.includes("Bash(ibni info:*)"));
     assert.ok(allow.includes(`Read(/${repo}/**)`));
@@ -143,15 +143,22 @@ for (const runner of RUNNERS) {
       assert.ok(!allow.some((rule) => rule.startsWith(`Bash(${forbidden}`)), `${forbidden} is not allowed`);
     }
     assert.deepEqual(deny, ["Bash(npm publish:*)", "Bash(git push --force:*)", "Bash(git *--output*)", "Bash(gh *--output*)",
-      "mcp__playwright__browser_run_code_unsafe", `Edit(/${spec.repoPath}/*)`]);
+      "mcp__playwright__browser_run_code_unsafe", `Edit(/${spec.repoPath}/*)`,
+      ...settings.sandbox.filesystem.denyRead.flatMap((file) => [`Read(/${file})`, `Read(/${file}/**)`])]);
     assert.equal(settings.permissions.disableBypassPermissionsMode, "disable");
     assert.equal(settings.sandbox.enabled, true);
     assert.equal(settings.sandbox.allowUnsandboxedCommands, false);
     assert.equal(settings.sandbox.autoAllowBashIfSandboxed, false);
     const git = path.join(spec.repoPath, ".git");
-    assert.deepEqual(settings.sandbox.filesystem.allowWrite, [spec.worktreeRoot, `/tmp/claude-${process.getuid()}`, git]);
+    assert.deepEqual(settings.sandbox.filesystem.allowWrite, [spec.worktreeRoot, `/tmp/claude-${process.getuid()}`,
+      ...["objects", "refs/heads/agent", "refs/remotes", "refs/tags", "logs/refs", "worktrees"].map((part) => path.join(git, part))]);
+    for (const part of ["refs/heads/agent", "refs/remotes", "logs/refs", "worktrees"]) assert.ok(existsSync(path.join(git, part)), `${part} exists for the sandbox`);
+    // segwi's own data (run secrets, pending approvals) is unreadable inside the sandbox.
+    assert.ok(settings.sandbox.filesystem.denyRead.includes(path.join(dir, "data")));
+    assert.ok(deny.includes(`Read(/${path.join(dir, "data")}/**)`), "and denied to the Read tool, which runs outside the sandbox");
+    assert.equal(report().gitHooksPath, path.join(git, "hooks"));
     assert.deepEqual(settings.sandbox.filesystem.denyWrite, [path.join(git, "config"), path.join(git, "hooks"), path.join(git, "modules"), path.join(spec.repoPath, "README.md")]);
-    assert.deepEqual(settings.sandbox.excludedCommands, ["ibni prepare *"]);
+    assert.deepEqual(settings.sandbox.excludedCommands, ["ibni *"]);
     // A build run starts outside the control checkout, which Claude Code would otherwise make writable, and tells ibni where it is.
     assert.equal(report().cwd, spec.worktreeRoot);
     assert.equal(report().launchCheckout, spec.repoPath);

@@ -6,7 +6,7 @@
 // because the harness never ran anything.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { runScripted, sandboxPrerequisiteProblem } from "./sandbox-harness.mjs";
@@ -166,5 +166,138 @@ test("an ask run can't write the control checkout, even when a person allows it"
     assert.equal(results[index]?.isError, true, `turn ${index}: ${report}`);
     assert.match(results[index].text, REFUSED, `turn ${index}: ${report}`);
   }
+  assert.deepEqual(controlState(repo), UNTOUCHED);
+});
+
+// --- the control checkout's git directory, hooks, secrets and the file tools ---
+
+const git = (cwd, ...args) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8" }).trim();
+const worktreeOf = ({ result }) => JSON.parse(result(0).text).worktreePath;
+const gitDirOf = ({ repo }) => path.join(repo, ".git");
+
+test("a build run writes only the git data its worktree needs, and a repository hooks path never runs", { skip, timeout: 180_000 }, async (t) => {
+  const hooksDir = (worktreeRoot) => path.join(worktreeRoot, "repo-hooks");
+  const markers = (worktreeRoot, home) => [path.join(worktreeRoot, "hook-ran"), path.join(home, "hook-ran")];
+  let mainBefore = "";
+  const prepare = ({ repo, worktreeRoot, home }) => {
+    // As husky does: the repository points git at a hooks folder the agent can edit (here, inside the worktree root).
+    mkdirSync(hooksDir(worktreeRoot));
+    writeFileSync(path.join(hooksDir(worktreeRoot), "pre-commit"), `#!/bin/sh\n${markers(worktreeRoot, home).map((file) => `touch ${file}`).join("\n")}\nexit 0\n`, { mode: 0o755 });
+    git(repo, "config", "core.hooksPath", hooksDir(worktreeRoot));
+    mainBefore = git(repo, "rev-parse", "refs/heads/main");
+  };
+  const shellWrite = (target) => (context) => bash(`sh -c "echo ${PLANTED} > ${target(context)}"`);
+  const script = [
+    bash("ibni prepare --slug sbx"),
+    (context) => bash(`cd ${worktreeOf(context)}`),
+    (context) => ({ tool: "Write", input: { file_path: path.join(worktreeOf(context), "note.txt"), content: "note\n" } }),
+    bash("git add note.txt"),
+    bash('git commit -q -m "sandboxed commit"'),
+    bash("git fetch origin"),
+    shellWrite((context) => path.join(gitDirOf(context), "HEAD")),
+    shellWrite((context) => path.join(gitDirOf(context), "index")),
+    shellWrite((context) => path.join(gitDirOf(context), "packed-refs")),
+    shellWrite((context) => path.join(gitDirOf(context), "info", "x")),
+    shellWrite((context) => path.join(gitDirOf(context), "refs", "heads", "main")),
+    (context) => bash(`git -C ${context.repo} update-ref refs/heads/main ${JSON.parse(context.result(0).text).baseSha}~0`),
+    (context) => bash(`git -C ${context.repo} update-ref refs/heads/main ${git(worktreeOf(context), "rev-parse", "HEAD")}`),
+    { text: "Done." },
+  ];
+  const { results, approvals, repo, worktreeRoot, home } = await runScripted(t, { action: "build", script, prepare });
+  const report = show(results, approvals);
+
+  assert.equal(results[0]?.isError, false, report);
+  const worktree = JSON.parse(results[0].text).worktreePath;
+  for (const index of [1, 2, 3, 4, 5]) assert.equal(results[index]?.isError, false, `turn ${index}: ${report}`);
+  assert.equal(git(repo, "log", "-1", "--format=%s", "agent/sbx"), "sandboxed commit");
+  for (const index of [6, 7, 8, 9, 10]) {
+    assert.ok(approvals.some((approval) => approval.exact === script[index]({ repo }).input.command), `turn ${index} reached a person: ${report}`);
+    assert.equal(results[index]?.isError, true, `turn ${index}: ${report}`);
+    assert.match(results[index].text, REFUSED, `turn ${index}: ${report}`);
+  }
+  // update-ref to the commit the run just made: the default branch's ref can't move.
+  assert.equal(results[12]?.isError, true, `turn 12: ${report}`);
+  assert.equal(git(repo, "rev-parse", "refs/heads/main"), mainBefore, "the default branch is where it was");
+  assert.equal(readFileSync(path.join(repo, ".git", "HEAD"), "utf8"), "ref: refs/heads/main\n");
+  for (const name of ["packed-refs", path.join("info", "x")]) assert.ok(!readFileSync(path.join(repo, ".git", name), { flag: "a+" }).includes(PLANTED), name);
+
+  // The pin held: the repository's hooks path never ran, in the sandbox or out of it.
+  for (const marker of markers(worktreeRoot, home)) assert.ok(!existsSync(marker), `${marker}: ${report}`);
+  // Control: without segwi's pin the same hook does run, so the test above proves the pin and not a broken hook.
+  execFileSync("git", ["-C", worktree, "commit", "-q", "--allow-empty", "-m", "unpinned"]);
+  assert.ok(existsSync(markers(worktreeRoot, home)[0]), "the hook runs when nothing pins the hooks path");
+});
+
+const key = (home) => path.join(home, ".ssh", "id_test");
+const plantKey = ({ home }) => {
+  mkdirSync(path.join(home, ".ssh"), { mode: 0o700 });
+  writeFileSync(key(home), "segwi-test-private-key\n", { mode: 0o600 });
+};
+// The run's MCP config, which holds its approval secret. The adapter's data folder has this one run.
+const mcpFile = ({ hostDataDir }) => {
+  const runs = path.join(hostDataDir, "runs");
+  return path.join(runs, readdirSync(runs)[0], "mcp.json");
+};
+const SECRET_TEXT = /segwi-test-private-key|SEGWI_RUN_SECRET/;
+
+test("inside the sandbox the home's keys and segwi's own run files can't be read, even when a person allows it", { skip, timeout: 180_000 }, async (t) => {
+  const prepare = plantKey;
+  const script = [
+    ({ home }) => bash(`sh -c "cat ${key(home)}"`),
+    (context) => bash(`sh -c "cat ${mcpFile(context)}"`),
+    { text: "Done." },
+  ];
+  const { results, approvals, home } = await runScripted(t, { action: "build", script, prepare });
+  const report = show(results, approvals);
+  assert.ok(existsSync(key(home)), "the key was there to read");
+  assert.equal(approvals.length, 2, `both reached a person: ${report}`);
+  for (const index of [0, 1]) {
+    assert.equal(results[index]?.isError, true, `turn ${index}: ${report}`);
+    assert.doesNotMatch(results[index].text, SECRET_TEXT, `turn ${index}: ${report}`);
+  }
+});
+
+test("the Read tool, which runs outside the sandbox, can't read the home's keys or segwi's run files either", { skip, timeout: 180_000 }, async (t) => {
+  const script = [
+    (context) => ({ tool: "Read", input: { file_path: mcpFile(context) } }),
+    ({ home }) => ({ tool: "Read", input: { file_path: key(home) } }),
+    { text: "Done." },
+  ];
+  // Allowed, so only a deny rule can keep the secret out of the conversation.
+  const { results, approvals, home } = await runScripted(t, { action: "build", script, prepare: plantKey });
+  const report = show(results, approvals);
+  assert.ok(existsSync(key(home)), "the key was there to read");
+  for (const index of [0, 1]) {
+    assert.equal(results[index]?.isError, true, `turn ${index}: ${report}`);
+    assert.doesNotMatch(results[index].text, SECRET_TEXT, `turn ${index}: ${report}`);
+  }
+});
+
+test("the file tools can't write the control checkout below its top level or through a symlink, and ibni runs outside", { skip, timeout: 180_000 }, async (t) => {
+  const prepare = ({ repo, worktreeRoot }) => symlinkSync(repo, path.join(worktreeRoot, "link"));
+  const write = (target) => (context) => ({ tool: "Write", input: { file_path: target(context), content: `${PLANTED}\n` } });
+  const script = [
+    write(({ repo }) => path.join(repo, "src", "new.txt")),
+    write(({ repo }) => path.join(repo, ".git", "hooks", "post-checkout")),
+    write(({ worktreeRoot }) => path.join(worktreeRoot, "link", "planted.txt")),
+    // ibni list lists the current repository's workspaces, so it runs from the worktree ibni prepare makes.
+    bash("ibni prepare --slug sbx"),
+    (context) => bash(`cd ${JSON.parse(context.result(3).text).worktreePath}`),
+    bash("ibni list"),
+    ({ repo }) => bash(`ibni list && sh -c "touch ${repo}/${PLANTED}-escaped"`),
+    { text: "Done." },
+  ];
+  // Approvals are allowed, so a write that asks and then lands would show on disk.
+  const { results, approvals, repo } = await runScripted(t, { action: "build", script, prepare });
+  const report = show(results, approvals);
+  for (const index of [0, 1, 2]) assert.equal(results[index]?.isError, true, `turn ${index}: ${report}`);
+  assert.ok(!existsSync(path.join(repo, "src")), report);
+  assert.ok(!existsSync(path.join(repo, ".git", "hooks", "post-checkout")), report);
+  assert.ok(!existsSync(path.join(repo, "planted.txt")), `the symlink led into the control checkout: ${report}`);
+
+  assert.equal(results[5]?.isError, false, `ibni list: ${report}`);
+  assert.match(results[5].text, /"sbx"|agent\/sbx/, `ibni list saw the worktree: ${report}`);
+  assert.ok(!approvals.some((approval) => approval.exact === "ibni list"), "ibni list needed no approval");
+  assert.match(results[6]?.text ?? "", new RegExp(`${PLANTED}-escaped.*(${REFUSED.source})`), `the compound stayed sandboxed: ${report}`);
   assert.deepEqual(controlState(repo), UNTOUCHED);
 });

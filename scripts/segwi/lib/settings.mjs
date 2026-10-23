@@ -61,7 +61,7 @@ export function settingsFromConfig(config, { home = os.homedir() } = {}) {
   });
   const subjectProblem = vapidSubjectProblem(segwi.vapidSubject ?? "");
   if (subjectProblem) throw new ConfigError(`segwi.vapidSubject: "${segwi.vapidSubject}" ${subjectProblem}`);
-  return { segwi, deny: [...config.guard.deny], worktreeRoot: config.paths.worktreeRoot, browser: config.browser, workflowPorts: config.workflow.ports };
+  return { segwi, deny: [...config.guard.deny], worktreeRoot: config.paths.worktreeRoot, browser: config.browser, workflowPorts: config.workflow.ports, branchPrefix: config.workflow.branchPrefix };
 }
 
 export async function readSettings({ file, home = os.homedir() } = {}) {

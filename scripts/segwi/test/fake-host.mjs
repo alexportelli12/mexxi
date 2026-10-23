@@ -37,6 +37,7 @@ const toolTimeout = Number(process.env.MCP_TOOL_TIMEOUT) > 0 ? Number(process.en
 const report = () => writeFileSync(reportFile, JSON.stringify({
   args, stdin, segwiEnv, approverReplies, grandchild,
   cwd: process.cwd(), launchCheckout: process.env.IBNI_LAUNCH_CHECKOUT ?? null, npmCache: process.env.npm_config_cache ?? null,
+  gitHooksPath: process.env.GIT_CONFIG_KEY_0 === "core.hooksPath" ? process.env.GIT_CONFIG_VALUE_0 : null,
 }));
 report();
 
