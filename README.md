@@ -92,6 +92,8 @@ The details live in the [docs](https://alexportelli12.github.io/mexxi/docs/), ge
 
 Go for it. I made this repository public to share the workflow I use day to day. It is opinionated around how I like to work, so take the parts that fit and change the rest.
 
+mexxi is released under the [MIT licence](LICENSE). To send a change back, read [CONTRIBUTING.md](CONTRIBUTING.md) first.
+
 ## Credits
 
 The [frontend-design](skills/frontend-design/) and [skill-creator](skills/skill-creator/) skills are adapted from Anthropic's [skills repository](https://github.com/anthropics/skills), under the Apache License 2.0. Each folder keeps its licence in `LICENSE.txt`.
