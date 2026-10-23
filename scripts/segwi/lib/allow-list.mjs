@@ -34,12 +34,26 @@ export function isPlainVerifyCommand(command) {
   return PLAIN_COMMAND.test(command) && !UNSAFE_FIRST_WORDS.has(command.trim().split(/\s+/)[0]);
 }
 
+// What an ask run may do: look, never change. No file tool writes, nothing that installs, builds,
+// commits or opens a pull request, and no browser, which can submit forms on the web.
+const ASK_IBNI = ["list", "info", "stats"];
+const ASK_GIT = ["status", "diff", "log", "show", "ls-files", "rev-parse", "check-ignore"];
+const ASK_GH = ["pr view", "pr checks", "pr diff", "run view", "run list"];
+
 /**
- * @param {{ worktreeRoot: string, verifyCommand: string, tempDir: string }} input
+ * @param {{ action: string, worktreeRoot: string, verifyCommand: string, tempDir: string, repoPath: string }} input
  * @returns {string[]}
  */
-export function allowRules({ worktreeRoot, verifyCommand, tempDir }) {
-  const roots = [worktreeRoot, tempDir];
+export function allowRules({ action, worktreeRoot, verifyCommand, tempDir, repoPath }) {
+  const reads = [worktreeRoot, tempDir, repoPath].map((root) => `Read(${absolute(root)})`);
+  if (action === "ask") {
+    return [
+      ...ASK_IBNI.map((sub) => prefix(`ibni ${sub}`)),
+      ...ASK_GIT.map((sub) => prefix(`git ${sub}`)),
+      ...ASK_GH.map((sub) => prefix(`gh ${sub}`)),
+      ...reads,
+    ];
+  }
   return [
     ...["ibni", "vfk", "npx vfk", "npx verifika"].map(prefix),
     // The verify command exactly as the repository names it, never as a prefix that would also allow what follows it.
@@ -54,14 +68,15 @@ export function allowRules({ worktreeRoot, verifyCommand, tempDir }) {
     ...NPX.map((tool) => prefix(`npx ${tool}`)),
     ...["node --test", "ocr delegate", "ffmpeg", "mkdir"].map(prefix),
     "mcp__playwright__*",
-    ...["Read", "Edit", "Write"].flatMap((tool) => roots.map((root) => `${tool}(${absolute(root)})`)),
+    ...reads,
+    ...["Edit", "Write"].flatMap((tool) => [worktreeRoot, tempDir].map((root) => `${tool}(${absolute(root)})`)),
   ];
 }
 
-export function renderSettings({ worktreeRoot, verifyCommand, tempDir, denyPatterns }) {
+export function renderSettings({ action, worktreeRoot, verifyCommand, tempDir, repoPath, denyPatterns }) {
   return {
     permissions: {
-      allow: allowRules({ worktreeRoot, verifyCommand, tempDir }),
+      allow: allowRules({ action, worktreeRoot, verifyCommand, tempDir, repoPath }),
       deny: [...denyRules(denyPatterns), ...OUTPUT_DENY],
       disableBypassPermissionsMode: "disable",
     },

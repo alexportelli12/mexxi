@@ -191,7 +191,7 @@ export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir 
     const settingsFile = path.join(runDir, "settings.json");
     const mcpFile = path.join(runDir, "mcp.json");
     const settings = renderSettings({
-      worktreeRoot: spec.worktreeRoot, verifyCommand: spec.verifyCommand, denyPatterns: spec.denyPatterns,
+      action: spec.action, worktreeRoot: spec.worktreeRoot, verifyCommand: spec.verifyCommand, denyPatterns: spec.denyPatterns, repoPath: spec.repoPath,
       tempDir: `/tmp/claude-${process.getuid?.() ?? 0}`,
     });
     await writeFile(settingsFile, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });

@@ -97,9 +97,25 @@ for (const runner of RUNNERS) {
     assert.deepEqual(segwiEnv, [], "SEGWI_ variables are not passed to the host");
   });
 
+  test(`${runner.id}: an ask run gets a read-only allow list`, async (t) => {
+    const { adapter, dir } = runner.adapter(t, "ask-completed");
+    const repo = makeRepo(t);
+    const spec = specFor(repo);
+    const events = await drive(adapter, spec, (all) => results(all).length === 1);
+    adapter.close(spec.runId);
+    await waitFor(() => exited(events));
+    const { allow } = JSON.parse(readFileSync(path.join(dir, "data", "runs", spec.runId, "settings.json"), "utf8")).permissions;
+    assert.ok(allow.includes("Bash(git status:*)") && allow.includes("Bash(gh pr view:*)") && allow.includes("Bash(ibni info:*)"));
+    assert.ok(allow.includes(`Read(/${repo}/**)`));
+    for (const writer of ["Edit(", "Write(", "NotebookEdit(", "Bash(gh pr create", "Bash(gh pr edit", "Bash(npm", "Bash(npx", "Bash(git add", "Bash(git commit",
+      "Bash(git rm", "Bash(git mv", "Bash(git fetch", "Bash(mkdir", "Bash(node", "Bash(ibni:", "Bash(ibni prepare", "Bash(npm run verify", "mcp__playwright"]) {
+      assert.ok(!allow.some((rule) => rule.startsWith(writer)), `${writer} is not allowed in an ask run`);
+    }
+  });
+
   test(`${runner.id}: rendered settings and MCP config follow the brief`, async (t) => {
     const { adapter, dir } = runner.adapter(t, "ask-completed");
-    const spec = specFor(makeRepo(t));
+    const spec = specFor(makeRepo(t), { action: "build" });
     const events = await drive(adapter, spec, (all) => results(all).length === 1);
     adapter.close(spec.runId);
     await waitFor(() => exited(events));
