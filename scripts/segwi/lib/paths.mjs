@@ -8,7 +8,12 @@ export function dataDir({ env = process.env, home = os.homedir() } = {}) {
   return path.join(base, "mexxi", "segwi");
 }
 
-// Used from p4 on for the token hash and the VAPID keys.
+// The installer's state directory: it holds the MCP token's hash.
+export function stateDir({ home = os.homedir() } = {}) {
+  return path.join(home, ".local", "share", "mexxi", "state");
+}
+
+// Used from p5 on for the VAPID keys.
 export function secretsFile({ home = os.homedir() } = {}) {
   return path.join(home, ".config", "mexxi", "secrets", "segwi.json");
 }

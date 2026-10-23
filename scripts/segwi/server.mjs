@@ -17,6 +17,7 @@ export const COMMANDS = {
     why: "The agent should never run an unusual command unseen, so each one waits for your answer.",
   },
   token: {
+    implemented: true,
     summary: "Rotate the bearer token MCP clients use.",
     why: "A leaked token should be cheap to replace, so rotating it takes one command.",
   },
@@ -98,6 +99,7 @@ export async function main(args = process.argv.slice(2)) {
   }
   if (first === "serve") return serve(args.slice(1));
   if (first === "approver") return (await import("./lib/approver.mjs")).runApprover(args.slice(1));
+  if (first === "token") return (await import("./lib/token-cli.mjs")).runToken(args.slice(1));
   process.stderr.write(`segwi ${first}: not yet implemented\n`);
   process.exitCode = 2;
   return undefined;

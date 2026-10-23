@@ -29,7 +29,7 @@ function sendJson(res, status, body) {
   res.end(text);
 }
 
-async function readBody(req, limit = BODY_LIMIT) {
+export async function readBody(req, limit = BODY_LIMIT) {
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {
@@ -78,9 +78,9 @@ async function serveStatic(res, root, pathname) {
 }
 
 /**
- * @param {{ store: object, settings: object, authenticate: Function, runs: object, approvals: object, broker: object, staticRoot: string|null, version: string }} deps
+ * @param {{ store: object, settings: object, authenticate: Function, runs: object, approvals: object, broker: object, staticRoot: string|null, version: string, mcp?: Function|null }} deps
  */
-export function createHandler({ store, settings, authenticate, runs, approvals, broker, staticRoot, version }) {
+export function createHandler({ store, settings, authenticate, runs, approvals, broker, staticRoot, version, mcp = null }) {
   const parsers = schemasFor(settings);
   const routes = [
     ["GET", "/api/health", "none", async () => runs.health(version)],
@@ -176,6 +176,7 @@ export function createHandler({ store, settings, authenticate, runs, approvals, 
     securityHeaders(res);
     const url = new URL(req.url ?? "/", "http://localhost");
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) return handleApi(req, res, url);
+    if (url.pathname === "/mcp") return mcp ? mcp(req, res) : res.writeHead(404).end();
     if (url.pathname === "/internal" || url.pathname.startsWith("/internal/")) return handleInternal(req, res, url);
     if (req.method !== "GET" && req.method !== "HEAD") {
       res.writeHead(405).end();

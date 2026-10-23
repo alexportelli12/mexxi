@@ -11,7 +11,8 @@ import { assertAuthConfig, createAuthenticator } from "./auth.mjs";
 import { assertLoopbackBind, assertPortOutsideWorkflow } from "./bind.mjs";
 import { createHandler } from "./http.mjs";
 import { createIbniLink } from "./ibni-link.mjs";
-import { ensurePrivateDir } from "./paths.mjs";
+import { createMcpHandler } from "./mcp.mjs";
+import { ensurePrivateDir, stateDir as defaultStateDir } from "./paths.mjs";
 import { createRunService } from "./runs.mjs";
 import { createBroker } from "./sse.mjs";
 import { openStore } from "./store.mjs";
@@ -22,10 +23,10 @@ const DEFAULT_STATIC = path.join(here, "..", "web", "dist", "web", "browser");
 const version = JSON.parse(readFileSync(path.join(here, "..", "..", "..", "package.json"), "utf8")).version ?? "0.0.0";
 
 /**
- * @param {{ settings: object, dataDir: string, runner?: object, ibni?: object, staticRoot?: string|null, approvalTimeoutMs?: number }} options
- *   `runner`, `ibni` and `approvalTimeoutMs` are injected by tests; the CLI uses the configured runner and the real ibni.
+ * @param {{ settings: object, dataDir: string, runner?: object, ibni?: object, staticRoot?: string|null, approvalTimeoutMs?: number, stateDir?: string, mcpConfirmTtlMs?: number }} options
+ *   `runner`, `ibni`, `approvalTimeoutMs`, `stateDir` and `mcpConfirmTtlMs` are injected by tests; the CLI uses the configured runner and the real ibni.
  */
-export async function startServer({ settings, dataDir, runner, ibni = createIbniLink(), staticRoot = DEFAULT_STATIC, approvalTimeoutMs }) {
+export async function startServer({ settings, dataDir, runner, ibni = createIbniLink(), staticRoot = DEFAULT_STATIC, approvalTimeoutMs, stateDir = defaultStateDir(), mcpConfirmTtlMs }) {
   ensurePrivateDir(dataDir);
   const store = openStore(path.join(dataDir, "segwi.db"));
   const { bind, auth, runner: runnerId } = settings.segwi;
@@ -47,6 +48,7 @@ export async function startServer({ settings, dataDir, runner, ibni = createIbni
   const handler = createHandler({
     store, settings, authenticate: createAuthenticator(auth.web), runs, approvals, broker,
     staticRoot: staticRoot && readableDir(staticRoot) ? staticRoot : null, version,
+    mcp: createMcpHandler({ store, settings, runs, approvals, stateDir, confirmTtlMs: mcpConfirmTtlMs }),
   });
   const server = http.createServer((req, res) => void handler(req, res));
   await new Promise((resolve, reject) => {
