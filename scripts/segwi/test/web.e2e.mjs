@@ -213,7 +213,7 @@ e2e("without the sandbox, New run says runs can't start and Start stays off", as
     await route.fulfill({ json: { ...real, sandbox } });
   });
   await page.goto(`${harness.url}/new`);
-  await page.getByTestId("sandbox-blocked").filter({ hasText: "bubblewrap and socat" }).waitFor();
+  await page.getByTestId("sandbox-blocked").filter({ hasText: "Runs can't start until the sandbox works" }).waitFor();
   await page.getByLabel("Task").fill("Anything at all");
   assert.ok(await page.getByRole("button", { name: "Start" }).isDisabled());
   sandbox.required = false;

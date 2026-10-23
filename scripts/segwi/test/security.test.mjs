@@ -12,6 +12,7 @@ import { AuthConfigError } from "../lib/auth.mjs";
 import { startServer } from "../lib/serve.mjs";
 import { createBroker } from "../lib/sse.mjs";
 import { openStore } from "../lib/store.mjs";
+import { probeSandbox } from "../runners/claude-code.mjs";
 import { fakeAdapter, fixturesDir, makeRepo, makeSettings, tempDir, waitFor } from "./helpers.mjs";
 
 const serverEntry = fileURLToPath(new URL("../server.mjs", import.meta.url));
@@ -230,6 +231,21 @@ test("without a working sandbox a run is refused, health says why, and allowUnsa
   assert.equal(warned.ok, true);
   assert.deepEqual({ available: warned.sandbox.available, required: warned.sandbox.required }, { available: false, required: false });
   assert.match(warned.sandbox.problems.at(-1), /without Claude Code's sandbox, because segwi.allowUnsandboxed is on/);
+});
+
+test("when bubblewrap is installed but can't create a sandbox, the probe passes on bubblewrap's own reason", (t) => {
+  const bin = tempDir(t, "segwi-bin-");
+  writeFileSync(path.join(bin, "bwrap"), "#!/bin/sh\necho 'bwrap: Creating new namespace failed: Operation not permitted' >&2\nexit 1\n", { mode: 0o755 });
+  writeFileSync(path.join(bin, "socat"), "#!/bin/sh\n", { mode: 0o755 });
+  const searchPath = process.env.PATH;
+  process.env.PATH = bin;
+  t.after(() => { process.env.PATH = searchPath; });
+  assert.deepEqual(probeSandbox(), [
+    "Claude Code's sandbox can't start: bubblewrap is installed but can't create a sandbox here (bwrap: Creating new namespace failed: Operation not permitted).",
+  ]);
+  // A bubblewrap that fails silently still gets a reason, never an empty pair of brackets.
+  writeFileSync(path.join(bin, "bwrap"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
+  assert.match(probeSandbox()[0], /can't create a sandbox here \(exit 1\)\.$/);
 });
 
 test("over the concurrent-runs cap, or the daily cap, is 429 and audited", async (t) => {

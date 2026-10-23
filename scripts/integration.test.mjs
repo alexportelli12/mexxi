@@ -1342,10 +1342,12 @@ test("enabling the service writes three recorded units and starts them through s
   const service = await readFile(unitFile(home, "segwi.service"), "utf8");
   assert.ok(service.startsWith("# Managed by mexxi's installer. Edits are overwritten.\n"));
   assert.match(service, new RegExp(`^ExecStart=${"/opt/node/bin/node".replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} ${segwiLinkTarget.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} serve$`, "m"));
-  for (const line of ["Restart=on-failure", "RestartSec=5", "NoNewPrivileges=yes", "RestrictSUIDSGID=yes", "LockPersonality=yes", "UMask=0077", "Environment=NODE_ENV=production", 'Environment="PATH=/opt/node/bin:/home/someone/.local/bin:/usr/bin"']) {
+  for (const line of ["Restart=on-failure", "RestartSec=5", "NoNewPrivileges=yes", "LockPersonality=yes", "UMask=0077", "Environment=NODE_ENV=production", 'Environment="PATH=/opt/node/bin:/home/someone/.local/bin:/usr/bin"']) {
     assert.match(service, new RegExp(`^${line}$`, "m"), line);
   }
   assert.doesNotMatch(service, /^(ProtectHome|ProtectSystem|PrivateTmp)=/m);
+  // Its seccomp filter stops bubblewrap creating the sandbox every run needs.
+  assert.doesNotMatch(service, /^RestrictSUIDSGID=/m);
   const canary = await readFile(unitFile(home, "segwi-canary.service"), "utf8");
   assert.match(canary, /^Type=oneshot$/m);
   assert.match(canary, /^Environment="PATH=\/opt\/node\/bin:\/home\/someone\/\.local\/bin:\/usr\/bin"$/m);

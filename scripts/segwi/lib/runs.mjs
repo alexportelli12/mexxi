@@ -13,7 +13,7 @@ import { StepFolder } from "./steps.mjs";
 import { FINAL } from "./store.mjs";
 
 const RESTART_REASON = "segwi restarted while this run was active";
-const NO_SANDBOX = "Claude Code's sandbox can't start, so segwi won't start a run: without it, every allowed command could reach your whole machine. Install bubblewrap and socat.";
+const NO_SANDBOX = "Claude Code's sandbox can't start, so segwi won't start a run: without it, every allowed command could reach your whole machine.";
 const UNSANDBOXED = "Runs start without Claude Code's sandbox, because segwi.allowUnsandboxed is on.";
 const DAY_CACHE_MS = 60_000;
 

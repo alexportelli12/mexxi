@@ -45,13 +45,17 @@ function onPath(name) {
 
 /**
  * Why Claude Code's sandbox can't start here, or nothing. Having bubblewrap is not enough: some systems
- * (Ubuntu 24.04, for one) forbid the user namespaces it needs, so this starts a throwaway sandbox to see.
+ * (Ubuntu 24.04, for one) forbid the user namespaces it needs, and a seccomp filter on segwi's own process
+ * can block it too, so this starts a throwaway sandbox to see and passes on bubblewrap's own reason.
  */
 export function probeSandbox() {
   const missing = SANDBOX_TOOLS.filter((name) => !onPath(name));
   if (missing.length) return [`Claude Code's sandbox can't start: install bubblewrap and socat (missing: ${missing.join(", ")}).`];
-  const trial = spawnSync("bwrap", ["--ro-bind", "/", "/", "--dev", "/dev", "--unshare-net", "true"], { stdio: "ignore", timeout: 5000 });
-  if (trial.status !== 0) return ["Claude Code's sandbox can't start: bubblewrap is installed but can't create a sandbox, usually because unprivileged user namespaces are turned off."];
+  const trial = spawnSync("bwrap", ["--ro-bind", "/", "/", "--dev", "/dev", "--unshare-net", "true"], { stdio: ["ignore", "ignore", "pipe"], encoding: "utf8", timeout: 5000 });
+  if (trial.status !== 0) {
+    const reason = trial.error?.message ?? (trial.stderr.trim().split("\n").at(-1).slice(0, 300) || `exit ${trial.status ?? trial.signal}`);
+    return [`Claude Code's sandbox can't start: bubblewrap is installed but can't create a sandbox here (${reason}).`];
+  }
   return [];
 }
 
