@@ -86,6 +86,7 @@
     },
     "runner": "claude-code",
     "model": "",
+    "allowUnsandboxed": false,
     "repositories": [],
     "auth": {
       "web": {

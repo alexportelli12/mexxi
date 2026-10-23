@@ -13,6 +13,8 @@ import { StepFolder } from "./steps.mjs";
 import { FINAL } from "./store.mjs";
 
 const RESTART_REASON = "segwi restarted while this run was active";
+const NO_SANDBOX = "Claude Code's sandbox can't start, so segwi won't start a run: without it, every allowed command could reach your whole machine. Install bubblewrap and socat.";
+const UNSANDBOXED = "Runs start without Claude Code's sandbox, because segwi.allowUnsandboxed is on.";
 const DAY_CACHE_MS = 60_000;
 
 export const hashSecret = (secret) => createHash("sha256").update(secret).digest("hex");
@@ -39,7 +41,8 @@ export function createRunService({ store, settings, runner, ibni, broker, server
   /** @type {Map<string, { folder: StepFolder, chain: Promise<void>, prepareCalls: Set<string>, ibniSession: string|null, runSecret: string, repoPath: string }>} */
   const live = new Map();
   const watchdog = createWatchdog(limits, (runId, reason) => void timeOut(runId, reason));
-  let healthCache = null;
+  let detectCache = null;
+  const requireSandbox = !settings.segwi.allowUnsandboxed;
   /** @type {Array<(runId: string) => void>} */
   const finishListeners = [];
 
@@ -126,6 +129,12 @@ export function createRunService({ store, settings, runner, ibni, broker, server
     };
   }
 
+  /** The runner's own report, refreshed at most once a minute: `claude --version` is too slow to run per request. */
+  async function detected() {
+    if (!detectCache || Date.now() - detectCache.at > DAY_CACHE_MS) detectCache = { at: Date.now(), detected: await runner.detect() };
+    return detectCache.detected;
+  }
+
   async function timeOut(runId, reason) {
     const run = store.getRun(runId);
     if (!run || FINAL.has(run.status)) return;
@@ -143,6 +152,10 @@ export function createRunService({ store, settings, runner, ibni, broker, server
       const repository = repositories.find((candidate) => candidate.name === input.repo);
       const problem = checkoutProblem(await checkoutState(repository.path));
       if (problem) throw new HttpError(409, problem);
+      if (requireSandbox && !(await detected()).sandbox.available) {
+        detectCache = null; // a refusal looks again, so installing bubblewrap takes effect at once
+        if (!(await detected()).sandbox.available) throw new HttpError(409, NO_SANDBOX);
+      }
       // Checked and inserted in one synchronous step, so two requests can't both pass.
       assertWithinCaps(store, limits);
       const id = randomUUID();
@@ -245,14 +258,17 @@ export function createRunService({ store, settings, runner, ibni, broker, server
     },
 
     async health(version) {
-      if (!healthCache || Date.now() - healthCache.at > DAY_CACHE_MS) healthCache = { at: Date.now(), detected: await runner.detect() };
-      const { available, version: runnerVersion, testedVersions, problems, sandbox } = healthCache.detected;
+      const { available, version: runnerVersion, testedVersions, problems, sandbox } = await detected();
+      const blocked = requireSandbox && !sandbox.available;
       return {
-        ok: available, version,
+        ok: available && !blocked, version,
         // The caps the app needs to size its inputs and word a timed-out run.
         limits: { taskMaxChars: limits.taskMaxChars, inputMaxChars: limits.inputMaxChars, idleTimeoutMinutes: limits.idleTimeoutMinutes },
         runner: { id: runner.id, available, version: runnerVersion, tested: runnerVersion !== null && testedVersions.includes(runnerVersion), problems },
-        sandbox,
+        sandbox: {
+          available: sandbox.available, required: requireSandbox,
+          problems: sandbox.available ? [] : [...sandbox.problems, blocked ? NO_SANDBOX : UNSANDBOXED],
+        },
       };
     },
 

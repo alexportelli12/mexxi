@@ -2,7 +2,7 @@
 // from a fixed argument array, renders the per-run settings and MCP config, and
 // turns the host's stream-json output into normalised RunEvents. No caller value
 // reaches the command line: the task goes to stdin, the rest comes from config.
-import { execFile, spawn } from "node:child_process";
+import { execFile, spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { accessSync, constants, readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -25,6 +25,8 @@ const SYSTEM_PROMPT = "A person must approve any tool call outside this run's al
   + "This holds even where other guidance suggests editing through the shell.";
 const ASK_PROMPT = " This run only answers a question: read what you need and change nothing.";
 const RESULT_DETAIL_MAX = 8000;
+// What Claude Code's sandbox needs on Linux. Without them it runs commands unsandboxed and says nothing.
+const SANDBOX_TOOLS = ["bwrap", "socat"];
 const INPUT_KEYS = ["command", "description", "file_path", "path", "pattern", "url", "query", "skill", "subagent_type", "prompt"];
 
 function onPath(name) {
@@ -36,6 +38,18 @@ function onPath(name) {
       return false;
     }
   });
+}
+
+/**
+ * Why Claude Code's sandbox can't start here, or nothing. Having bubblewrap is not enough: some systems
+ * (Ubuntu 24.04, for one) forbid the user namespaces it needs, so this starts a throwaway sandbox to see.
+ */
+export function probeSandbox() {
+  const missing = SANDBOX_TOOLS.filter((name) => !onPath(name));
+  if (missing.length) return [`Claude Code's sandbox can't start: install bubblewrap and socat (missing: ${missing.join(", ")}).`];
+  const trial = spawnSync("bwrap", ["--ro-bind", "/", "/", "--dev", "/dev", "--unshare-net", "true"], { stdio: "ignore", timeout: 5000 });
+  if (trial.status !== 0) return ["Claude Code's sandbox can't start: bubblewrap is installed but can't create a sandbox, usually because unprivileged user namespaces are turned off."];
+  return [];
 }
 
 /** The first stdin line for each action. `ready` appends a task only if one is given. */
@@ -137,12 +151,14 @@ export function mapMessage(message) {
 
 /**
  * @param {{ bin?: string, binArgs?: string[], dataDir?: string, killGraceMs?: [number, number], stateDir?: string|null,
- *   onUnknown?: (what: string) => void, onLine?: (line: string) => void }} [options]
+ *   onUnknown?: (what: string) => void, onLine?: (line: string) => void, sandboxProblems?: () => string[] }} [options]
  *   `bin` and `binArgs` exist for tests and the canary only; nothing from config, a request or the environment reaches them.
+ *   `sandboxProblems` lets tests decide whether the sandbox can start, whatever this machine has installed.
  *   `stateDir` is where a canary's passed versions are read from. `onUnknown` hears each line the adapter did not
  *   recognise, and `onLine` each raw line of the host's output, both for the canary.
  */
-export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir = path.join(os.tmpdir(), "segwi"), killGraceMs = [10_000, 5_000], stateDir = null, onUnknown = () => {}, onLine = () => {} } = {}) {
+export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir = path.join(os.tmpdir(), "segwi"), killGraceMs = [10_000, 5_000], stateDir = null, onUnknown = () => {}, onLine = () => {},
+  sandboxProblems = probeSandbox } = {}) {
   /** @type {Map<string, { child: import("node:child_process").ChildProcess, closed: boolean, timers: NodeJS.Timeout[] }>} */
   const processes = new Map();
 
@@ -160,9 +176,8 @@ export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir 
     if (version && !tested.includes(version)) {
       problems.push(`Claude Code ${version} has not been tested with segwi (tested: ${tested.join(", ")}).`);
     }
-    const missing = ["bwrap", "socat"].filter((name) => !onPath(name));
-    const sandboxProblems = missing.length ? ["Claude Code's sandbox can't start: install bubblewrap and socat."] : [];
-    return { available: version !== null, version, testedVersions: tested, problems, sandbox: { available: !missing.length, problems: sandboxProblems } };
+    const sandbox = sandboxProblems();
+    return { available: version !== null, version, testedVersions: tested, problems, sandbox: { available: !sandbox.length, problems: sandbox } };
   }
 
   async function start(spec, emit) {

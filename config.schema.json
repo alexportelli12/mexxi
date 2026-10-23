@@ -245,6 +245,11 @@
         },
         "runner": { "description": "Which coding agent segwi starts. Only Claude Code exists so far.", "type": "string", "enum": ["claude-code"], "default": "claude-code" },
         "model": { "description": "Model every run uses, such as sonnet. Empty uses your coding agent's own default, which may cost more than a run needs.", "type": "string", "pattern": "^[A-Za-z0-9._-]*$", "default": "" },
+        "allowUnsandboxed": {
+          "description": "Start runs even when Claude Code's sandbox can't start, because bubblewrap or socat is missing. Dangerous: without the sandbox, every command on the allow list, such as npm run or a test, runs with all of your access. It can write anywhere you can, reach any network address, and reach segwi itself to answer its own approvals.",
+          "type": "boolean",
+          "default": false
+        },
         "repositories": {
           "description": "The only repositories a run may start in, each with a name, the path of its control checkout and the actions allowed there (build, ready or ask).",
           "type": "array",

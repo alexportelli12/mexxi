@@ -46,13 +46,16 @@ export function makeSettings({ repos, auth = {}, limits = {}, host = "127.0.0.1"
   };
 }
 
-/** An adapter whose "claude" replays a recording. Returns the adapter and where the host's report lands. */
+/**
+ * An adapter whose "claude" replays a recording. Returns the adapter and where the host's report lands.
+ * The sandbox counts as available unless a test passes its own `sandboxProblems`, so the suite doesn't depend on bubblewrap.
+ */
 export function fakeAdapter(t, fixture, options = {}) {
   const dir = tempDir(t, "segwi-host-");
   const reportFile = path.join(dir, "report.json");
   const file = path.isAbsolute(fixture) ? fixture : path.join(fixturesDir, "claude-code", `${fixture}.jsonl`);
   const adapter = createClaudeCodeAdapter({
-    bin: process.execPath, binArgs: [fakeHost, file, reportFile], dataDir: path.join(dir, "data"), killGraceMs: [200, 200], ...options,
+    bin: process.execPath, binArgs: [fakeHost, file, reportFile], dataDir: path.join(dir, "data"), killGraceMs: [200, 200], sandboxProblems: () => [], ...options,
   });
   return { adapter, report: () => JSON.parse(readFileSync(reportFile, "utf8")), dir };
 }

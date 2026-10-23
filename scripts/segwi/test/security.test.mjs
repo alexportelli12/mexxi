@@ -170,6 +170,31 @@ test("a dirty checkout, or one off its default branch, is 409 and audited", asyn
   assert.ok(!JSON.stringify(repos).includes(repo), "the repository path is never shown");
 });
 
+test("without a working sandbox a run is refused, health says why, and allowUnsandboxed lets it start with a warning", async (t) => {
+  const noSandbox = { sandboxProblems: () => ["Claude Code's sandbox can't start: install bubblewrap and socat (missing: bwrap)."] };
+  const { server } = await boot(t, { adapterOptions: noSandbox });
+  const refused = await startRun(server);
+  assert.equal(refused.status, 409);
+  assert.match(refused.json.error, /sandbox can't start, so segwi won't start a run/);
+  assert.equal(server.store.listRuns().length, 0);
+  assert.match(lastRejected(server).detail, /^409 .*sandbox/);
+  const health = (await request(server, "GET", "/api/health")).json;
+  assert.equal(health.ok, false);
+  assert.deepEqual({ available: health.sandbox.available, required: health.sandbox.required }, { available: false, required: true });
+  assert.match(health.sandbox.problems.join(" "), /missing: bwrap.*won't start a run/);
+
+  const repo = makeRepo(t);
+  const settings = makeSettings({ repos: [{ name: "my-app", path: repo, actions: ["ask"] }] });
+  settings.segwi.allowUnsandboxed = true;
+  const loose = await startServer({ settings, dataDir: tempDir(t, "segwi-data-"), runner: fakeAdapter(t, "ask-completed", noSandbox).adapter, ibni: noIbni, staticRoot: null });
+  t.after(() => loose.close());
+  assert.equal((await startRun(loose)).status, 201);
+  const warned = (await request(loose, "GET", "/api/health")).json;
+  assert.equal(warned.ok, true);
+  assert.deepEqual({ available: warned.sandbox.available, required: warned.sandbox.required }, { available: false, required: false });
+  assert.match(warned.sandbox.problems.at(-1), /without Claude Code's sandbox, because segwi.allowUnsandboxed is on/);
+});
+
 test("over the concurrent-runs cap, or the daily cap, is 429 and audited", async (t) => {
   const concurrent = await boot(t, { fixture: "build-needs-input", limits: { concurrentRuns: 1 } });
   assert.equal((await startRun(concurrent.server, { action: "build" })).status, 201);
@@ -213,7 +238,7 @@ test("an ask run completes, shows readable steps, and a repeated clientId return
   const health = (await request(server, "GET", "/api/health")).json;
   assert.equal(health.runner.id, "claude-code");
   assert.equal(health.runner.tested, true);
-  assert.equal(typeof health.sandbox.available, "boolean");
+  assert.deepEqual(health.sandbox, { available: true, required: true, problems: [] });
   for (const header of ["content-security-policy", "x-content-type-options", "referrer-policy"]) assert.ok(health[header] === undefined && (await request(server, "GET", "/api/health")).headers[header]);
   assert.match((await request(server, "GET", "/api/health")).headers["cache-control"], /no-store/);
   assert.match((await request(server, "GET", "/")).text, /Build the web app/);
