@@ -1,5 +1,7 @@
 // segwi's SQLite database. Every text from outside is redacted before it is
-// written, and the audit table refuses UPDATE and DELETE.
+// written, and the audit table refuses UPDATE and DELETE. The one exception is a
+// pending approval: a person must see exactly what would run, so its call is kept
+// raw until it is decided, then redacted in place.
 import { DatabaseSync } from "node:sqlite";
 import { chmodSync, existsSync } from "node:fs";
 import { cleanDeep, cleanText } from "./clean.mjs";
@@ -7,7 +9,8 @@ import { cleanDeep, cleanText } from "./clean.mjs";
 export const FINAL = new Set(["completed", "failed", "stopped", "timed_out"]);
 export const ACTIVE = ["queued", "running", "needs_input", "needs_approval"];
 
-// Version 1 is the p2 schema, version 2 adds approvals (p3), version 3 push subscriptions (p5).
+// Version 1 is the p2 schema, version 2 adds approvals (p3), version 3 push subscriptions (p5),
+// version 4 the content a file tool would write.
 const MIGRATIONS = [
   `CREATE TABLE runs (
      id TEXT PRIMARY KEY, repo TEXT NOT NULL, action TEXT NOT NULL, task TEXT NOT NULL, status TEXT NOT NULL,
@@ -44,6 +47,7 @@ const MIGRATIONS = [
      id TEXT PRIMARY KEY, endpoint TEXT NOT NULL UNIQUE, p256dh TEXT NOT NULL, auth TEXT NOT NULL, identity TEXT NOT NULL,
      created_at TEXT NOT NULL, last_ok_at TEXT, last_error TEXT
    );`,
+  "ALTER TABLE approvals ADD COLUMN content TEXT;",
 ];
 
 const RUN_COLUMNS = {
@@ -66,7 +70,7 @@ function approvalFromRow(row) {
   return {
     id: row.id, runId: row.run_id, tool: row.tool, exact: row.exact, cwd: row.cwd, why: row.why, risk: row.risk,
     createdAt: row.created_at, expiresAt: row.expires_at, status: row.status, decidedBy: row.decided_by, decidedAt: row.decided_at,
-    toolUseId: row.tool_use_id,
+    toolUseId: row.tool_use_id, content: row.content ? JSON.parse(row.content) : null,
   };
 }
 
@@ -76,7 +80,8 @@ function eventFromRow(row) {
 
 export function openStore(file, { now = () => new Date() } = {}) {
   const db = new DatabaseSync(file);
-  db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
+  // secure_delete overwrites freed pages, so a redacted approval's raw call doesn't linger in the file.
+  db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000; PRAGMA secure_delete = ON;");
   const version = db.prepare("PRAGMA user_version").get().user_version;
   for (let next = version; next < MIGRATIONS.length; next += 1) {
     db.exec("BEGIN");
@@ -109,10 +114,10 @@ export function openStore(file, { now = () => new Date() } = {}) {
     setSecret: db.prepare("UPDATE runs SET secret_hash = ? WHERE id = ?"),
     getSecret: db.prepare("SELECT secret_hash FROM runs WHERE id = ?"),
     lastOfKind: db.prepare("SELECT * FROM events WHERE run_id = ? AND kind = ? ORDER BY seq DESC LIMIT 1"),
-    insertApproval: db.prepare(`INSERT INTO approvals (id, run_id, tool, exact, cwd, why, risk, created_at, expires_at, status, tool_use_id)
-                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`),
+    insertApproval: db.prepare(`INSERT INTO approvals (id, run_id, tool, exact, content, cwd, why, risk, created_at, expires_at, status, tool_use_id)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)`),
     getApproval: db.prepare("SELECT * FROM approvals WHERE id = ?"),
-    decideApproval: db.prepare("UPDATE approvals SET status = ?, decided_by = ?, decided_at = ? WHERE id = ? AND status = 'pending'"),
+    decideApproval: db.prepare("UPDATE approvals SET status = ?, decided_by = ?, decided_at = ?, exact = ?, content = ? WHERE id = ? AND status = 'pending'"),
     pendingFor: db.prepare("SELECT * FROM approvals WHERE run_id = ? AND status = 'pending' ORDER BY created_at, rowid"),
     getSubscription: db.prepare("SELECT * FROM push_subscriptions WHERE id = ?"),
     subscriptionByEndpoint: db.prepare("SELECT * FROM push_subscriptions WHERE endpoint = ?"),
@@ -172,13 +177,19 @@ export function openStore(file, { now = () => new Date() } = {}) {
       return row ? eventFromRow(row) : null;
     },
 
-    createApproval({ id, runId, tool, exact, cwd, why, risk, expiresAt, toolUseId }) {
-      statements.insertApproval.run(id, runId, cleanText(tool, 200), cleanText(exact, 2000), cleanText(cwd, 500), cleanText(why, 300), risk, stamp(), expiresAt, cleanText(toolUseId, 200));
+    /** `exact` and `content` are stored raw: the person decides on exactly what runs. */
+    createApproval({ id, runId, tool, exact, content = null, cwd, why, risk, expiresAt, toolUseId }) {
+      statements.insertApproval.run(id, runId, cleanText(tool, 200), exact, content ? JSON.stringify(content) : null, cleanText(cwd, 500), cleanText(why, 300), risk, stamp(), expiresAt, cleanText(toolUseId, 200));
       return approvalFromRow(statements.getApproval.get(id));
     },
     getApproval: (id) => approvalFromRow(statements.getApproval.get(id)),
-    /** Moves a pending approval to its final status. Returns false if it was no longer pending. */
-    decideApproval: (id, status, decidedBy) => statements.decideApproval.run(status, decidedBy ? cleanText(decidedBy, 200) : null, stamp(), id).changes === 1,
+    /** Moves a pending approval to its final status, redacting its call now nobody needs it raw. Returns false if it was no longer pending. */
+    decideApproval(id, status, decidedBy) {
+      const row = statements.getApproval.get(id);
+      if (!row || row.status !== "pending") return false;
+      const content = row.content ? JSON.stringify(cleanDeep(JSON.parse(row.content))) : null;
+      return statements.decideApproval.run(status, decidedBy ? cleanText(decidedBy, 200) : null, stamp(), cleanText(row.exact), content, id).changes === 1;
+    },
     pendingApprovalsFor: (runId) => statements.pendingFor.all(runId).map(approvalFromRow),
     listApprovals({ status = "pending", limit = 100 } = {}) {
       return db.prepare("SELECT * FROM approvals WHERE status = ? ORDER BY created_at, rowid LIMIT ?").all(status, limit).map(approvalFromRow);

@@ -2,6 +2,10 @@
 // process holds an HTTP request open (the "long poll") until the call is decided
 // or expires. Expired means denied. Nothing here widens a decision: it applies
 // to the one call, there is no "allow all" and no "remember".
+//
+// What the person sees is exactly what runs: the raw command or file content,
+// never redacted or shortened, because the approver hands the same input back.
+// A call too long to show in full is denied instead of asked.
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import os from "node:os";
 import { audit } from "./audit.mjs";
@@ -10,20 +14,49 @@ import { HttpError } from "./errors.mjs";
 import { classifyRisk, RISK_LABELS } from "./risk.mjs";
 import { hashSecret } from "./runs.mjs";
 
-const EXACT_MAX = 2000;
+/** The most a phone can show of one call, counting the command or path and any file content. */
+export const DISPLAY_MAX = 20_000;
 const WHY_MAX = 300;
 const ASKABLE = new Set(["running", "needs_input", "needs_approval"]);
-const FILE_TOOLS = new Set(["Edit", "Write", "NotebookEdit", "Read"]);
 
-/** What the person is shown to decide on: the command, path or URL itself. */
+// The input fields each tool is known to take. A call with any other field is shown whole, as JSON,
+// so nothing that changes what runs can hide beside the part the card names.
+const KNOWN_FIELDS = {
+  Bash: ["command", "description", "timeout", "run_in_background", "dangerouslyDisableSandbox"],
+  Read: ["file_path", "offset", "limit", "pages"],
+  Write: ["file_path", "content"],
+  Edit: ["file_path", "old_string", "new_string", "replace_all"],
+  NotebookEdit: ["notebook_path", "cell_id", "new_source", "cell_type", "edit_mode"],
+  WebFetch: ["url", "prompt"],
+};
+const PRIMARY = { Bash: "command", Read: "file_path", Write: "file_path", Edit: "file_path", NotebookEdit: "notebook_path", WebFetch: "url" };
+
+const knownShape = (tool, input) => Object.hasOwn(KNOWN_FIELDS, tool) && typeof input[PRIMARY[tool]] === "string"
+  && Object.keys(input).every((key) => KNOWN_FIELDS[tool].includes(key));
+
+/** The line the person decides on: the command, path or URL itself, or the whole call as JSON. */
 export function exactFor(tool, input) {
-  if (tool === "Bash" && typeof input.command === "string") return input.command;
-  if (FILE_TOOLS.has(tool)) {
-    const file = input.file_path ?? input.notebook_path ?? input.path;
-    if (typeof file === "string") return file;
+  return knownShape(tool, input) ? input[PRIMARY[tool]] : `${tool} ${JSON.stringify(input)}`;
+}
+
+const text = (value) => (typeof value === "string" ? value : "");
+const orNull = (value) => (typeof value === "string" ? value : null);
+
+/** What a file tool would write, raw, or null for every other call. */
+export function contentFor(tool, input) {
+  if (!knownShape(tool, input)) return null;
+  if (tool === "Write") return { kind: "write", text: text(input.content) };
+  if (tool === "Edit") return { kind: "edit", oldText: text(input.old_string), newText: text(input.new_string), replaceAll: input.replace_all === true };
+  if (tool === "NotebookEdit") {
+    return { kind: "notebook", cellId: orNull(input.cell_id), editMode: orNull(input.edit_mode), cellType: orNull(input.cell_type), text: text(input.new_source) };
   }
-  if (tool === "WebFetch" && typeof input.url === "string") return input.url;
-  return `${tool} ${JSON.stringify(input)}`;
+  return null;
+}
+
+/** Characters the person would have to read: the exact line and every text in the content. */
+export function displayLength(exact, content) {
+  const texts = content ? Object.values(content).filter((value) => typeof value === "string" && value !== content.kind) : [];
+  return [exact, ...texts].reduce((sum, value) => sum + value.length, 0);
 }
 
 function tildeHome(directory, home) {
@@ -70,6 +103,13 @@ export function createApprovalService({ store, settings, runs, broker, notify = 
   // A run that ends takes its open questions with it.
   runs.onFinish((runId) => store.pendingApprovalsFor(runId).forEach(expire));
 
+  /** Denies a call nobody could read in full on a phone. The denial's message reaches the run as the call's result. */
+  function refuseTooLong(run, tool, exact, length) {
+    const message = `This call is ${length} characters, too long for segwi to show you in full (the limit is ${DISPLAY_MAX}), so it denied it. Split it into smaller calls.`;
+    audit(store, { actor: "system", origin: "system", action: "approval.too_long", target: run.id, outcome: "rejected", detail: `${tool}: ${length} characters: ${exact}` });
+    return { decision: "deny", message };
+  }
+
   function checkSecret(runId, bearer) {
     const stored = store.getRunSecretHash(runId);
     if (!stored || !bearer) return false;
@@ -87,10 +127,14 @@ export function createApprovalService({ store, settings, runs, broker, notify = 
       const run = store.getRun(runId);
       if (!run || !checkSecret(runId, bearer)) throw new HttpError(401, "That run secret is not valid.");
       if (!ASKABLE.has(run.status)) throw new HttpError(409, `The run is ${run.status}, so nothing can be approved for it.`);
+      const exact = exactFor(toolName, input);
+      const content = contentFor(toolName, input);
+      const length = displayLength(exact, content);
+      if (length > DISPLAY_MAX) return refuseTooLong(run, toolName, exact, length);
       const lastText = store.lastEventOfKind(runId, "text")?.data.text ?? "";
       const repoPath = settings.segwi.repositories.find((repository) => repository.name === run.repo)?.path ?? "";
       const approval = store.createApproval({
-        id: randomBytes(12).toString("hex"), runId, tool: toolName, exact: cleanText(exactFor(toolName, input), EXACT_MAX),
+        id: randomBytes(12).toString("hex"), runId, tool: toolName, exact, content,
         cwd: tildeHome(run.worktreePath ?? repoPath, home),
         why: cleanText(typeof input.description === "string" && input.description ? input.description : lastText, WHY_MAX),
         risk: classifyRisk({ tool: toolName, input, worktreeRoot: settings.worktreeRoot }),
