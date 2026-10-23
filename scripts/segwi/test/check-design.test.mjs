@@ -57,3 +57,53 @@ test("the product name is held to the same rule", async (t) => {
   const problems = checkDesign(await tree(t, { "scripts/segwi/web/src/app/app.ts": "const title = 'segwi';" }));
   assert.match(problems[0], /"segwi" is typed in/);
 });
+
+test("colour functions outside tokens.css are refused wherever they are written", async (t) => {
+  const css = "a { color: rgb(1 2 3); background: rgba(0,0,0,.5); border-color: hsl(10 20% 30%); outline-color: hsla(1,2%,3%,.4); "
+    + "fill: oklch(70% 0.1 200); stroke: oklab(0.5 0.1 0.1); caret-color: hwb(10 20% 30%); }";
+  const problems = checkDesign(await tree(t, { "site/styles.css": css }));
+  assert.equal(problems.length, 7, problems.join("\n"));
+  assert.match(problems[0], /site\/styles\.css:1: colour rgb\(/);
+  const ts = checkDesign(await tree(t, { "scripts/segwi/web/src/app/app.ts": "el.style.background = 'rgb(1, 2, 3)';" }));
+  assert.equal(ts.length, 1);
+});
+
+test("named colours and lab/lch/color() are refused in CSS values: files, style blocks and attributes, component styles, Tailwind", async (t) => {
+  const cases = {
+    "site/styles.css": "a { color: red; }\n.b {\n  border: 1px solid RebeccaPurple;\n  --x: lab(50% 10 10);\n  background: lch(50% 10 10) color(display-p3 1 0 0);\n}",
+    "site/index.html": '<meta name="theme-color" content="#0a0b0d" /><style>p { color: navy }</style><p style="background: white">x</p>',
+    "scripts/segwi/web/src/app/app.ts": "@Component({ styles: [`:host { color: tomato; }`], template: `<p class=\"bg-[red] text-[rgb(1_2_3)] [color:teal]\">x</p>` })",
+    "scripts/docs/vitepress/theme/custom.css": ".dark { --vp-c-bg: black }",
+  };
+  const problems = checkDesign(await tree(t, cases));
+  const found = problems.map((problem) => problem.replace(/ belongs.*/, ""));
+  assert.deepEqual(found.sort(), [
+    "scripts/docs/vitepress/theme/custom.css:1: colour black",
+    "scripts/segwi/web/src/app/app.ts:1: colour red",
+    "scripts/segwi/web/src/app/app.ts:1: colour rgb(…)",
+    "scripts/segwi/web/src/app/app.ts:1: colour teal",
+    "scripts/segwi/web/src/app/app.ts:1: colour tomato",
+    "site/index.html:1: colour navy",
+    "site/index.html:1: colour white",
+    "site/styles.css:1: colour red",
+    "site/styles.css:3: colour RebeccaPurple",
+    "site/styles.css:4: colour lab(",
+    "site/styles.css:5: colour color(",
+    "site/styles.css:5: colour lch(",
+  ]);
+});
+
+test("named colour words outside CSS values, and keywords that are not colours, pass", async (t) => {
+  const cases = {
+    "site/styles.css": "/* a red line, once */\na:hover { color: currentColor; background: transparent; border-color: inherit; }\n"
+      + ".tan-box { content: \"red\"; background: url(red.png) var(--red); color: color-mix(in srgb, var(--text) 50%, var(--bg)); }",
+    "site/index.html": '<meta name="theme-color" content="#0a0b0d" /><p class="red">Black and white, red and gold.</p>',
+    "scripts/segwi/web/src/app/app.ts": "const red = 'green'; function color(x) { return lab(x); } const label = 'Stop the white run'; const grid = 'grid-cols-[auto_1fr] text-[15px]';",
+    "scripts/segwi/web/src/app/words.ts": "export const word = 'wettaq'; // navy",
+  };
+  assert.deepEqual(checkDesign(await tree(t, cases)), []);
+});
+
+test("site/tokens.css may hold any colour", async (t) => {
+  assert.deepEqual(checkDesign(await tree(t, { "site/tokens.css": ":root { --bg: #0a0b0d; --soft: rgb(1 2 3 / 0.1); --x: red; --y: oklch(70% 0.1 200); }" })), []);
+});

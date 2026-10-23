@@ -463,7 +463,7 @@ h3 {
 .entry {
   break-inside: avoid;
   padding-block: 12px;
-  border-bottom: 1px solid rgb(29 26 22 / 0.12);
+  border-bottom: 1px solid var(--ink-rule);
   font-family: var(--font-book);
   line-height: 1.45;
 }

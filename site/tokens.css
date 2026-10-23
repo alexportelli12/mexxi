@@ -18,6 +18,7 @@
   --paper: #f1e9da; /* the dictionary's page */
   --ink: #1d1a16;
   --ink-muted: #5d554a;
+  --ink-rule: rgb(29 26 22 / 0.12); /* a hairline on the page, --ink at 12% */
 
   /* A run's state, never shown by colour alone. Each reaches WCAG AA (4.5:1)
      on --bg, --surface and --surface-raised; a test checks it. */
