@@ -29,7 +29,7 @@ describe('sandbox status', () => {
     const element = await banner({ available: false, required: true, problems: ['bwrap was not found'] });
     const strip = element.querySelector('[data-testid="sandbox-blocked"]')!;
     expect(strip.getAttribute('role')).toBe('alert');
-    expect(strip.textContent).toContain("Runs can't start until bubblewrap and socat are installed");
+    expect(strip.textContent).toContain("Runs can't start until the sandbox works on the server");
     expect(strip.textContent).toContain('bwrap was not found');
   });
 

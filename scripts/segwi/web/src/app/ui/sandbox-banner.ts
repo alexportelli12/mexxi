@@ -15,14 +15,14 @@ import { Banner } from './banner';
     @if (live.sandboxBlocked()) {
       <segwi-banner tone="error" data-testid="sandbox-blocked">
         <span class="flex flex-col gap-1">
-          <span>Runs can't start until bubblewrap and socat are installed on the server, because every run needs the sandbox.</span>
+          <span>Runs can't start until the sandbox works on the server, because every run needs it.</span>
           @for (problem of live.sandbox()!.problems; track $index) { <span class="text-sm text-muted">{{ problem }}</span> }
         </span>
       </segwi-banner>
     } @else if (live.sandboxSkipped()) {
       <segwi-banner data-testid="sandbox-skipped">
         <span class="flex flex-col gap-1">
-          <span>Runs start without the sandbox: bubblewrap or socat is missing, and the server is set to allow that.</span>
+          <span>Runs start without the sandbox: it can't start on the server, and the server is set to allow that.</span>
           @for (problem of live.sandbox()!.problems; track $index) { <span class="text-sm text-muted">{{ problem }}</span> }
         </span>
       </segwi-banner>

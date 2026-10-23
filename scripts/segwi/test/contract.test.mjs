@@ -306,7 +306,7 @@ for (const runner of RUNNERS) {
     assert.deepEqual(detected.testedVersions, ["2.1.309"]);
     assert.deepEqual(detected.problems, []);
     assert.equal(typeof detected.sandbox.available, "boolean");
-    if (!detected.sandbox.available) assert.match(detected.sandbox.problems[0], /install bubblewrap and socat/);
+    if (!detected.sandbox.available) assert.match(detected.sandbox.problems[0], /Claude Code's sandbox can't start/);
     assert.throws(() => adapter.answer("r", "a", "allow"), /later version/);
   });
 }
