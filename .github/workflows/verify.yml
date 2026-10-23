@@ -1,0 +1,36 @@
+name: Verify
+
+# Runs the repository's own verify command on every pull request, whatever its
+# base branch, so agent and Dependabot pull requests prove themselves before
+# anyone reviews them.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # The docs freshness check compares against the merge base with main, so it needs the history.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # The mods check validates and tests claude/mods/ with the Claude Code CLI itself.
+      - run: npm install -g @anthropic-ai/claude-code@2.1.309
+      # The rendered-qa browser test skips itself where Playwright's Chromium is absent, as here.
+      # The segwi-web check installs its own dependencies from its lockfile.
+      - run: npm run verify

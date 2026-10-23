@@ -78,6 +78,41 @@
     "timeoutMs": 5000,
     "zeroDataRetention": true
   },
+  "segwi": {
+    "enabled": false,
+    "bind": {
+      "host": "127.0.0.1",
+      "port": 4280
+    },
+    "runner": "claude-code",
+    "model": "",
+    "repositories": [],
+    "auth": {
+      "web": {
+        "mode": "localhost-only",
+        "header": "Tailscale-User-Login",
+        "allowed": []
+      }
+    },
+    "limits": {
+      "concurrentRuns": 2,
+      "runsPerDay": 20,
+      "maxTurns": 80,
+      "idleTimeoutMinutes": 30,
+      "hardTimeoutMinutes": 120,
+      "approvalTimeoutMinutes": 60,
+      "taskMaxChars": 8000,
+      "inputMaxChars": 4000
+    },
+    "canary": {
+      "model": "haiku",
+      "maxTurns": 6
+    },
+    "push": true,
+    "service": {
+      "systemdUserUnit": false
+    }
+  },
   "retro": {
     "output": "retro/",
     "transcriptRetentionDays": 90

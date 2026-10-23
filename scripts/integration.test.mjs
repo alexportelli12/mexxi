@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { rmSync } from "node:fs";
 import { cp, lstat, mkdir, mkdtemp, readdir, readFile, readlink, symlink, writeFile, rm } from "node:fs/promises";
@@ -67,10 +68,15 @@ async function configure(home, config = {}, clone = checkout) {
   return file;
 }
 
+// Installed dependencies and build output are not sources, and the web
+// package's would fill a small /tmp in a few copies.
+const notSources = new Set(["node_modules", "dist", ".angular"]);
+const sourcesOnly = (source) => !notSources.has(path.basename(source));
+
 // A disposable copy of the clone whose sources a test may change.
 async function copyCheckout(base) {
   for (const directory of [".claude-plugin", "agent", "claude", "codex", "commands", "opencode", "scripts", "skills"]) {
-    await cp(path.join(checkout, directory), path.join(base, directory), { recursive: true });
+    await cp(path.join(checkout, directory), path.join(base, directory), { recursive: true, filter: sourcesOnly });
   }
   await cp(path.join(checkout, "docs"), path.join(base, "docs"), { recursive: true });
   for (const file of ["AGENTS.md", "README.md", "config.example.json", "config.schema.json", "mexxi.schema.json", "names.json", "package.json", "prompts.json", "verifika.config.json"]) {
@@ -1239,4 +1245,243 @@ test("a failing mod step leaves the rest installed, reports the failure and stay
   // With the cause fixed, a rerun installs the mods and --check is green.
   assert.equal((await install(options)).modsFailed, undefined);
   await install({ ...options, check: true });
+});
+
+// segwi is opt-in: the key must change nothing a default install records or
+// renders, so everyone who leaves it unset (or spells out its defaults) gets
+// exactly what they had.
+async function snapshot(home) {
+  const entries = new Map();
+  const visit = async (directory) => {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const file = path.join(directory, entry.name);
+      const name = path.relative(home, file);
+      // The clone's own path may contain any word, so compare with it masked.
+      const masked = (text) => text.replaceAll(home, "<home>").replaceAll(path.resolve(checkout), "<checkout>");
+      if (entry.isDirectory()) await visit(file);
+      else if (entry.isSymbolicLink()) entries.set(name, `-> ${masked(await readlink(file))}`);
+      else if (name !== ".config/mexxi/config.json" && !name.startsWith(".claude-stub")) entries.set(name, masked(await readFile(file, "utf8")));
+    }
+  };
+  await visit(home);
+  return entries;
+}
+
+test("with segwi unset, or set to its defaults, the install records and renders exactly what it did before", async (t) => {
+  const installed = async (config) => {
+    const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-optin-off-"));
+    t.after(() => rm(home, { recursive: true, force: true }));
+    await configure(home, config);
+    await registerPlaywright(home);
+    const options = { home, checkout, hookDirectory: path.join(home, "git-hooks") };
+    const result = await install(options);
+    await install({ ...options, check: true });
+    assert.equal((await install({ ...options, dryRun: true })).conflicts, 0);
+    return { result, files: await snapshot(home) };
+  };
+  const unset = await installed({});
+  const defaults = await installed({ segwi: JSON.parse(await readFile(path.join(checkout, "config.example.json"), "utf8")).segwi });
+  assert.deepEqual(defaults.files, unset.files);
+  assert.equal(defaults.result.created, unset.result.created);
+  // Nothing of segwi is linked, rendered or recorded.
+  assert.ok(unset.files.size > 0);
+  for (const [name, content] of unset.files) assert.doesNotMatch(`${name}\n${content}`, /segwi/i, name);
+  assert.doesNotMatch(JSON.stringify(unset.result).replaceAll(path.resolve(checkout), "<checkout>"), /segwi/i);
+  // No systemd user directory and no unit state either.
+  for (const name of unset.files.keys()) assert.doesNotMatch(name, /systemd|segwi-units/, name);
+});
+
+// segwi opted in: the `segwi` link, and optionally three systemd user units
+// recorded in a state file. A stand-in systemctl logs its calls; none of
+// these tests reaches the real systemd or the real home.
+const segwiLinkTarget = path.join(path.resolve(checkout), "scripts/segwi/server.mjs");
+const unitNames = ["segwi-canary.service", "segwi-canary.timer", "segwi.service"];
+
+function systemctlStub(result = { available: true, status: 0, stderr: "" }) {
+  const calls = [];
+  return { calls, systemctl: (args) => { calls.push(args); return result; } };
+}
+
+async function segwiHome(t, segwi) {
+  const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-segwi-"));
+  t.after(() => rm(home, { recursive: true, force: true }));
+  await configure(home, { segwi });
+  await registerPlaywright(home);
+  const stub = systemctlStub();
+  const options = { home, checkout, hookDirectory: path.join(home, "git-hooks"), systemctl: stub.systemctl, platform: "linux" };
+  return { home, options, stub, reconfigure: (next) => configure(home, { segwi: next }) };
+}
+
+const withService = { enabled: true, service: { systemdUserUnit: true } };
+const unitFile = (home, name) => path.join(home, ".config/systemd/user", name);
+const stateFile = (home) => path.join(home, ".local/share/mexxi/state/segwi-units.json");
+
+test("enabling segwi without the service adds the link and nothing else", async (t) => {
+  const baseline = await segwiHome(t, {});
+  await install(baseline.options);
+  const before = await snapshot(baseline.home);
+
+  const on = await segwiHome(t, { enabled: true });
+  assert.equal((await install(on.options)).segwi, undefined);
+  const after = await snapshot(on.home);
+
+  const added = [...after.keys()].filter((name) => !before.has(name));
+  assert.deepEqual(added, [process.platform === "win32" ? ".local/bin/segwi.cmd" : ".local/bin/segwi"]);
+  if (process.platform !== "win32") assert.equal(await readlink(path.join(on.home, ".local/bin/segwi")), segwiLinkTarget);
+  assert.deepEqual(on.stub.calls, []);
+  assert.equal((await install(on.options)).created, 0);
+  await install({ ...on.options, check: true });
+});
+
+test("enabling the service writes three recorded units and starts them through systemctl", async (t) => {
+  const { home, options, stub } = await segwiHome(t, withService);
+  const result = await install(options);
+
+  assert.deepEqual((await readdir(path.join(home, ".config/systemd/user"))).sort(), unitNames);
+  const service = await readFile(unitFile(home, "segwi.service"), "utf8");
+  assert.ok(service.startsWith("# Managed by mexxi's installer. Edits are overwritten.\n"));
+  assert.match(service, new RegExp(`^ExecStart=${process.execPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} ${segwiLinkTarget.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} serve$`, "m"));
+  for (const line of ["Restart=on-failure", "RestartSec=5", "NoNewPrivileges=yes", "RestrictSUIDSGID=yes", "LockPersonality=yes", "UMask=0077", "Environment=NODE_ENV=production"]) {
+    assert.match(service, new RegExp(`^${line}$`, "m"), line);
+  }
+  assert.doesNotMatch(service, /^(ProtectHome|ProtectSystem|PrivateTmp)=/m);
+  const canary = await readFile(unitFile(home, "segwi-canary.service"), "utf8");
+  assert.match(canary, /^Type=oneshot$/m);
+  assert.match(canary, /^ExecStart=\S+ \S+\/scripts\/segwi\/server\.mjs canary$/m);
+  const timer = await readFile(unitFile(home, "segwi-canary.timer"), "utf8");
+  for (const line of ["OnCalendar=*-*-* 03:30", "RandomizedDelaySec=15m", "Persistent=true", "WantedBy=timers.target"]) assert.ok(timer.includes(`\n${line}\n`), line);
+  for (const name of unitNames) assert.ok((await readFile(unitFile(home, name), "utf8")).startsWith("# Managed by mexxi's installer."), name);
+
+  const state = JSON.parse(await readFile(stateFile(home), "utf8"));
+  assert.deepEqual(state.units.map((unit) => unit.path), ["segwi.service", "segwi-canary.service", "segwi-canary.timer"].map((name) => unitFile(home, name)));
+  for (const unit of state.units) assert.equal(unit.sha256, createHash("sha256").update(await readFile(unit.path)).digest("hex"));
+
+  assert.deepEqual(stub.calls, [["daemon-reload"], ["enable", "--now", "segwi.service", "segwi-canary.timer"]]);
+  assert.equal(result.segwi.systemctl, "ran");
+  // Running it again changes and runs nothing, and --check is green.
+  assert.equal((await install(options)).segwi, undefined);
+  assert.equal(stub.calls.length, 2);
+  await install({ ...options, check: true });
+});
+
+test("--dry-run lists the units and the systemctl commands and writes nothing", async (t) => {
+  const { home, options, stub } = await segwiHome(t, withService);
+  const before = await snapshot(home);
+  const result = await install({ ...options, dryRun: true });
+  assert.deepEqual(result.segwi.units, { write: ["segwi.service", "segwi-canary.service", "segwi-canary.timer"].map((name) => unitFile(home, name)), remove: [] });
+  assert.deepEqual(result.segwi.commands, ["systemctl --user daemon-reload", "systemctl --user enable --now segwi.service segwi-canary.timer"]);
+  assert.deepEqual(await snapshot(home), before);
+  assert.deepEqual(stub.calls, []);
+  await assert.rejects(lstat(path.join(home, ".config/systemd")), /ENOENT/);
+});
+
+test("turning the service off, or segwi off, removes exactly the recorded units and stops them first", async (t) => {
+  const { home, options, stub, reconfigure } = await segwiHome(t, withService);
+  await install(options);
+  // The user's own unit and an unrelated segwi-named file are not ours.
+  await writeFile(unitFile(home, "mine.service"), "[Service]\nExecStart=/bin/true\n");
+  stub.calls.length = 0;
+
+  await reconfigure({ enabled: true, service: { systemdUserUnit: false } });
+  await assert.rejects(install({ ...options, check: true }), /segwi\.service was added by mexxi and config\.json no longer asks for it/);
+  const result = await install(options);
+  assert.deepEqual((await readdir(path.join(home, ".config/systemd/user"))).sort(), ["mine.service"]);
+  assert.deepEqual(JSON.parse(await readFile(stateFile(home), "utf8")), { units: [] });
+  assert.deepEqual(stub.calls, [["disable", "--now", "segwi.service", "segwi-canary.timer"], ["daemon-reload"]]);
+  assert.deepEqual(result.segwi.units.remove.sort(), unitNames.map((name) => unitFile(home, name)).sort());
+  // The link stays while segwi stays enabled.
+  if (process.platform !== "win32") assert.equal(await readlink(path.join(home, ".local/bin/segwi")), segwiLinkTarget);
+  await install({ ...options, check: true });
+
+  // Turning segwi itself off retires the link, and a second pass has nothing left to do.
+  await reconfigure({ enabled: false });
+  await assert.rejects(install({ ...options, check: true }), /segwi.*\(stale\)/);
+  await install(options);
+  await assert.rejects(lstat(path.join(home, ".local/bin/segwi")), /ENOENT/);
+  await install({ ...options, check: true });
+  assert.equal(await readFile(unitFile(home, "mine.service"), "utf8"), "[Service]\nExecStart=/bin/true\n");
+});
+
+test("a segwi.service mexxi did not write is a conflict: nothing is written and the file survives", async (t) => {
+  const { home, options, stub } = await segwiHome(t, withService);
+  await mkdir(path.dirname(unitFile(home, "segwi.service")), { recursive: true });
+  await writeFile(unitFile(home, "segwi.service"), "[Service]\nExecStart=/usr/bin/my-own-segwi\n");
+  await assert.rejects(install(options), new RegExp(`existing configuration differs[\\s\\S]*${unitFile(home, "segwi.service").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} exists and mexxi did not write it`));
+  await assert.rejects(install({ ...options, dryRun: true }), /did not write it/);
+  assert.equal(await readFile(unitFile(home, "segwi.service"), "utf8"), "[Service]\nExecStart=/usr/bin/my-own-segwi\n");
+  assert.deepEqual(await readdir(path.join(home, ".config/systemd/user")), ["segwi.service"]);
+  await assert.rejects(readFile(stateFile(home)), /ENOENT/);
+  await assert.rejects(lstat(path.join(home, ".local/bin/segwi")), /ENOENT/);
+  assert.deepEqual(stub.calls, []);
+});
+
+test("--check reports a unit that was edited or deleted by hand, and the next install repairs it", async (t) => {
+  const { home, options, stub } = await segwiHome(t, withService);
+  await install(options);
+  await install({ ...options, check: true });
+  await writeFile(unitFile(home, "segwi.service"), "# edited\n");
+  await rm(unitFile(home, "segwi-canary.timer"));
+  await assert.rejects(install({ ...options, check: true }), (error) => {
+    assert.match(error.message, /segwi\.service differs from what mexxi renders/);
+    assert.match(error.message, /segwi-canary\.timer is missing/);
+    return true;
+  });
+  stub.calls.length = 0;
+  await install(options);
+  await install({ ...options, check: true });
+  assert.ok((await readFile(unitFile(home, "segwi.service"), "utf8")).includes("ExecStart="));
+  assert.deepEqual(stub.calls, [["daemon-reload"], ["enable", "--now", "segwi.service", "segwi-canary.timer"]]);
+});
+
+test("without systemctl the units are still written, and the commands are handed back to run", async (t) => {
+  const { home, options } = await segwiHome(t, withService);
+  const result = await install({ ...options, systemctl: () => ({ available: false, status: null, stderr: "" }) });
+  assert.deepEqual((await readdir(path.join(home, ".config/systemd/user"))).sort(), unitNames);
+  assert.equal(result.segwi.systemctl, "missing");
+  assert.deepEqual(result.segwi.commands, ["systemctl --user daemon-reload", "systemctl --user enable --now segwi.service segwi-canary.timer"]);
+  await install({ ...options, check: true });
+});
+
+test("a failing systemctl is reported, never an install failure", async (t) => {
+  const { options } = await segwiHome(t, withService);
+  const result = await install({ ...options, systemctl: () => ({ available: true, status: 1, stderr: "Failed to connect to bus" }) });
+  assert.equal(result.segwi.systemctl, "failed");
+  assert.match(result.segwi.failed[0], /Failed to connect to bus/);
+});
+
+test("the units are Linux only, and the real systemctl is never reached from a throwaway home", async (t) => {
+  const { home, options, stub } = await segwiHome(t, withService);
+  await install({ ...options, platform: "darwin" });
+  await assert.rejects(lstat(path.join(home, ".config/systemd")), /ENOENT/);
+  assert.deepEqual(stub.calls, []);
+  // Without an injected runner a home other than the real one gets no systemctl at all.
+  const bare = await segwiHome(t, withService);
+  const { systemctl, ...withoutRunner } = bare.options;
+  const result = await install(withoutRunner);
+  assert.equal(result.segwi.systemctl, "missing");
+});
+
+test("with segwi off, only a `segwi` link into this clone is retired", async (t) => {
+  if (process.platform === "win32") return;
+  const { home, options } = await segwiHome(t, {});
+  await mkdir(path.join(home, ".local/bin"), { recursive: true });
+  await symlink(segwiLinkTarget, path.join(home, ".local/bin/segwi"));
+  await install(options);
+  await assert.rejects(lstat(path.join(home, ".local/bin/segwi")), /ENOENT/);
+
+  const mine = await segwiHome(t, {});
+  await mkdir(path.join(mine.home, ".local/bin"), { recursive: true });
+  await writeFile(path.join(mine.home, "my-segwi"), "#!/bin/sh\n");
+  await symlink(path.join(mine.home, "my-segwi"), path.join(mine.home, ".local/bin/segwi"));
+  await install(mine.options);
+  assert.equal(await readlink(path.join(mine.home, ".local/bin/segwi")), path.join(mine.home, "my-segwi"));
+  await install({ ...mine.options, check: true });
+});
+
+test("an enabled segwi refuses to take over a `segwi` that is not its link", async (t) => {
+  if (process.platform === "win32") return;
+  const { home, options } = await segwiHome(t, { enabled: true });
+  await mkdir(path.join(home, ".local/bin"), { recursive: true });
+  await writeFile(path.join(home, ".local/bin/segwi"), "#!/bin/sh\n");
+  await assert.rejects(install(options), /existing configuration differs[\s\S]*\.local\/bin\/segwi/);
 });

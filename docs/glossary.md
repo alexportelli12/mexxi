@@ -4,7 +4,8 @@ sources:
   - skills/workflow-for-alex/SKILL.md
   - scripts/ibni/ibni.mjs
   - docs/decisions/0008-jev-shadow-metadata-only.md
-reviewed: 2026-10-22
+  - docs/decisions/0011-segwi.md
+reviewed: 2026-10-23
 ---
 
 # Glossary
@@ -14,6 +15,10 @@ The words these docs use, what each one means, and why it matters to mexxi. The 
 ## agent
 
 A specialist role, such as the code-reviewer, that a coding agent can hand part of a run to. Each is defined once in `agent/` and rendered for each host. A separate agent can be given fewer powers: the reviewer cannot edit code, so it can only judge.
+
+## approval
+
+A question segwi asks you when an agent wants to run something outside its allow list, such as a `curl` to the internet. It shows the exact command, and only a person can answer it, in the web app. No answer within the time limit counts as a denial, so a run never gets more freedom by waiting. See [segwi](segwi.md).
 
 ## baseline
 
@@ -73,7 +78,7 @@ A hook that counts identical failing shell commands. When the same command fails
 
 ## MCP
 
-The Model Context Protocol: a standard way to give a coding agent extra tools. mexxi uses one MCP server, Playwright MCP, to let the agent drive a browser.
+The Model Context Protocol: a standard way to give a coding agent extra tools. mexxi uses Playwright MCP to let the agent drive a browser. [segwi](#segwi) offers an MCP server too, so other tools can start and follow runs.
 
 ## merge call
 
@@ -98,6 +103,10 @@ What a run delivers: a branch with the change, and a description that explains i
 ## rendered QA
 
 Driving the running UI in a real browser and capturing evidence: several screen sizes, motion, keyboard use and console errors. It catches the page that is broken even though the tests pass. It is a gate for user-facing changes.
+
+## segwi
+
+An opt-in tool that starts, follows and answers mexxi runs from your phone or any MCP client, on a machine you own. It is a launcher and viewer: the workflow, the worktrees and the pull request stay the same. It listens on your own machine only. See [segwi](segwi.md) and [decision 0011](decisions/0011-segwi.md).
 
 ## session
 

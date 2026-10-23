@@ -1,19 +1,22 @@
+/* The docs build copies site/tokens.css beside this file, so the import is local. */
+@import "./tokens.css";
+
 /* mexxi's accent on the landing page's dark palette. */
 :root {
-  --vp-c-brand-1: #f4b860;
-  --vp-c-brand-2: #e8a94a;
-  --vp-c-brand-3: #d99a35;
-  --vp-c-brand-soft: rgb(244 184 96 / 0.14);
+  --vp-c-brand-1: var(--accent);
+  --vp-c-brand-2: var(--accent-hover);
+  --vp-c-brand-3: var(--accent-pressed);
+  --vp-c-brand-soft: var(--accent-soft);
 }
 
 .dark {
-  --vp-c-bg: #0a0b0d;
-  --vp-c-bg-alt: #0e1013;
-  --vp-c-bg-soft: #0e1013;
-  --vp-c-bg-elv: #13161a;
-  --vp-c-divider: #1d2127;
-  --vp-c-gutter: #1d2127;
-  --vp-button-brand-text: #0a0b0d;
+  --vp-c-bg: var(--bg);
+  --vp-c-bg-alt: var(--surface);
+  --vp-c-bg-soft: var(--surface);
+  --vp-c-bg-elv: var(--surface-raised);
+  --vp-c-divider: var(--border);
+  --vp-c-gutter: var(--border);
+  --vp-button-brand-text: var(--on-accent);
 }
 
 pre.mermaid {
@@ -47,15 +50,15 @@ pre.mermaid {
   margin: 20px 0 24px;
   padding: 16px 20px;
   border-radius: 10px;
-  background: #f1e9da;
-  color: #5d554a;
-  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  background: var(--paper);
+  color: var(--ink-muted);
+  font-family: var(--font-book);
   font-size: 16px;
   line-height: 1.6;
 }
 
 .vp-doc p.dictionary strong {
-  color: #1d1a16;
+  color: var(--ink);
   font-size: 22px;
   font-weight: 700;
 }
@@ -67,5 +70,5 @@ pre.mermaid {
 }
 
 .vp-doc p.dictionary a {
-  color: #1d1a16;
+  color: var(--ink);
 }

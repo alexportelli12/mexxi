@@ -224,6 +224,99 @@
         "zeroDataRetention": { "description": "Ask OpenRouter to route only to providers that retain no data (provider.zdr). If none serves the model, calls fail and are recorded with the reason.", "type": "boolean", "default": true }
       }
     },
+    "segwi": {
+      "description": "segwi, a local web app and MCP server for starting and following mexxi runs from your phone.",
+      "why": "A run takes minutes to an hour and stops whenever it needs a reply or a permission, so without segwi you have to be at the terminal to keep it moving.",
+      "scope": "Experimental, and off by default",
+      "type": "object",
+      "additionalProperties": false,
+      "default": {},
+      "properties": {
+        "enabled": { "description": "Install and run segwi at all.", "type": "boolean", "default": false },
+        "bind": {
+          "description": "The address the server listens on.",
+          "type": "object",
+          "additionalProperties": false,
+          "default": {},
+          "properties": {
+            "host": { "description": "Interface to listen on. Loopback only: the server refuses any other host, so reach it from other devices through tailscale serve.", "type": "string", "minLength": 1, "default": "127.0.0.1" },
+            "port": { "description": "Port to listen on.", "type": "integer", "minimum": 1024, "maximum": 65535, "default": 4280 }
+          }
+        },
+        "runner": { "description": "Which coding agent segwi starts. Only Claude Code exists so far.", "type": "string", "enum": ["claude-code"], "default": "claude-code" },
+        "model": { "description": "Model every run uses, such as sonnet. Empty uses your coding agent's own default, which may cost more than a run needs.", "type": "string", "pattern": "^[A-Za-z0-9._-]*$", "default": "" },
+        "repositories": {
+          "description": "The only repositories a run may start in, each with a name, the path of its control checkout and the actions allowed there (build, ready or ask).",
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "name": { "description": "Short name shown in the app.", "type": "string", "pattern": "^[A-Za-z0-9._-]+$", "default": "my-app" },
+              "path": { "description": "Control checkout of the repository.", "type": "string", "pattern": "^(~/|/)", "default": "~/workspace/my-app" },
+              "actions": { "description": "What a run may do here: build runs /wettaq, ready runs /lesti, ask answers a question without changing anything.", "type": "array", "items": { "type": "string", "enum": ["build", "ready", "ask"] }, "default": ["build", "ready", "ask"] }
+            }
+          },
+          "default": []
+        },
+        "auth": {
+          "description": "Who may use the web app.",
+          "type": "object",
+          "additionalProperties": false,
+          "default": {},
+          "properties": {
+            "web": {
+              "description": "Sign-in for the web app. MCP clients always use a bearer token instead.",
+              "type": "object",
+              "additionalProperties": false,
+              "default": {},
+              "properties": {
+                "mode": { "description": "localhost-only trusts anyone on this machine. tailscale-header trusts the identity header that tailscale serve sets, and only on loopback.", "type": "string", "enum": ["localhost-only", "tailscale-header"], "default": "localhost-only" },
+                "header": { "description": "Request header that carries the signed-in identity in tailscale-header mode.", "type": "string", "minLength": 1, "default": "Tailscale-User-Login" },
+                "allowed": { "description": "Identities allowed in tailscale-header mode. Empty means nobody.", "type": "array", "items": { "type": "string", "minLength": 1 }, "default": [] }
+              }
+            }
+          }
+        },
+        "limits": {
+          "description": "Caps that keep a run, or a runaway client, from costing more than you meant.",
+          "type": "object",
+          "additionalProperties": false,
+          "default": {},
+          "properties": {
+            "concurrentRuns": { "description": "Runs that may work at the same time.", "type": "integer", "minimum": 1, "default": 2 },
+            "runsPerDay": { "description": "Runs that may start in one day.", "type": "integer", "minimum": 1, "default": 20 },
+            "maxTurns": { "description": "Agent turns one run may take before it stops.", "type": "integer", "minimum": 1, "default": 80 },
+            "idleTimeoutMinutes": { "description": "Minutes a run may sit without activity or a reply before segwi stops it.", "type": "integer", "minimum": 1, "default": 30 },
+            "hardTimeoutMinutes": { "description": "Minutes a run may last in total.", "type": "integer", "minimum": 1, "default": 120 },
+            "approvalTimeoutMinutes": { "description": "Minutes an approval waits for you before it counts as denied.", "type": "integer", "minimum": 1, "default": 60 },
+            "taskMaxChars": { "description": "Longest task text a run accepts.", "type": "integer", "minimum": 1, "default": 8000 },
+            "inputMaxChars": { "description": "Longest reply a run accepts.", "type": "integer", "minimum": 1, "default": 4000 }
+          }
+        },
+        "canary": {
+          "description": "The nightly check that your coding agent still works the way segwi expects.",
+          "why": "The agent's command line and output can change between versions, and a small real run each night finds that out before you do.",
+          "type": "object",
+          "additionalProperties": false,
+          "default": {},
+          "properties": {
+            "model": { "description": "Model the canary run uses. A small one keeps the nightly cost to a few cents.", "type": "string", "pattern": "^[A-Za-z0-9._-]*$", "default": "haiku" },
+            "maxTurns": { "description": "Agent turns the canary run may take before it stops.", "type": "integer", "minimum": 1, "default": 6 }
+          }
+        },
+        "push": { "description": "Send a push notification when a run needs you, finishes or fails.", "type": "boolean", "default": true },
+        "service": {
+          "description": "Running segwi in the background.",
+          "type": "object",
+          "additionalProperties": false,
+          "default": {},
+          "properties": {
+            "systemdUserUnit": { "description": "Let the installer add systemd user units for the server and its nightly check. Linux only.", "type": "boolean", "default": false }
+          }
+        }
+      }
+    },
     "retro": {
       "description": "Where session retrospectives go and how long transcripts are kept for them.",
       "why": "Session transcripts are private, so retrospectives need a home that no public repository ever commits.",

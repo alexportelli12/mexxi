@@ -30,6 +30,7 @@ export const ALLOWLIST = [
   "docs/freshness.json",
   "docs/agents.json",
   "site/favicon.svg",
+  "site/tokens.css", // copied beside the VitePress theme, which imports it
   "site/index.html", // read by the consistency check, never published as a docs page
 ];
 
