@@ -285,17 +285,21 @@ for (const runner of RUNNERS) {
     // The file tools run outside the sandbox, so in auto mode only these rules, not a person, keep them out.
     const home = os.homedir();
     const mexxiRoot = path.resolve(fileURLToPath(new URL("../../../", import.meta.url)));
+    const otherCheckout = makeRepo(t);
     for (const permissions of ["auto", "sandboxed", "strict"]) {
-      const { settings } = await rendered(t, { permissions });
+      const { spec, settings } = await rendered(t, { permissions, controlCheckouts: [otherCheckout] });
       const { deny, ask } = settings.permissions;
-      const protectedPaths = [...settings.sandbox.filesystem.denyRead, mexxiRoot,
-        ...[".bashrc", ".zshrc", ".profile", ".gitconfig", ".config", ".local/bin", ".claude"].map((name) => path.join(home, name)).filter((file) => existsSync(file))];
-      for (const file of protectedPaths) {
-        // A folder only in the `/*` form: a rule without a glob becomes a read-only sandbox mount, which over the mexxi
-        // clone would also cover its git directory, so a run in that repository could no longer commit.
-        const folder = statSync(file).isDirectory();
-        assert.ok(deny.includes(folder ? `Edit(/${file}/*)` : `Edit(/${file})`), `${permissions}: ${file} is denied to the file tools`);
-        if (folder) assert.ok(!deny.includes(`Edit(/${file})`), `${permissions}: ${file} is never mounted read-only`);
+      // Every configured repository's checkout, as the run's own: the `/*` form, never mounted over its git directory.
+      for (const checkout of [spec.repoPath, otherCheckout]) {
+        assert.ok(deny.includes(`Edit(/${checkout}/*)`) && !deny.includes(`Edit(/${checkout})`), `${permissions}: ${checkout}`);
+      }
+      // Whether or not each exists yet, so a run can't create one: files exactly, folders in the `/*` form only.
+      const files = [".bashrc", ".bash_profile", ".bash_login", ".profile", ".zshrc", ".zshenv", ".zprofile", ".zlogin", ".gitconfig"];
+      const folders = [".config", ".local/bin", ".claude", ...settings.sandbox.filesystem.denyRead.filter((file) => statSync(file).isDirectory()).map((file) => path.relative(home, file)), path.relative(home, mexxiRoot)];
+      for (const name of files) assert.ok(deny.includes(`Edit(/${path.join(home, name)})`), `${permissions}: ${name}`);
+      for (const name of folders) {
+        const folder = path.resolve(home, name);
+        assert.ok(deny.includes(`Edit(/${folder}/*)`) && !deny.includes(`Edit(/${folder})`), `${permissions}: ${folder} is denied and never mounted read-only`);
       }
       assert.deepEqual(ask, ["Bash(git push:*)", "Bash(gh api:*)", "Bash(gh repo:*)", "Bash(gh release:*)", "Bash(gh pr merge:*)"], permissions);
     }

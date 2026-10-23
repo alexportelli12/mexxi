@@ -142,7 +142,7 @@ function filesystemRules({ action, worktreeRoot, tempDir, repoPath, gitCommonDir
  * checkout, which would also block the git directory a worktree's commits need. A `/*` glob is not mounted,
  * and still refuses every file tool anywhere in the checkout (the sandbox test checks both).
  */
-const controlDenyRules = (repoPath) => [`Edit(/${repoPath}/*)`];
+const controlDenyRules = (checkouts) => [...new Set(checkouts)].map((checkout) => `Edit(/${checkout}/*)`);
 
 /** The Read tool runs outside the sandbox, so denyRead alone doesn't stop it; each secret path is denied to it too. */
 const secretReadRules = (paths) => paths.flatMap((file) => [`Read(/${file})`, `Read(/${file}/**)`]);
@@ -157,11 +157,15 @@ const isFolder = (file) => {
 
 /**
  * The file tools run outside the sandbox too, and in auto mode a model, not a person, judges a write outside the
- * worktree. So the paths whose contents later run as you, or steer the agent, are denied to them in every mode. A
- * folder gets only the `/*` form, as the control checkout does: a rule without a glob becomes a read-only sandbox
- * mount, and over the mexxi clone that would cover its git directory too, so a run in it could no longer commit.
+ * worktree. So the paths whose contents later run as you, or steer the agent, are denied to them in every mode,
+ * whether or not they exist yet. A folder gets only the `/*` form, as the control checkout does: a rule without a
+ * glob becomes a read-only sandbox mount, and over the mexxi clone that would cover its git directory too, so a run
+ * in it could no longer commit. A secret is a folder or a file by what is on disk; the others are named as one.
  */
-const protectedWriteRules = (paths) => [...new Set(paths)].map((file) => (isFolder(file) ? `Edit(/${file}/*)` : `Edit(/${file})`));
+function protectedWriteRules({ secrets, files, folders }) {
+  const fileRules = [...secrets.filter((file) => !isFolder(file)), ...files].map((file) => `Edit(/${file})`);
+  return [...new Set([...fileRules, ...[...secrets.filter(isFolder), ...folders].map((folder) => `Edit(/${folder}/*)`)])];
+}
 
 // What a run never does unasked, in any mode, though in sandboxed mode it would run inside the sandbox, which can
 // reach GitHub: push, or change a repository through gh. ibni publish is the run's own way to push.
@@ -172,12 +176,14 @@ const ASK_RULES = ["git push", "gh api", "gh repo", "gh release", "gh pr merge"]
  * segwi's own state and data (its tokens, push key, run secrets and pending approvals). Only existing paths.
  */
 export function renderSettings({ action, worktreeRoot, verifyCommand, tempDir, repoPath, gitCommonDir = path.join(repoPath, ".git"), branchPrefix = "agent/",
-  branchPrefixes = [], permissions = "strict", controlEntries = [], existingGit = [], denyRead = [], denyEdit = [], denyPatterns }) {
+  branchPrefixes = [], permissions = "strict", controlEntries = [], existingGit = [], denyRead = [], protectedFiles = [], protectedFolders = [],
+  controlCheckouts = [], denyPatterns }) {
   const prefixes = writablePrefixes(branchPrefix, branchPrefixes);
   return {
     permissions: {
       allow: allowRules({ action, worktreeRoot, verifyCommand, tempDir, repoPath }),
-      deny: [...denyRules(denyPatterns), ...OUTPUT_DENY, ...BROWSER_DENY, ...controlDenyRules(repoPath), ...secretReadRules(denyRead), ...protectedWriteRules([...denyRead, ...denyEdit])],
+      deny: [...denyRules(denyPatterns), ...OUTPUT_DENY, ...BROWSER_DENY, ...controlDenyRules([repoPath, ...controlCheckouts]), ...secretReadRules(denyRead),
+        ...protectedWriteRules({ secrets: denyRead, files: protectedFiles, folders: protectedFolders })],
       ask: ASK_RULES,
       disableBypassPermissionsMode: "disable",
     },

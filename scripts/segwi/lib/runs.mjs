@@ -189,7 +189,7 @@ export function createRunService({ store, settings, runner, ibni, broker, server
           worktreeRoot: settings.worktreeRoot, verifyCommand,
           denyPatterns: settings.deny, browser: settings.browser, serverUrl: serverUrl(), bindPort: Number(new URL(serverUrl() || "http://127.0.0.1").port) || undefined, runSecret,
           tailnetName: settings.segwi.auth.web.mode === "tailscale-header" ? settings.segwi.auth.web.hostname : undefined,
-          branchPrefix: settings.branchPrefix, branchPrefixes: settings.segwi.branchPrefixes ?? [],
+          branchPrefix: settings.branchPrefix, branchPrefixes: settings.segwi.branchPrefixes ?? [], controlCheckouts: repositories.map((candidate) => candidate.path),
           permissions: permissionsFor({ segwi: settings.segwi, repository, action: input.action }),
         }, emitterFor(id));
       } catch (error) {

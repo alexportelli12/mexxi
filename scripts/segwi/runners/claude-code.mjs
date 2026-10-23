@@ -58,9 +58,10 @@ const RESULT_DETAIL_MAX = 8000;
 const SANDBOX_TOOLS = ["bwrap", "socat"];
 // Credentials nothing inside the sandbox needs; gh's own config stays readable, because gh pr view needs it.
 const SECRET_PATHS = [".ssh", ".gnupg", ".aws", ".netrc", ".git-credentials", ".npmrc", ".docker", ".codex", ".claude/.credentials.json", ".claude.json"];
-// What the file tools may never write, besides the secrets: what runs as you or steers an agent later (shell and git
-// config, ~/.config with its systemd units, ~/.local/bin, Claude Code's own config), and mexxi itself, where ibni lives.
-const PROTECTED_HOME = [".bashrc", ".bash_profile", ".bash_login", ".profile", ".zshrc", ".zshenv", ".zprofile", ".zlogin", ".gitconfig", ".config", ".local/bin", ".claude"];
+// What the file tools may never write or create, besides the secrets: what runs as you or steers an agent later (shell
+// and git config, ~/.config with its systemd units, ~/.local/bin, Claude Code's own config), and mexxi itself, where ibni lives.
+const PROTECTED_HOME_FILES = [".bashrc", ".bash_profile", ".bash_login", ".profile", ".zshrc", ".zshenv", ".zprofile", ".zlogin", ".gitconfig"];
+const PROTECTED_HOME_FOLDERS = [".config", ".local/bin", ".claude"];
 const MEXXI_ROOT = path.resolve(fileURLToPath(new URL("../../../", import.meta.url)));
 const INPUT_KEYS = ["command", "description", "file_path", "path", "pattern", "url", "query", "skill", "subagent_type", "prompt"];
 
@@ -315,7 +316,10 @@ export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir 
     const settings = renderSettings({
       action: spec.action, worktreeRoot: spec.worktreeRoot, verifyCommand: spec.verifyCommand, denyPatterns: spec.denyPatterns, repoPath: spec.repoPath,
       tempDir, gitCommonDir: commonDir, branchPrefix: prefixes[0], branchPrefixes: prefixes, permissions: spec.permissions, controlEntries: readdirSync(spec.repoPath), existingGit, denyRead: secrets,
-      denyEdit: [...PROTECTED_HOME.map((name) => path.join(home, name)).filter((file) => existsSync(file)), MEXXI_ROOT],
+      protectedFiles: PROTECTED_HOME_FILES.map((name) => path.join(home, name)),
+      protectedFolders: [...PROTECTED_HOME_FOLDERS.map((name) => path.join(home, name)), MEXXI_ROOT],
+      // Every configured repository's checkout, not only this run's: a file planted in any of them runs as you later.
+      controlCheckouts: spec.controlCheckouts ?? [],
     });
     await writeFile(settingsFile, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
     await writeFile(mcpFile, `${JSON.stringify(renderMcpConfig({ spec }), null, 2)}\n`, { mode: 0o600 });

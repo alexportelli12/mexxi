@@ -440,3 +440,59 @@ test("in sandboxed mode a push or a GitHub API call still asks, though it would 
   assert.deepEqual(approvals.map((approval) => approval.exact), ["git push origin HEAD:main", "gh api repos/someone/something"], report);
   assert.equal(results[2]?.isError, false, report);
 });
+
+// Every configured repository's checkout is yours, not only the run's own: a file planted in another one runs as you
+// the next time you work there. The file tools run outside the sandbox, so only a deny rule keeps them out.
+for (const permissions of ["sandboxed", "auto"]) {
+  test(`in ${permissions} mode the file tools can't write another configured repository's checkout`, { skip, timeout: 180_000 }, async (t) => {
+    const manifest = '{ "name": "other-app" }\n';
+    const prepare = ({ otherRepo }) => writeFileSync(path.join(otherRepo, "package.json"), manifest);
+    const script = [
+      // The Edit tool refuses a file it hasn't read before it checks any permission, so it reads it first.
+      ({ otherRepo }) => ({ tool: "Read", input: { file_path: path.join(otherRepo, "package.json") } }),
+      ({ otherRepo }) => ({ tool: "Edit", input: { file_path: path.join(otherRepo, "package.json"), old_string: "other-app", new_string: PLANTED } }),
+      ({ otherRepo }) => ({ tool: "Write", input: { file_path: path.join(otherRepo, "src", `${PLANTED}.js`), content: "x\n" } }),
+      { text: "Done." },
+    ];
+    const { results, approvals, otherRepo } = await runScripted(t, { action: "build", script, prepare, otherRepository: true, segwi: { permissions } });
+    const report = show(results, approvals);
+    for (const index of [1, 2]) assert.match(results[index]?.text ?? "", /denied/, `turn ${index}: ${report}`);
+    // The read may ask; the writes never do: a deny rule refuses them before a person or the classifier is asked.
+    assert.deepEqual(approvals.filter((approval) => approval.tool !== "Read"), [], report);
+    assert.equal(readFileSync(path.join(otherRepo, "package.json"), "utf8"), manifest);
+    assert.ok(!existsSync(path.join(otherRepo, "src")), report);
+  });
+}
+
+test("the file tools can't create a protected home file or folder that doesn't exist yet, and the sandbox still starts", { skip, timeout: 180_000 }, async (t) => {
+  const write = (target) => (context) => ({ tool: "Write", input: { file_path: target(context), content: `${PLANTED}\n` } });
+  const targets = [".zshenv", ".bash_profile", ".gitconfig", path.join(".local", "bin", "planted"), path.join(".config", "planted", "x"), path.join(".claude", "CLAUDE.md")];
+  const script = [...targets.map((name) => write(({ home }) => path.join(home, name))), bash("echo still-sandboxed"), { text: "Done." }];
+  const { results, approvals, home } = await runScripted(t, { action: "build", script });
+  const report = show(results, approvals);
+  targets.forEach((name, index) => assert.match(results[index]?.text ?? "", /denied/, `${name}: ${report}`));
+  assert.deepEqual(approvals, [], report);
+  for (const name of targets) assert.ok(!existsSync(path.join(home, name)), `${name}: ${report}`);
+  assert.deepEqual(results[targets.length], { isError: false, text: "still-sandboxed" }, report);
+});
+
+test("ibni prepare stays inside the sandbox with a command substitution, a redirect or a second line", { skip, timeout: 180_000 }, async (t) => {
+  const forms = [
+    'ibni prepare --slug "$(id)"',
+    // Unquoted, id's output splits into several arguments, so ibni stops at them before it reaches the lock.
+    "ibni prepare --slug `id`",
+    "ibni prepare --slug `id -u`",
+    "ibni prepare --slug x > /tmp/out",
+    "ibni prepare --slug x\necho second-line",
+  ];
+  // Every approval is allowed, so only the sandbox decides where each one ran.
+  const { results, approvals, repo } = await runScripted(t, { action: "build", script: [...forms.map(bash), { text: "Done." }] });
+  const report = show(results, approvals);
+  // Inside, prepare can't take the git directory's lock, and the shell can't open the redirect's file; outside it could.
+  for (const index of [0, 2, 3, 4]) assert.match(results[index]?.text ?? "", /EROFS|read-only file system/i, `${forms[index]}: ${report}`);
+  assert.match(results[1]?.text ?? "", /invalid argument/, report);
+  for (const index of [0, 1, 2, 3]) assert.equal(results[index]?.isError, true, `${forms[index]}: ${report}`);
+  // The second line ran after prepare failed inside.
+  assert.match(results[4].text, /second-line/, report);
+  assert.deepEqual(branchesOf(repo), ["main"], `no form made a branch: ${report}`);
+});

@@ -7,7 +7,7 @@ import { z } from "zod";
  *   runId: string, repoPath: string, action: "build"|"ready"|"ask", task: string, model?: string,
  *   limits: { maxTurns: number }, worktreeRoot: string, verifyCommand: string,
  *   denyPatterns: string[], browser: object, serverUrl?: string, bindPort?: number, tailnetName?: string, branchPrefix?: string, runSecret?: string,
- *   permissions?: "auto"|"sandboxed"|"strict", branchPrefixes?: string[],
+ *   permissions?: "auto"|"sandboxed"|"strict", branchPrefixes?: string[], controlCheckouts?: string[],
  * }} RunSpec
  * @typedef {{ id: string, capabilities: { input: boolean, approvals: boolean, cost: boolean },
  *   detect(): Promise<{ available: boolean, version: string|null, testedVersions: string[], problems: string[], sandbox: { available: boolean, problems: string[] } }>,
