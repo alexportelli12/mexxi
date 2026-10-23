@@ -55,6 +55,17 @@ function makeRepo(root, name, { dirty = false } = {}) {
   return dir;
 }
 
+/**
+ * Why the browser tests can't run on this machine, or null. Only a browser that isn't
+ * installed is a reason; any other launch failure is a real failure. With CI set nothing is
+ * ever skipped, so a passing CI run proves the browser tests ran.
+ * @param {{ env?: Record<string, string|undefined>, launchError: Error|null }} options
+ */
+export function browserSkipReason({ env = process.env, launchError }) {
+  if (env.CI || !launchError || !/Executable doesn't exist/.test(launchError.message)) return null;
+  return "Playwright's Chromium isn't installed. Run npx playwright install chromium in scripts/segwi/web to run these tests.";
+}
+
 const noIbni = { findNewWorkspace: async () => null, summary: async () => { throw new Error("no ibni in the demo"); }, list: async () => [] };
 
 /**

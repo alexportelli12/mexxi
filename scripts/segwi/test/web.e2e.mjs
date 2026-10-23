@@ -1,6 +1,7 @@
 // The web app in a real browser against a real segwi server with the fake host
 // (plan sections 6, 11.9 to 11.11). Needs the app built (npm --prefix scripts/segwi/web
-// run build) and Playwright's Chromium (npx playwright install chromium). Everything it
+// run build) and Playwright's Chromium (npx playwright install chromium); without Chromium
+// every test is skipped with that reason, except under CI, where they must run. Everything it
 // starts is stopped, and its temporary folders removed, when the file ends.
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
@@ -8,7 +9,7 @@ import { createRequire } from "node:module";
 import net from "node:net";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { startHarness } from "./web-harness.mjs";
+import { browserSkipReason, startHarness } from "./web-harness.mjs";
 import { waitFor } from "./helpers.mjs";
 
 const webPackage = fileURLToPath(new URL("../web/package.json", import.meta.url));
@@ -17,15 +18,29 @@ const requireFromWeb = createRequire(webPackage);
 const { chromium } = requireFromWeb("playwright-core");
 const { AxeBuilder } = requireFromWeb("@axe-core/playwright");
 
+// verify always builds the app first (segwi-e2e depends on segwi-web), so a missing build means
+// the file was run by hand too early: say so loudly rather than skip.
 assert.ok(existsSync(dist), "Build the web app first: npm --prefix scripts/segwi/web run build");
 
-const harness = await startHarness({ seed: true });
-const browser = await chromium.launch();
+let browser = null;
+let launchError = null;
+try {
+  browser = await chromium.launch();
+} catch (error) {
+  launchError = error;
+}
+const skip = browserSkipReason({ launchError });
+if (launchError && !skip) throw launchError;
+// Every test below goes through `e2e`, so without a browser the whole file reports as skipped, with the reason.
+const e2e = skip ? (name, fn) => test(name, { skip }, fn) : test;
+const harness = skip ? null : await startHarness({ seed: true });
 const problems = [];
-test.after(async () => {
-  await browser.close();
-  await harness.close();
-});
+if (!skip) {
+  test.after(async () => {
+    await browser.close();
+    await harness.close();
+  });
+}
 
 async function open(path, { width = 390, height = 844, base = harness.url, collect = true } = {}) {
   const context = await browser.newContext({ viewport: { width, height }, serviceWorkers: "block" });
@@ -44,7 +59,7 @@ const runs = async () => (await api("/api/runs?limit=50")).runs;
 const approvals = async () => (await api("/api/approvals?status=pending")).approvals;
 const runWith = async (text) => (await runs()).find((run) => run.task.includes(text));
 
-test("a run started from New appears with its steps and waits for a reply", async () => {
+e2e("a run started from New appears with its steps and waits for a reply", async () => {
   const { page, close } = await open("/new");
   await page.getByLabel("Repository").selectOption("my-app");
   await page.getByRole("radio", { name: /Build/ }).check({ force: true });
@@ -63,7 +78,7 @@ test("a run started from New appears with its steps and waits for a reply", asyn
   await close();
 });
 
-test("scrolling up pauses following, Jump to latest resumes it", async () => {
+e2e("scrolling up pauses following, Jump to latest resumes it", async () => {
   const { id } = (await post("/api/runs", { repo: "my-app", action: "build", task: "Audit every source file" })).run;
   const { page, close } = await open(`/runs/${id}`);
   await page.getByText("Needs your reply").first().waitFor();
@@ -84,7 +99,7 @@ test("scrolling up pauses following, Jump to latest resumes it", async () => {
   await close();
 });
 
-test("an approval shows the exact command, Deny has focus, and a decision works", async () => {
+e2e("an approval shows the exact command, Deny has focus, and a decision works", async () => {
   const run = await post("/api/runs", { repo: "my-app", action: "build", task: "Check what example.com serves again" });
   const approval = await waitFor(async () => (await approvals()).find((entry) => entry.runId === run.run.id), { what: "the approval" });
   const { page, close } = await open(`/approvals/${approval.id}`);
@@ -101,7 +116,7 @@ test("an approval shows the exact command, Deny has focus, and a decision works"
   await close();
 });
 
-test("Approve is a deliberate tap, and the title counts what needs you", async () => {
+e2e("Approve is a deliberate tap, and the title counts what needs you", async () => {
   const run = await post("/api/runs", { repo: "my-app", action: "build", task: "Check what example.com serves once more" });
   const approval = await waitFor(async () => (await approvals()).find((entry) => entry.runId === run.run.id), { what: "the approval" });
   const { page, close } = await open("/approvals");
@@ -118,7 +133,7 @@ test("Approve is a deliberate tap, and the title counts what needs you", async (
   await close();
 });
 
-test("a tap that lands just as the cards move does nothing", async () => {
+e2e("a tap that lands just as the cards move does nothing", async () => {
   const run = await post("/api/runs", { repo: "my-app", action: "build", task: "Check what example.com serves, tapped too soon" });
   const approval = await waitFor(async () => (await approvals()).find((entry) => entry.runId === run.run.id), { what: "the approval" });
   const { page, close } = await open("/approvals");
@@ -138,7 +153,7 @@ test("a tap that lands just as the cards move does nothing", async () => {
   await close();
 });
 
-test("an approval shows control and bidi characters as marked codes, whole, and copies the raw command", async () => {
+e2e("an approval shows control and bidi characters as marked codes, whole, and copies the raw command", async () => {
   const run = await post("/api/runs", { repo: "my-app", action: "build", task: "Print hidden characters in a status line" });
   const approval = await waitFor(async () => (await approvals()).find((entry) => entry.runId === run.run.id), { what: "the approval" });
   const { page, close } = await open(`/approvals/${approval.id}`);
@@ -157,7 +172,7 @@ test("an approval shows control and bidi characters as marked codes, whole, and 
   await close();
 });
 
-test("file approvals show what would be written, readable on a phone", async () => {
+e2e("file approvals show what would be written, readable on a phone", async () => {
   const run = await post("/api/runs", { repo: "my-app", action: "build", task: "Update the notes and the app" });
   const next = async (tool) => waitFor(async () => (await approvals()).find((entry) => entry.runId === run.run.id && entry.tool === tool), { what: `the ${tool} approval` });
   const show = async (approval) => {
@@ -188,7 +203,7 @@ test("file approvals show what would be written, readable on a phone", async () 
   await post(`/api/approvals/${notebook.id}`, { decision: "deny" });
 });
 
-test("without the sandbox, New run says runs can't start and Start stays off", async () => {
+e2e("without the sandbox, New run says runs can't start and Start stays off", async () => {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, serviceWorkers: "block" });
   const page = await context.newPage();
   const sandbox = { available: false, required: true, problems: ["bwrap was not found"] };
@@ -210,7 +225,7 @@ test("without the sandbox, New run says runs can't start and Start stays off", a
   assert.equal(typeof health.sandbox?.required, "boolean");
 });
 
-test("stopping asks first, and Keep running is the focused choice", async () => {
+e2e("stopping asks first, and Keep running is the focused choice", async () => {
   const target = await runWith("Replace the footer links");
   const { page, close } = await open(`/runs/${target.id}`);
   await page.getByRole("button", { name: "Stop…" }).click();
@@ -228,7 +243,7 @@ test("stopping asks first, and Keep running is the focused choice", async () => 
   await close();
 });
 
-test("a draft survives a reload, with the last repo and action", async () => {
+e2e("a draft survives a reload, with the last repo and action", async () => {
   const { page, close } = await open("/new");
   await page.getByLabel("Repository").selectOption("docs-site");
   await page.getByRole("radio", { name: /Ask/ }).check({ force: true });
@@ -241,7 +256,7 @@ test("a draft survives a reload, with the last repo and action", async () => {
   await close();
 });
 
-test("the Runs screen puts what needs you first and keeps the filter in the URL", async () => {
+e2e("the Runs screen puts what needs you first and keeps the filter in the URL", async () => {
   const { page, close } = await open("/runs");
   await page.getByRole("heading", { name: "Needs you" }).waitFor();
   const first = await page.locator("main a[href^='/runs/']").first().textContent();
@@ -255,7 +270,7 @@ test("the Runs screen puts what needs you first and keeps the filter in the URL"
   await close();
 });
 
-test("deep links load directly, and an unknown page says so", async () => {
+e2e("deep links load directly, and an unknown page says so", async () => {
   const target = await runWith("Fix the flaky date test");
   const direct = await open(`/runs/${target.id}`);
   await direct.page.getByRole("heading", { name: "Run", exact: true }).waitFor();
@@ -283,7 +298,7 @@ const SCREENS = () => [
   `/runs/${runIds.running}`, `/runs/${runIds.completed}`, `/runs/${runIds.failed}`, `/runs/${runIds.timedOut}`,
 ];
 const runIds = {};
-test("every screen passes the axe scan, and every control is at least 44 by 44 on a phone", async () => {
+e2e("every screen passes the axe scan, and every control is at least 44 by 44 on a phone", async () => {
   const all = await runs();
   runIds.running = all.find((run) => run.task.startsWith("Replace the footer")).id;
   runIds.completed = all.find((run) => run.task.startsWith("Fix the flaky")).id;
@@ -315,7 +330,7 @@ test("every screen passes the axe scan, and every control is at least 44 by 44 o
   await close();
 });
 
-test("the Reconnecting banner shows when the server goes away and clears when it is back", async () => {
+e2e("the Reconnecting banner shows when the server goes away and clears when it is back", async () => {
   const free = await new Promise((resolve) => { const probe = net.createServer(); probe.listen(0, "127.0.0.1", () => { const { port } = probe.address(); probe.close(() => resolve(port)); }); });
   let second = await startHarness({ port: free });
   const { page, close } = await open("/runs", { base: second.url, collect: false });
@@ -333,7 +348,7 @@ test("the Reconnecting banner shows when the server goes away and clears when it
   }
 });
 
-test.after(() => {
+if (!skip) test.after(() => {
   const real = problems.filter((message) => !/Failed to load resource.*(404|0)|the server responded with a status of 404/.test(message));
   assert.deepEqual(real, [], "no console errors or CSP violations");
 });
