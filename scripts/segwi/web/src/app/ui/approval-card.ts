@@ -88,7 +88,12 @@ export class ApprovalCard {
   protected readonly error = signal('');
   private readonly deny = viewChild('deny', { read: ElementRef<HTMLButtonElement> });
   protected readonly exactLabel = computed(() => EXACT_LABELS[this.approval().tool] ?? 'Call');
-  protected readonly hiddenCount = computed(() => escapeCount(visibleSegments(this.approval().exact)) + escapeCount(visibleSegments(this.approval().why ?? '')));
+  /** Every text the card shows counts, the file content included. */
+  protected readonly hiddenCount = computed(() => {
+    const { exact, why, content } = this.approval();
+    const texts = [exact, why ?? '', ...(content ? Object.entries(content).filter(([key, value]) => key !== 'kind' && typeof value === 'string').map(([, value]) => value as string) : [])];
+    return texts.reduce((sum, text) => sum + escapeCount(visibleSegments(text)), 0);
+  });
   protected readonly hiddenNote = computed(() => {
     const count = this.hiddenCount();
     return `${count} hidden or control character${count === 1 ? '' : 's'} shown as marked codes. Copy gives the exact text.`;

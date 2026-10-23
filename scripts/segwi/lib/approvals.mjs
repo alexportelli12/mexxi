@@ -19,20 +19,21 @@ export const DISPLAY_MAX = 20_000;
 const WHY_MAX = 300;
 const ASKABLE = new Set(["running", "needs_input", "needs_approval"]);
 
-// The input fields each tool is known to take. A call with any other field is shown whole, as JSON,
-// so nothing that changes what runs can hide beside the part the card names.
+// The input fields each tool is known to take, with their types. A call with any other field, or a field of
+// another type, is shown whole, as JSON, so nothing that changes what runs can hide beside the part the card
+// names. dangerouslyDisableSandbox is left out on purpose, so a call that sets it shows it.
 const KNOWN_FIELDS = {
-  Bash: ["command", "description", "timeout", "run_in_background", "dangerouslyDisableSandbox"],
-  Read: ["file_path", "offset", "limit", "pages"],
-  Write: ["file_path", "content"],
-  Edit: ["file_path", "old_string", "new_string", "replace_all"],
-  NotebookEdit: ["notebook_path", "cell_id", "new_source", "cell_type", "edit_mode"],
-  WebFetch: ["url", "prompt"],
+  Bash: { command: "string", description: "string", timeout: "number", run_in_background: "boolean" },
+  Read: { file_path: "string", offset: "number", limit: "number", pages: "string" },
+  Write: { file_path: "string", content: "string" },
+  Edit: { file_path: "string", old_string: "string", new_string: "string", replace_all: "boolean" },
+  NotebookEdit: { notebook_path: "string", cell_id: "string", new_source: "string", cell_type: "string", edit_mode: "string" },
+  WebFetch: { url: "string", prompt: "string" },
 };
 const PRIMARY = { Bash: "command", Read: "file_path", Write: "file_path", Edit: "file_path", NotebookEdit: "notebook_path", WebFetch: "url" };
 
 const knownShape = (tool, input) => Object.hasOwn(KNOWN_FIELDS, tool) && typeof input[PRIMARY[tool]] === "string"
-  && Object.keys(input).every((key) => KNOWN_FIELDS[tool].includes(key));
+  && Object.entries(input).every(([key, value]) => Object.hasOwn(KNOWN_FIELDS[tool], key) && typeof value === KNOWN_FIELDS[tool][key]);
 
 /** The line the person decides on: the command, path or URL itself, or the whole call as JSON. */
 export function exactFor(tool, input) {
@@ -53,9 +54,11 @@ export function contentFor(tool, input) {
   return null;
 }
 
+const CONTENT_TEXTS = { write: ["text"], edit: ["oldText", "newText"], notebook: ["cellId", "editMode", "cellType", "text"] };
+
 /** Characters the person would have to read: the exact line and every text in the content. */
 export function displayLength(exact, content) {
-  const texts = content ? Object.values(content).filter((value) => typeof value === "string" && value !== content.kind) : [];
+  const texts = content ? CONTENT_TEXTS[content.kind].map((field) => content[field] ?? "") : [];
   return [exact, ...texts].reduce((sum, value) => sum + value.length, 0);
 }
 

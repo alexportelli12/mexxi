@@ -32,7 +32,7 @@ const BLOCK = 'font-code max-h-80 overflow-auto rounded-card border bg-bg p-3 te
       }
       @case ('notebook') {
         <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm" data-testid="content-cell">
-          <dt class="text-muted">Cell</dt><dd class="font-code break-all">{{ notebook().cellId ?? 'new cell' }}</dd>
+          <dt class="text-muted">Cell</dt><dd class="font-code break-all">@if (notebook().cellId !== null) {<segwi-visible-text [text]="notebook().cellId!" />} @else {new cell}</dd>
           <dt class="text-muted">Change</dt><dd>{{ notebook().editMode ?? 'replace' }}</dd>
           <dt class="text-muted">Type</dt><dd>{{ notebook().cellType ?? 'unchanged' }}</dd>
         </dl>

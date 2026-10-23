@@ -58,6 +58,12 @@ describe('ApprovalCard', () => {
     expect(decide).toHaveBeenCalledWith('ap1', 'deny');
   });
 
+  it('counts hidden characters in the file content too, and marks them in a notebook cell id', async () => {
+    const { element } = await render({ tool: 'NotebookEdit', exact: '/w/n.ipynb', content: { kind: 'notebook', cellId: 'c\u202E1', editMode: 'replace', cellType: null, text: 'notebook' } });
+    expect(element.querySelector('[data-testid="content-cell"] [data-escape]')?.textContent).toBe('U+202E');
+    expect(element.querySelector('[data-testid="hidden-characters"]')?.textContent).toContain('1 hidden or control character');
+  });
+
   it('shows exact and why whole, with hidden characters as chips, and copies the raw string', async () => {
     const opaque = 'x'.repeat(3000);
     const exact = `printf "\u001b[2K" \u202Etxt.exe TOKEN=${opaque}`;

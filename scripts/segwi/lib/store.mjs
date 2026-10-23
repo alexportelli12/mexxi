@@ -189,7 +189,10 @@ export function openStore(file, { now = () => new Date() } = {}) {
       const row = statements.getApproval.get(id);
       if (!row || row.status !== "pending") return false;
       const content = row.content ? JSON.stringify(cleanDeep(JSON.parse(row.content))) : null;
-      return statements.decideApproval.run(status, decidedBy ? cleanText(decidedBy, 200) : null, stamp(), cleanText(row.exact), content, id).changes === 1;
+      const changed = statements.decideApproval.run(status, decidedBy ? cleanText(decidedBy, 200) : null, stamp(), cleanText(row.exact), content, id).changes === 1;
+      // The write-ahead log still holds the raw page until a checkpoint; empty it now if no reader holds it.
+      try { db.exec("PRAGMA wal_checkpoint(TRUNCATE)"); } catch { /* busy: the next checkpoint does it */ }
+      return changed;
     },
     pendingApprovalsFor: (runId) => statements.pendingFor.all(runId).map(approvalFromRow),
     listApprovals({ status = "pending", limit = 100 } = {}) {

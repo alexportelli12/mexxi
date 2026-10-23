@@ -9,6 +9,7 @@ import { Readable } from "node:stream";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { contentFor, displayLength, exactFor } from "../lib/approvals.mjs";
 import { createHandler } from "../lib/http.mjs";
 import { startServer } from "../lib/serve.mjs";
 import { fakeAdapter, makeRepo, makeSettings, request, tempDir, waitFor } from "./helpers.mjs";
@@ -183,6 +184,19 @@ test("Write, Edit and NotebookEdit approvals carry the raw content they would wr
     await waitFor(() => replies(host).length === index + 1);
     assert.deepEqual(host.report().approverReplies[index].updatedInput, call.input);
   }
+});
+
+test("a call with a field of an unexpected type, or one that asks to leave the sandbox, is shown whole", () => {
+  const odd = [
+    ["Bash", { command: "ls", dangerouslyDisableSandbox: true }],
+    ["Edit", { file_path: "/tmp/segwi-test-worktrees/a", old_string: "a", new_string: "b", replace_all: "true" }],
+    ["Write", { file_path: "/tmp/segwi-test-worktrees/a", content: ["not", "text"] }],
+  ];
+  for (const [tool, input] of odd) {
+    assert.equal(exactFor(tool, input), `${tool} ${JSON.stringify(input)}`, tool);
+    assert.equal(contentFor(tool, input), null, tool);
+  }
+  assert.equal(displayLength("abc", { kind: "edit", oldText: "edit", newText: "xy", replaceAll: false }), 9, "the kind's own name is not text, but text equal to it is");
 });
 
 test("a call with an unknown field is shown whole, and one too long to show is denied without asking", async (t) => {
