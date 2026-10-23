@@ -120,7 +120,8 @@ async function exercise({ server, waits, command }) {
   const refusal = steps.find((step) => step.type === "refusal" && step.title.startsWith(`Refused: ${command}`));
   if (!refusal) throw new Error(`the deny-listed command \`${command}\` was not refused`);
   // Auto mode would refuse it too, so only a refusal by the deny list or the guard hook proves your settings loaded.
-  const reason = refusal.detail.slice(`Refused: ${command} — `.length);
+  // The reason follows the first " — " after the command, whatever flags the agent added to it.
+  const reason = refusal.detail.slice(refusal.detail.indexOf(" — ", `Refused: ${command}`.length) + 3);
   if (reason.startsWith("auto mode:")) throw new Error(`\`${command}\` was refused by auto mode, not by guard.deny or mexxi's guard hook (${reason})`);
   const kinds = new Set(server.store.listEvents(run.id, 0, 5000).map((row) => row.kind));
   const missing = EVENT_KINDS.find((kind) => !kinds.has(kind)) ?? (server.store.getRun(run.id).hostSessionId ? null : "session");
