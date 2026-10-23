@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import test from "node:test";
+import test, { after } from "node:test";
 import { checkFreshness, FreshnessError } from "./fresh.mjs";
 
 const run = (cwd, ...args) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.com", ...args], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
@@ -14,10 +14,14 @@ const write = async (directory, file, text) => {
 const page = (sources, reviewed = "2026-01-01") => `---\nsources:\n${sources.map((source) => `  - ${source}`).join("\n")}\nreviewed: ${reviewed}\n---\n# Page\n`;
 const sidecar = (reviewed = "2026-01-01") => `${JSON.stringify({ "README.md": { sources: ["src/**"], reviewed }, "site/index.html": { sources: ["src/b.txt"], reviewed } })}\n`;
 
+const fixtures = [];
+after(() => Promise.all(fixtures.map((directory) => rm(directory, { recursive: true, force: true }))));
+
 // A repository with an origin whose default branch is main, and a feature
 // branch checked out in a clone of it.
 async function fixture() {
   const parent = await mkdtemp(path.join(os.tmpdir(), "mexxi-fresh-"));
+  fixtures.push(parent);
   const origin = path.join(parent, "origin.git");
   const seed = path.join(parent, "seed");
   run(parent, "init", "-q", "--bare", "-b", "main", origin);
