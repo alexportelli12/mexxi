@@ -152,17 +152,19 @@ export function createRunService({ store, settings, runner, ibni, broker, server
 
   return {
     async create(input) {
-      if (input.clientId) {
-        const existing = store.findByClientId(input.clientId);
-        if (existing) return { run: publicRun(existing), created: false };
-      }
+      const existing = () => (input.clientId ? store.findByClientId(input.clientId) : null);
+      if (existing()) return { run: publicRun(existing()), created: false };
       const repository = repositories.find((candidate) => candidate.name === input.repo);
       const problem = checkoutProblem(await checkoutState(repository.path));
-      if (problem) throw new HttpError(409, problem);
-      if (requireSandbox && !(await detected()).sandbox.available) {
+      let sandboxReady = !requireSandbox || (await detected()).sandbox.available;
+      if (!sandboxReady) {
         detectCache = null; // a refusal looks again, so installing bubblewrap takes effect at once
-        if (!(await detected()).sandbox.available) throw new HttpError(409, NO_SANDBOX);
+        sandboxReady = (await detected()).sandbox.available;
       }
+      // A retry with the same clientId may have inserted its run while this one awaited; nothing awaits from here to the insert.
+      if (existing()) return { run: publicRun(existing()), created: false };
+      if (problem) throw new HttpError(409, problem);
+      if (!sandboxReady) throw new HttpError(409, NO_SANDBOX);
       // Checked and inserted in one synchronous step, so two requests can't both pass.
       assertWithinCaps(store, limits);
       const id = randomUUID();

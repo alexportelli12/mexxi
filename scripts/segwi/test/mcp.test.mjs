@@ -364,3 +364,13 @@ test("every MCP request is audited: protocol methods, notifications, unknown met
   assert.deepEqual(called.map((row) => [row.action, row.outcome]), [["list_repos", "ok"]], "a tool call is audited once, by its tool");
   assert.ok(!JSON.stringify(server.store.listAudit(200)).includes(SECRET_ARG), "no argument text is audited");
 });
+
+test("concurrent start_run calls with one clientId return the same run, without an error", async (t) => {
+  const { server, token } = await boot(t, { fixture: "build-needs-input" });
+  const client = await connect(t, server, token);
+  const clientId = "7a6b5c4d-3e2f-4a1b-8c9d-0e1f2a3b4c5d";
+  const results = await Promise.all(Array.from({ length: 4 }, () => call(client, "start_run", { repo: "my-app", action: "build", task: "one", clientId })));
+  assert.ok(results.every((result) => !result.isError), JSON.stringify(results.find((result) => result.isError)));
+  assert.equal(new Set(results.map((result) => plain(result).id)).size, 1);
+  assert.equal(server.store.listRuns().length, 1);
+});

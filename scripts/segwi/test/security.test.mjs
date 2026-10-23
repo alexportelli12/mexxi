@@ -468,3 +468,12 @@ test("a stop that lands while the host is starting stays stopped, and the host i
   assert.equal(server.store.getRun(id).status, "stopped");
   assert.equal(statusEvents(server, id).at(-1).data.status, "stopped");
 });
+
+test("concurrent starts with one clientId make one run: the first gets 201, the rest 200 with the same run", async (t) => {
+  const { server } = await boot(t, { fixture: "build-needs-input" });
+  const clientId = "4c1d6a3e-2b7f-4e8a-9c0d-1e2f3a4b5c6d";
+  const responses = await Promise.all(Array.from({ length: 5 }, () => startRun(server, { action: "build", clientId })));
+  assert.deepEqual(responses.map((response) => response.status).sort(), [200, 200, 200, 200, 201]);
+  assert.equal(new Set(responses.map((response) => response.json.run.id)).size, 1);
+  assert.equal(server.store.listRuns().length, 1);
+});
