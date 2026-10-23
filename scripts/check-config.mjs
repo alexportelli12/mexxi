@@ -222,11 +222,13 @@ export async function check(base = root) {
   for (const pattern of claudeOnly) assert.match(overlay, pattern, `claude/overlay.md no longer names ${pattern}; update this check with the overlay`);
   const rules = overlay.split(/\n(?=- )/).filter((item) => item.startsWith("- ")).map((item) => item.slice(2).replace(/\s+/g, " ").trim());
   assert.ok(rules.length >= 3, "claude/overlay.md must list its rules as bullets");
+  // skills/synced/ is gitignored and holds skills synced in from elsewhere,
+  // which mexxi does not write, so the installer skips it and so does this.
   const sharedInstructions = ["AGENTS.md",
     ...(await readdir(path.join(base, "agent"))).map((name) => `agent/${name}`),
     ...(await readdir(path.join(base, "commands"))).map((name) => `commands/${name}`),
     ...(await readdir(path.join(base, "skills"), { recursive: true })).map((name) => `skills/${name.split(path.sep).join("/")}`),
-  ].filter((name) => name.endsWith(".md"));
+  ].filter((name) => name.endsWith(".md") && !name.startsWith("skills/synced/"));
   for (const name of sharedInstructions) {
     const text = (await readFile(path.join(base, name), "utf8"));
     for (const pattern of claudeOnly) assert.doesNotMatch(text, pattern, `${name} names a Claude Code-only tool; that rule belongs in claude/overlay.md`);
