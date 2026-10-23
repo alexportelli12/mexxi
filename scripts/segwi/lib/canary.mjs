@@ -117,7 +117,11 @@ async function exercise({ server, waits, command }) {
   const finished = await until(() => server.store.getRun(run.id).status === "completed", { timeoutMs: waits.completeMs, pollMs: waits.pollMs, give: failure });
   if (!finished) throw new Error(`the run did not complete within ${Math.round(waits.completeMs / 60_000)} minutes`);
   const { steps, costUsd } = server.runs.get(run.id);
-  if (!steps.some((step) => step.type === "refusal" && step.title.startsWith(`Refused: ${command}`))) throw new Error(`the deny-listed command \`${command}\` was not refused`);
+  const refusal = steps.find((step) => step.type === "refusal" && step.title.startsWith(`Refused: ${command}`));
+  if (!refusal) throw new Error(`the deny-listed command \`${command}\` was not refused`);
+  // Auto mode would refuse it too, so only a refusal by the deny list or the guard hook proves your settings loaded.
+  const reason = refusal.detail.slice(`Refused: ${command} — `.length);
+  if (reason.startsWith("auto mode:")) throw new Error(`\`${command}\` was refused by auto mode, not by guard.deny or mexxi's guard hook (${reason})`);
   const kinds = new Set(server.store.listEvents(run.id, 0, 5000).map((row) => row.kind));
   const missing = EVENT_KINDS.find((kind) => !kinds.has(kind)) ?? (server.store.getRun(run.id).hostSessionId ? null : "session");
   if (missing) throw new Error(`the run showed no ${missing} event`);

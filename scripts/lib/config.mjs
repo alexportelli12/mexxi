@@ -98,6 +98,7 @@ export function abbreviateHome(value, home = os.homedir()) {
 
 // Keys segwi's sandbox and permission modes used, retired by decision 0016. For one release a config that still
 // names them loads: they are dropped before validation, and segwi warns about each (see segwi/lib/settings.mjs).
+// Remove this shim, and let the schema refuse them again, after 2026-12-01.
 const RETIRED_SEGWI_KEYS = ["permissions", "mcpPermissions", "branchPrefixes", "allowUnsandboxed", "allowedDomains"];
 const RETIRED_REPOSITORY_KEYS = ["permissions", "allowedDomains"];
 

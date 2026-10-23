@@ -16,7 +16,7 @@ Meanwhile the same agent runs on the same machine, as the same user, without any
 ## Decision
 
 - **A run is the session you would start by hand.** Build, ready and ask runs start in the repository's checkout with `--permission-mode auto` and your own Claude Code settings. segwi renders no settings file: no sandbox, no allow, ask or deny list. mexxi's guard hook, loop breaker and `guard.deny` apply exactly as in a session you start yourself.
-- **An ask run stays read-only, without plan mode.** It runs in auto mode too, with `--disallowedTools Edit,Write,NotebookEdit`, and its prompt says to change nothing. Plan mode stays out, because it let `curl` run unasked and switched to a larger model than `--model` names.
+- **An ask run is meant to change nothing, without plan mode.** It runs in auto mode too, with `--disallowedTools Edit,Write,NotebookEdit`, and its prompt says to change nothing. It keeps the shell, so auto mode and that prompt, not a sandbox, stop a command that writes. Plan mode stays out, because it let `curl` run unasked and switched to a larger model than `--model` names.
 - **segwi keeps what protects it from outsiders.** Loopback binding, the tailnet identity check with its Host allow list, same-origin writes and the MCP bearer token stay. So do approvals only a person can answer and the mark on the run's own browser. Caps, timeouts, the two-step stop, audit, redaction and push stay as they are.
 - **The approval tool stays wired** as `--permission-prompt-tool`, for the rare call auto mode escalates after repeated refusals.
 - **`ibni` behaves as it does for you.** `IBNI_LAUNCH_CHECKOUT`, `IBNI_LOCK_ROOT`, `IBNI_BRANCH_PREFIXES`, `IBNI_SKIP_SWEEP` and `IBNI_DEFER_SETUP` are gone, and so is the deferred setup they served.

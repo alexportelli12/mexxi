@@ -1,7 +1,9 @@
 // The canary (plan sections 9 and 11.15): it passes against a host that behaves,
 // and fails loudly, with a state file, the health route and a push, against one
 // that does not. A fake host replays recordings; no real `claude` runs here.
-// The recording refuses `npm publish --help`, built from the first guard.deny entry makeSettings sets.
+// canary-refused.jsonl is synthetic: a real ask-completed recording with its tool call, result and message edited to
+// refuse `npm publish --help`, built from the first guard.deny entry makeSettings sets. Its other fields still describe
+// the original run, which the adapter ignores. Replace it with a stream from `segwi canary --save-stream`.
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import http from "node:http";
@@ -116,6 +118,16 @@ test("a deny-listed command that runs instead of being refused fails the canary"
   assert.equal(state.ok, false);
   assert.equal(state.problem, "the deny-listed command `npm publish --help` was not refused");
   assert.deepEqual(state.canaryTestedVersions, []);
+});
+
+test("a refusal by auto mode's classifier instead of the deny list fails the canary, which proves your settings loaded", async (t) => {
+  const classifier = "Permission for this action was denied by the Claude Code auto mode classifier. Reason: It looked risky.";
+  const judged = changed(t, (line) => (line.type === "user"
+    ? { ...line, message: { ...line.message, content: [{ ...line.message.content[0], content: classifier }] } }
+    : line));
+  const state = await runCanary({ settings: settingsWithCanary(), stateDir: tempDir(t, "segwi-cn-state-"), dataDir: tempDir(t, "segwi-cn-data-"), host: replaying(t, judged), waits: WAITS });
+  assert.equal(state.ok, false);
+  assert.equal(state.problem, "`npm publish --help` was refused by auto mode, not by guard.deny or mexxi's guard hook (auto mode: It looked risky)");
 });
 
 test("a run that never says anything fails the canary, which needs every kind of event a run shows", async (t) => {

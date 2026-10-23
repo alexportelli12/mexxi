@@ -170,7 +170,7 @@ Approvals stop the agent's browser and your MCP clients, not every program on th
 
 When auto mode, a `guard.deny` rule or mexxi's guard hook, the backup to mexxi's rules, refuses a call, the run shows a step. It reads "Refused:" followed by the command and the reason. The agent is told to stop and ask you rather than work around a refusal, so the run then shows **Needs your reply**. Each refusal is also counted in the audit log as `run.refused`.
 
-An ask run promises to change nothing. It runs in auto mode too, without the tools that edit or write files, and it is told to change nothing.
+An ask run is meant to change nothing. It runs in auto mode too, without the tools that edit or write files, and it is told to change nothing. It still has the shell, though, so only auto mode and that instruction keep a command such as `sed -i` from changing your checkout.
 
 segwi's own service runs with `NODE_ENV=production`, and a run doesn't inherit it, so `npm ci` installs a repository's test tools as it does in your terminal.
 
