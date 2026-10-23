@@ -9,8 +9,10 @@ import { cleanText } from "./clean.mjs";
 import { HttpError } from "./errors.mjs";
 import { readVapid } from "./vapid.mjs";
 
-const NOTIFIED = new Set(["needs_input", "needs_approval", "completed", "failed"]);
+const NOTIFIED = new Set(["needs_input", "needs_approval", "completed", "failed", "canary_failed"]);
 const COPY = { needs_input: "needs your reply", needs_approval: "needs your OK", completed: "is done", failed: "failed" };
+// The nightly canary has no run and no repo. Its payload is fixed text, so there is nothing in it to leak.
+const CANARY_PAYLOAD = { v: 1, kind: "canary_failed", status: "canary_failed", title: "segwi canary failed", url: "/", tag: "canary" };
 // The push services browsers subscribe with (Chrome, Firefox, Safari, Edge). Any other host is refused,
 // because a public name can still resolve to an internal address.
 const PUSH_SERVICES = ["fcm.googleapis.com", "updates.push.services.mozilla.com", "web.push.apple.com", "notify.windows.com"];
@@ -38,6 +40,7 @@ export function createPushService({ store, settings, stateDir, allowEndpoint = e
   const inflight = new Set();
 
   function payloadFor(kind, run) {
+    if (kind === "canary_failed") return CANARY_PAYLOAD;
     const approval = kind === "needs_approval" ? store.pendingApprovalsFor(run.id)[0] : null;
     return {
       v: 1, kind, runId: run.id, ...(approval ? { approvalId: approval.id } : {}), repo: run.repo, status: kind,
@@ -76,15 +79,15 @@ export function createPushService({ store, settings, stateDir, allowEndpoint = e
       if (!store.deleteSubscription(id)) throw new HttpError(404, "No such subscription.");
     },
 
-    /** Sends one notification per subscription. Never throws into the run. */
+    /** Sends one notification per subscription (`run` is null for `canary_failed`). Never throws into the run. */
     notify(kind, run) {
       try {
         const vapid = settings.segwi.push ? readVapid(stateDir) : null;
-        if (!vapid || !NOTIFIED.has(kind) || !run) return;
+        if (!vapid || !NOTIFIED.has(kind) || (!run && kind !== "canary_failed")) return;
         const body = JSON.stringify(payloadFor(kind, run));
         const options = {
           TTL: 3600, urgency: kind.startsWith("needs_") ? "high" : "normal",
-          topic: `run-${createHash("sha256").update(run.id).digest("hex").slice(0, 12)}`,
+          topic: `run-${createHash("sha256").update(run?.id ?? "canary").digest("hex").slice(0, 12)}`,
           vapidDetails: vapid, timeout: 10_000, ...(agent ? { agent } : {}),
         };
         for (const subscription of store.listSubscriptions()) {

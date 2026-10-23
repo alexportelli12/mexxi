@@ -32,3 +32,11 @@ test("a repository with an unknown action, or an unknown auth mode, is refused",
   );
   await assert.rejects(resolveConfig({ segwi: { auth: { web: { mode: "open" } } } }, { home }), ConfigError);
 });
+
+test("the canary defaults to a small model and a short run, and refuses a model name with odd characters", async () => {
+  const { segwi } = await resolveConfig({}, { home });
+  assert.deepEqual(segwi.canary, { model: "haiku", maxTurns: 6 });
+  assert.equal((await resolveConfig({ segwi: { canary: { maxTurns: 3 } } }, { home })).segwi.canary.model, "haiku");
+  await assert.rejects(resolveConfig({ segwi: { canary: { model: "haiku; rm" } } }, { home }), ConfigError);
+  await assert.rejects(resolveConfig({ segwi: { canary: { maxTurns: 0 } } }, { home }), ConfigError);
+});

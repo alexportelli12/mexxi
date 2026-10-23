@@ -1,5 +1,5 @@
 ---
-status: Proposed
+status: Accepted
 date: 2026-10-22
 ---
 
@@ -22,7 +22,7 @@ Claude Code's Remote Control lets you follow a Claude Code session from a phone.
 - **The web app shares mexxi's look** through one `site/tokens.css` that the landing page, the docs and the app all import. Its Maltese words come from `names.json`.
 - **Maintenance is automated from the start.** Dependency updates arrive as pull requests, CI runs verify on every pull request, and a check audits dependencies. A nightly canary runs against the real host CLI, and a scheduled agent run handles framework major versions. Machines open pull requests; a person merges.
 
-The full specification is in [the plan](../plans/segwi.md) while segwi is built.
+How to set segwi up and use it is in [the user guide](../segwi.md).
 
 ## Consequences
 

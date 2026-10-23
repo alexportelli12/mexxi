@@ -104,6 +104,10 @@
       "taskMaxChars": 8000,
       "inputMaxChars": 4000
     },
+    "canary": {
+      "model": "haiku",
+      "maxTurns": 6
+    },
     "push": true,
     "service": {
       "systemdUserUnit": false

@@ -294,6 +294,17 @@
             "inputMaxChars": { "description": "Longest reply a run accepts.", "type": "integer", "minimum": 1, "default": 4000 }
           }
         },
+        "canary": {
+          "description": "The nightly check that your coding agent still works the way segwi expects.",
+          "why": "The agent's command line and output can change between versions, and a small real run each night finds that out before you do.",
+          "type": "object",
+          "additionalProperties": false,
+          "default": {},
+          "properties": {
+            "model": { "description": "Model the canary run uses. A small one keeps the nightly cost to a few cents.", "type": "string", "pattern": "^[A-Za-z0-9._-]*$", "default": "haiku" },
+            "maxTurns": { "description": "Agent turns the canary run may take before it stops.", "type": "integer", "minimum": 1, "default": 6 }
+          }
+        },
         "push": { "description": "Send a push notification when a run needs you, finishes or fails.", "type": "boolean", "default": true },
         "service": {
           "description": "Running segwi in the background.",

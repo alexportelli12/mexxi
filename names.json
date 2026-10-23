@@ -16,6 +16,14 @@
     "replaces": "implementation-workspace"
   },
   {
+    "name": "segwi",
+    "kind": "cli",
+    "partOfSpeech": "verb",
+    "meaning": ["to follow"],
+    "job": "Starts, follows and answers mexxi runs from your phone or any MCP client, on a machine you own.",
+    "replaces": null
+  },
+  {
     "name": "wettaq",
     "kind": "command",
     "partOfSpeech": "verb",

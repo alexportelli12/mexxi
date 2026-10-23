@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { symlinkSync, writeFileSync } from "node:fs";
 import net from "node:net";
 import path from "node:path";
 import test from "node:test";
@@ -11,21 +11,28 @@ import { tempDir, waitFor } from "./helpers.mjs";
 const server = fileURLToPath(new URL("../server.mjs", import.meta.url));
 const run = (...args) => spawnSync(process.execPath, [server, ...args], { encoding: "utf8" });
 
-test("--help lists every subcommand with its why, and marks the ones that don't work yet", () => {
+test("--help lists every subcommand with its why, and every one works", () => {
   const { status, stdout } = run("--help");
   assert.equal(status, 0);
-  assert.match(stdout, /canary .*\(not yet implemented\)/);
-  assert.doesNotMatch(stdout, /(serve|token|vapid) .*not yet implemented/);
+  assert.doesNotMatch(stdout, /not yet implemented/);
   for (const [name, { why }] of Object.entries(COMMANDS)) {
     assert.ok(stdout.includes(name), name);
     assert.ok(stdout.includes(`Why: ${why}`), `${name} shows its why`);
   }
 });
 
-test("a subcommand that does not exist yet says so and fails", () => {
-  const { status, stderr } = run("canary");
+test("the file runs through a symlink, which is how the installer links it as `segwi`", (t) => {
+  const link = path.join(tempDir(t, "segwi-link-"), "segwi");
+  symlinkSync(server, link);
+  const { status, stdout } = spawnSync(process.execPath, [link, "--help"], { encoding: "utf8" });
+  assert.equal(status, 0);
+  assert.match(stdout, /Usage: segwi <command>/);
+});
+
+test("canary rejects a flag it does not take before it starts anything", () => {
+  const { status, stderr } = run("canary", "--bogus", "x");
   assert.equal(status, 2);
-  assert.match(stderr, /not yet implemented/);
+  assert.match(stderr, /usage: segwi canary/);
 });
 
 test("an unknown subcommand is refused with the list to choose from", () => {

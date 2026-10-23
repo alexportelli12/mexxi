@@ -171,7 +171,8 @@ export async function check(base = root) {
   }
   const commandFiles = (await readdir(path.join(base, "commands"))).filter((name) => name.endsWith(".md") && !(name in commandAliases));
   assert.deepEqual(names.filter((entry) => entry.kind === "command").map((entry) => `${entry.name}.md`).sort(), commandFiles.sort(), "names.json must list each command, and only commands");
-  assert.deepEqual(names.filter((entry) => entry.kind === "cli").map((entry) => entry.name), ["ibni"]);
+  // ibni runs a task's worktree; segwi, opt-in, starts and follows runs (decision 0011).
+  assert.deepEqual(names.filter((entry) => entry.kind === "cli").map((entry) => entry.name), ["ibni", "segwi"]);
   assert.deepEqual(names.filter((entry) => entry.kind === "repo").map((entry) => entry.name), ["mexxi"]);
   const skillEntries = names.filter((entry) => entry.kind === "skill");
   assert.deepEqual(skillEntries.map((entry) => entry.name), ["ibda"]);

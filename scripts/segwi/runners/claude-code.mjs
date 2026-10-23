@@ -12,6 +12,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { playwrightArguments } from "../../lib/browser.mjs";
 import { isPlainVerifyCommand, renderSettings, VERIFY_NOT_ALLOWED } from "../lib/allow-list.mjs";
+import { canaryTestedVersions } from "../lib/canary-state.mjs";
 
 const execFileAsync = promisify(execFile);
 const serverEntry = fileURLToPath(new URL("../server.mjs", import.meta.url));
@@ -94,6 +95,12 @@ function resultText(content) {
   return "";
 }
 
+// The message types the host is known to write. A new one is not an error for a
+// run, but the canary counts it, because it means the stream format moved.
+const KNOWN_MESSAGE_TYPES = new Set(["system", "assistant", "user", "result", "rate_limit_event"]);
+
+export const isKnownMessage = (message) => KNOWN_MESSAGE_TYPES.has(message?.type);
+
 /** Maps one parsed stream-json object to RunEvents. Unknown shapes map to nothing. */
 export function mapMessage(message) {
   const events = [];
@@ -129,10 +136,13 @@ export function mapMessage(message) {
 }
 
 /**
- * @param {{ bin?: string, binArgs?: string[], dataDir?: string, killGraceMs?: [number, number] }} [options]
- *   `bin` and `binArgs` exist for tests only; nothing from config, a request or the environment reaches them.
+ * @param {{ bin?: string, binArgs?: string[], dataDir?: string, killGraceMs?: [number, number], stateDir?: string|null,
+ *   onUnknown?: (what: string) => void, onLine?: (line: string) => void }} [options]
+ *   `bin` and `binArgs` exist for tests and the canary only; nothing from config, a request or the environment reaches them.
+ *   `stateDir` is where a canary's passed versions are read from. `onUnknown` hears each line the adapter did not
+ *   recognise, and `onLine` each raw line of the host's output, both for the canary.
  */
-export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir = path.join(os.tmpdir(), "segwi"), killGraceMs = [10_000, 5_000] } = {}) {
+export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir = path.join(os.tmpdir(), "segwi"), killGraceMs = [10_000, 5_000], stateDir = null, onUnknown = () => {}, onLine = () => {} } = {}) {
   /** @type {Map<string, { child: import("node:child_process").ChildProcess, closed: boolean, timers: NodeJS.Timeout[] }>} */
   const processes = new Map();
 
@@ -145,12 +155,14 @@ export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir 
     } catch {
       problems.push("Claude Code did not answer `claude --version`.");
     }
-    if (version && !testedVersions.includes(version)) {
-      problems.push(`Claude Code ${version} has not been tested with segwi (tested: ${testedVersions.join(", ")}).`);
+    // The repository file is the reviewed baseline; a passing canary adds the version it ran against.
+    const tested = [...new Set([...testedVersions, ...canaryTestedVersions(stateDir)])];
+    if (version && !tested.includes(version)) {
+      problems.push(`Claude Code ${version} has not been tested with segwi (tested: ${tested.join(", ")}).`);
     }
     const missing = ["bwrap", "socat"].filter((name) => !onPath(name));
     const sandboxProblems = missing.length ? ["Claude Code's sandbox can't start: install bubblewrap and socat."] : [];
-    return { available: version !== null, version, testedVersions, problems, sandbox: { available: !missing.length, problems: sandboxProblems } };
+    return { available: version !== null, version, testedVersions: tested, problems, sandbox: { available: !missing.length, problems: sandboxProblems } };
   }
 
   async function start(spec, emit) {
@@ -180,17 +192,21 @@ export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir 
     let stderrTail = "";
     const handleLine = (line) => {
       if (!line.trim()) return;
+      onLine(line);
       let message;
       try {
         message = JSON.parse(line);
       } catch {
+        onUnknown("an unreadable line");
         emit({ kind: "error", message: `Unreadable line from the host: ${line.slice(0, 120)}` });
         return;
       }
       if (message === null || typeof message !== "object" || Array.isArray(message)) {
+        onUnknown("a line that is not an object");
         emit({ kind: "error", message: `Unexpected line from the host: ${line.slice(0, 120)}` });
         return;
       }
+      if (!isKnownMessage(message)) onUnknown(`a "${String(message.type).slice(0, 40)}" message`);
       for (const event of mapMessage(message)) emit(event);
     };
     child.stdout.on("data", (chunk) => {

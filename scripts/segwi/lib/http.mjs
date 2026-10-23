@@ -5,6 +5,7 @@ import path from "node:path";
 import { PROXY_HEADERS, assertNotFromThisMachine, assertSameOriginWrite } from "./auth.mjs";
 import { isLoopbackAddress } from "./bind.mjs";
 import { audit } from "./audit.mjs";
+import { canaryHealth } from "./canary-state.mjs";
 import { HttpError } from "./errors.mjs";
 import { parse, schemas as schemasFor } from "./validate.mjs";
 
@@ -86,12 +87,12 @@ async function serveStatic(res, root, pathname) {
 }
 
 /**
- * @param {{ store: object, settings: object, authenticate: Function, runs: object, approvals: object, broker: object, push: object, staticRoot: string|null, version: string, mcp?: Function|null }} deps
+ * @param {{ store: object, settings: object, authenticate: Function, runs: object, approvals: object, broker: object, push: object, staticRoot: string|null, version: string, mcp?: Function|null, stateDir?: string|null }} deps
  */
-export function createHandler({ store, settings, authenticate, runs, approvals, broker, push, staticRoot, version, mcp = null }) {
+export function createHandler({ store, settings, authenticate, runs, approvals, broker, push, staticRoot, version, mcp = null, stateDir = null }) {
   const parsers = schemasFor(settings);
   const routes = [
-    ["GET", "/api/health", "none", async () => runs.health(version)],
+    ["GET", "/api/health", "none", async () => ({ ...(await runs.health(version)), canary: canaryHealth(stateDir) })],
     ["GET", "/api/repos", "none", async () => ({ repos: await runs.repos() })],
     ["GET", "/api/runs", "listRuns", async ({ query }) => ({ runs: runs.list({ status: query.status, repo: query.repo, limit: query.limit }) })],
     ["POST", "/api/runs", "createRun", async ({ body }) => {

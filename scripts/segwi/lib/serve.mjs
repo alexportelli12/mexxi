@@ -40,7 +40,7 @@ export async function startServer({ settings, dataDir, runner, ibni = createIbni
     store.close();
     throw error;
   }
-  const theRunner = runner ?? createRunner(runnerId, { dataDir });
+  const theRunner = runner ?? createRunner(runnerId, { dataDir, stateDir });
   const broker = createBroker({ store });
   let serverUrl = "";
   const runs = createRunService({ store, settings, runner: theRunner, ibni, broker, serverUrl: () => serverUrl });
@@ -50,7 +50,7 @@ export async function startServer({ settings, dataDir, runner, ibni = createIbni
   runs.recover();
   const handler = createHandler({
     store, settings, authenticate: createAuthenticator(auth.web), runs, approvals, broker, push,
-    staticRoot: staticRoot && readableDir(staticRoot) ? staticRoot : null, version,
+    staticRoot: staticRoot && readableDir(staticRoot) ? staticRoot : null, version, stateDir,
     mcp: createMcpHandler({ store, settings, runs, approvals, stateDir, confirmTtlMs: mcpConfirmTtlMs }),
   });
   // A request still running when the server closes may find the store shut; it has nobody left to answer.

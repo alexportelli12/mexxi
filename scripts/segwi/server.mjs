@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // segwi's entry point: the subcommand table, help and dispatch. Each phase
 // fills in more commands, and help marks the ones that don't work yet.
+import { realpathSync } from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -27,6 +28,7 @@ export const COMMANDS = {
     why: "Your phone can only trust a push that is signed, so segwi needs its own key pair.",
   },
   canary: {
+    implemented: true,
     summary: "Run a small real task to check the coding agent still behaves as segwi expects.",
     why: "The agent's command line can change between versions, and a nightly check finds out before you do.",
   },
@@ -102,9 +104,11 @@ export async function main(args = process.argv.slice(2)) {
   if (first === "approver") return (await import("./lib/approver.mjs")).runApprover(args.slice(1));
   if (first === "vapid") return (await import("./lib/vapid-cli.mjs")).runVapid(args.slice(1));
   if (first === "token") return (await import("./lib/token-cli.mjs")).runToken(args.slice(1));
+  if (first === "canary") return void (await (await import("./lib/canary-cli.mjs")).runCanaryCommand(args.slice(1)));
   process.stderr.write(`segwi ${first}: not yet implemented\n`);
   process.exitCode = 2;
   return undefined;
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();
+// The installer links this file as `segwi`, and node runs a symlinked script from its real path.
+if (process.argv[1] && import.meta.url === pathToFileURL(realpathSync(process.argv[1])).href) await main();
