@@ -156,12 +156,17 @@ claude -p --input-format stream-json --output-format stream-json --verbose
   - `git` with `status`, `diff`, `log`, `show`, `add`, `commit`, `grep`, `ls-files`, `rev-parse`, `fetch`, `check-ignore`, `rm` and `mv`;
   - `gh pr` create, view, edit, checks and diff, and `gh run` view and list (the agent opens the PR itself);
   - `npm ci`, `npm install` with no package, `npm run`, `npm test`, `npm audit`, `npm view`;
-  - `npx` with `prettier`, `vitest`, `playwright`, `tsc`, `eslint`, `ng` and `oxlint`; `node --test`; `ocr delegate`; `ffmpeg`; `mkdir`;
+  - `npx` with `prettier`, `vitest`, `playwright`, `tsc`, `eslint`, `ng` and `oxlint`; `node --test`; `ocr delegate`; `ffmpeg`; `mkdir`; exactly `set -o pipefail`, which mexxi's command-fixer mod puts before a piped verify;
   - `mcp__playwright__*`;
   - Read, Edit and Write under `paths.worktreeRoot` and the per-user temp directory, as `//absolute/**` rules.
 
   Edit and Write are allowed where the run actually works, **not** in the control checkout. Interpreters, network clients, `rm`, `cp`, `mv`, `kill`, `git push` and `gh api` are left off on purpose. The rendered list is generated from config and this derived set, so it stays in one place.
-- **Steering.** `--append-system-prompt` adds two sentences: a person answers any call outside the allow list from a phone, so prefer the file tools and the listed commands. This keeps approvals for the genuinely unusual without loosening a rule.
+- **Steering.** `--append-system-prompt` says that a person approves any call outside the allow list, and the run waits for them. It then asks for three things:
+  - change files only with Edit and Write, never with shell redirection, `<<EOF` blocks, `tee` or `sed -i`;
+  - keep each Bash call to plain commands, without variable assignments or `$(…)`;
+  - follow this even where other guidance suggests editing through the shell.
+
+  The first real `/wettaq` run, with a vaguer prompt, edited files through `<<EOF` blocks and `sed`, and each of those calls waited on a person. Steering keeps approvals for the genuinely unusual without loosening a rule.
 - **The target:** a recorded real `/wettaq` run on a typical repo completes with **zero approvals**. Approvals are for the genuinely unusual (a `curl` to the internet, a write outside the worktree).
 - `--setting-sources user` keeps the repo's own hooks, allow rules and `.mcp.json` out while keeping mexxi's user hooks. Never use `--bare`.
 - Stop: SIGINT, then SIGTERM after 10 s. `result` gives the cost and the session ID.
