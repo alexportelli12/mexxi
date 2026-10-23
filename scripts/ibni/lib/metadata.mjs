@@ -100,6 +100,13 @@ export function sessionVerifyCommand(metadata) {
   return metadata.verifyCommand ?? DEFAULT_VERIFY_COMMAND;
 }
 
+// The lockfile blob ids are bookkeeping for adopt, not something to print.
+export function summarizeSetup(setup) {
+  if (!setup) return null;
+  const { lockfiles: _lockfiles, ...rest } = setup;
+  return rest;
+}
+
 export function workspaceSummary(entry) {
   const { metadata } = entry;
   if (!metadata) return null;
@@ -115,6 +122,9 @@ export function workspaceSummary(entry) {
     defaultBranch: metadata.defaultBranch,
     baseSha: metadata.baseSha,
     publishedSha: metadata.publishedSha,
+    // Absent from sessions prepared before ibni ran setup and verify itself.
+    setup: summarizeSetup(metadata.setup),
+    verification: metadata.verification ?? null,
     evidenceTreeSha: metadata.evidenceTreeSha,
     evidenceRecordedAt: metadata.evidenceRecordedAt,
     createdAt: metadata.createdAt,

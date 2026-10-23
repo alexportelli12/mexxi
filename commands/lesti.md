@@ -27,8 +27,8 @@ not stop on a failing verify.
 
 Gather evidence in the worktree: run `repo-context`'s `scripts/inspect.js` for
 the stack, tests and CI, read the package scripts, CI workflows and tool
-configs, and run the verify command (`prepare`'s `verifyCommand`) if it exists
-to learn what already fails.
+configs, and run the verify command (`ibni verify`) if it exists to learn what
+already fails.
 Write the gap list to `evidenceDir` before the first edit.
 
 | Requirement | Check |
@@ -59,7 +59,10 @@ Choose the verify command first:
   holds only Verifika and the `verify` script.
 
 Any verify command other than `npm run verify` goes in a committed
-`.mexxi.json` as `"verify": "<command>"`, run from the repository root. If a
+`.mexxi.json` as `"verify": "<command>"`, run from the repository root. When
+the repository installs its dependencies some other way than one npm or pnpm
+lockfile at its root (Yarn, several lockfiles, a bootstrap script), name that
+command as `"setup"` too, so `ibni prepare` can install them. If a
 CI check runs that full command, add `"ciCheck": "<that check's name as the
 forge reports it>"` (a GitHub check run or a GitLab job) so `ibni prepare` can reuse CI's result. With neither, write no
 `.mexxi.json`. Keep any keys an existing `.mexxi.json` already holds.
@@ -77,14 +80,18 @@ for a one-way door.
 
 ## Prove It
 
-From a clean install of the repository's dependencies in the worktree
-(`npm ci` for an npm project), the chosen verify command passes on the branch.
-That is what `ibni prepare` followed by `/wettaq`'s preflight would run once
-this pull request is merged, so it is the proof they would succeed. `prepare`
-read `.mexxi.json` from the default branch, so its `verifyCommand` does not yet
-show a command this branch adds: run the one you chose. Say in the description
-that baseline reuse, and any `verify` named in `.mexxi.json`, only take effect
-once this PR is merged.
+From a clean install of the repository's dependencies in the worktree, the
+chosen verify command passes on the branch. Commit, run
+`ibni setup --session "<sessionId>"` so the install comes from the branch's
+own lockfile, then run `ibni verify --session "<sessionId>"`. That is what
+`ibni prepare` followed by `/wettaq`'s preflight would run once this pull
+request is merged, so it is the proof they would succeed. `prepare` read
+`.mexxi.json` from the default branch, so its `verifyCommand` does not yet show
+a command this branch adds. When the default branch has no verify command at
+all, `ibni verify` runs the one this branch names and reports
+`commandSource: branch`; otherwise it runs the default branch's. Say in the
+description that baseline reuse, and any `verify` or `setup` named in
+`.mexxi.json`, only take effect once this PR is merged.
 
 ## Review And Deliver
 

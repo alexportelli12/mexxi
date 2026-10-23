@@ -39,7 +39,7 @@ const report = () => writeFileSync(reportFile, JSON.stringify({
   cwd: process.cwd(), launchCheckout: process.env.IBNI_LAUNCH_CHECKOUT ?? null, npmCache: process.env.npm_config_cache ?? null,
   gitHooksPath: process.env.GIT_CONFIG_KEY_0 === "core.hooksPath" ? process.env.GIT_CONFIG_VALUE_0 : null,
   nodeEnv: process.env.NODE_ENV ?? null, chromeBin: process.env.CHROME_BIN ?? null, headlessShell: process.env.MEXXI_HEADLESS_SHELL ?? null,
-  lockRoot: process.env.IBNI_LOCK_ROOT ?? null, skipSweep: process.env.IBNI_SKIP_SWEEP ?? null, branchPrefixes: process.env.IBNI_BRANCH_PREFIXES ?? null,
+  lockRoot: process.env.IBNI_LOCK_ROOT ?? null, skipSweep: process.env.IBNI_SKIP_SWEEP ?? null, deferSetup: process.env.IBNI_DEFER_SETUP ?? null, branchPrefixes: process.env.IBNI_BRANCH_PREFIXES ?? null,
   gitConfig: { count: process.env.GIT_CONFIG_COUNT, first: [process.env.GIT_CONFIG_KEY_0, process.env.GIT_CONFIG_VALUE_0], second: [process.env.GIT_CONFIG_KEY_1, process.env.GIT_CONFIG_VALUE_1] },
 }));
 report();

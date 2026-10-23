@@ -14,9 +14,11 @@ import { publishMedia } from "./commands/publish-media.mjs";
 import { publishWorkspace } from "./commands/publish.mjs";
 import { recordGate } from "./commands/record.mjs";
 import { recordEvidence } from "./commands/record-evidence.mjs";
+import { setupWorkspace } from "./commands/setup.mjs";
 import { workspaceStats } from "./commands/stats.mjs";
 import { triageSession } from "./commands/triage.mjs";
 import { synchronizeWorkspace } from "./commands/sync.mjs";
+import { verifyWorkspace } from "./commands/verify.mjs";
 import { WorkspaceError } from "./lib/errors.mjs";
 import { MEDIA_EXTENSIONS } from "./lib/media.mjs";
 import { recordStep } from "./lib/timings.mjs";
@@ -33,8 +35,10 @@ export {
   publishWorkspace,
   recordEvidence,
   recordGate,
+  setupWorkspace,
   synchronizeWorkspace,
   triageSession,
+  verifyWorkspace,
   workspaceInfo,
   workspaceStats,
 };
@@ -45,6 +49,8 @@ const SESSION_LOOKUP = "The session's workspace is found from its metadata, so t
 // subcommand cannot exist without a usage line or a `why`, the problem it
 // solves, which its help and the docs both show. Lifecycle steps (`timed`) are
 // recorded with start, end and outcome in the session's metadata for `stats`.
+// A command with `failed` exits 1 when its JSON reports a failure, so a
+// background run's exit status alone says whether it passed.
 export const COMMANDS = {
   prepare: {
     usage: "ibni prepare --slug <name> [--prefix <prefix>]",
@@ -57,12 +63,19 @@ export const COMMANDS = {
       "worktree, its evidenceDir and a free PORT (from workflow.ports in config.json).",
       "verifyCommand is the repository's verify command: verify in its committed .mexxi.json,",
       "or npm run verify when that names none.",
+      "Then installs dependencies in the new worktree, without holding the repository lock: setup in",
+      ".mexxi.json, or the root lockfile's own install (package-lock.json: npm ci --prefer-offline",
+      "--no-audit --no-fund; pnpm-lock.yaml: pnpm install --frozen-lockfile --prefer-offline). With",
+      "neither, or more than one lockfile, setup.ran is false and setup.reason says why. The log goes",
+      "to evidenceDir/setup.log. A failed setup rolls the new workspace back and prints the log's end.",
+      "IBNI_DEFER_SETUP=1 (segwi sets it) skips the install: setup.deferred is true and the run",
+      "calls ibni setup itself, inside its sandbox.",
       "If .mexxi.json names a ciCheck (the CI run of its full verify command) and that",
       "check succeeded on exactly the base commit, baseline.reused is true and baseline cites the",
       "run, so the local baseline verify can be skipped; otherwise baseline says why it runs.",
       "forge is github or gitlab, from the push remote's host, forge.hosts in config.json or",
       "\"forge\" in .mexxi.json; null when none is known, and forgeReason then says why.",
-      "Prints sessionId, worktreePath, branch, baseSha, forge, evidenceDir, port, verifyCommand, baseline, provisionedEnv and cleanup.",
+      "Prints sessionId, worktreePath, branch, baseSha, forge, evidenceDir, port, verifyCommand, baseline, setup, provisionedEnv and cleanup.",
     ],
     options: {
       slug: "Short task name for the branch and worktree folder.",
@@ -70,6 +83,47 @@ export const COMMANDS = {
     },
     timed: true,
     run: (options) => prepareWorkspace({ cwd: process.env.IBNI_LAUNCH_CHECKOUT || process.cwd(), slug: options.slug, prefix: options.prefix }),
+  },
+  setup: {
+    usage: "ibni setup --session <id>",
+    summary: "Install the session's dependencies in its worktree.",
+    why: "Each worktree needs its own dependencies, installed exactly as the repository pins them, before its checks can run.",
+    details: [
+      "For a run whose prepare deferred setup (setup.deferred, as in segwi), when adopt reports",
+      "dependencies.current false, or after a commit changes a lockfile. Resolves the command as",
+      "prepare does: setup in the default branch's .mexxi.json, else the lockfile at HEAD. Never",
+      "reinstalls on its own. The lock is not held during the install. Writes evidenceDir/setup.log",
+      "and prints setup (ran, command, source, passed, exitCode, durationMs, logPath, and logTail",
+      "when it failed). Exits 1 when the install fails.",
+      SESSION_LOOKUP,
+    ],
+    options: { session: "The sessionId from prepare or adopt." },
+    timed: true,
+    failed: (result) => result.setup.ran && !result.setup.passed,
+    run: (options) => setupWorkspace({ sessionId: options.session }),
+  },
+  verify: {
+    usage: "ibni verify --session <id>",
+    summary: "Run the repository's verify command on the committed tree and record the result.",
+    why: "A push should carry only code that passed the repository's checks, so ibni runs them itself rather than taking the agent's word.",
+    details: [
+      "Runs the session's verifyCommand from the worktree root and refuses on a dirty tree, so the",
+      "result belongs to one committed tree. Before the first commit the tree is baseSha's, so this is",
+      "the baseline run; when prepare reported baseline.reused, that CI run is recorded instead",
+      "(reused) and nothing runs. The output goes to evidenceDir/verify-<tree>.log, never to stdout,",
+      "and the lock is held only to check and record, so it is safe to run in the background.",
+      "When the default branch has no verify command at all (no verify in .mexxi.json, no verify",
+      "script in package.json), the one this branch's .mexxi.json names runs instead, and",
+      "commandSource is branch; a branch never replaces a gate the default branch already has.",
+      "Records verification (treeSha, headSha, passed, exitCode, durationMs, logPath, ranAt) and a",
+      "verify entry for stats. A commit or edit while it runs leaves the result unrecorded.",
+      "Prints one line of JSON at the end, with logTail when it failed; exits 1 unless it passed and was recorded.",
+      SESSION_LOOKUP,
+    ],
+    options: { session: "The sessionId from prepare or adopt." },
+    timed: true,
+    failed: (result) => !result.passed || !result.recorded,
+    run: (options) => verifyWorkspace({ sessionId: options.session }),
   },
   sync: {
     usage: "ibni sync --session <id>",
@@ -84,7 +138,11 @@ export const COMMANDS = {
     usage: "ibni record-evidence --session <id>",
     summary: "Record that the committed tree passed the gates.",
     why: "A push should carry only code that passed the checks, so this records exactly which code that was.",
-    details: ["Required before publish; any later commit needs it again.", SESSION_LOOKUP],
+    details: [
+      "Required before publish; any later commit needs it again. Refuses (recorded: false,",
+      "requiresVerify: true, with a nextAction) unless ibni verify passed on exactly this tree.",
+      SESSION_LOOKUP,
+    ],
     options: { session: "The sessionId from prepare or adopt." },
     timed: true,
     run: (options) => recordEvidence({ sessionId: options.session }),
@@ -94,7 +152,8 @@ export const COMMANDS = {
     summary: "Sync, then push the evidenced branch without force.",
     why: "Pushing is where an agent can do the most damage, so it happens one safe way: never forced, and only the recorded code.",
     details: [
-      "Returns published: false with a nextAction when evidence is missing or stale.",
+      "Returns published: false with a nextAction when evidence is missing or stale, or when",
+      "ibni verify has not passed on the tree it would push (requiresVerify: true).",
       "A push failing with an HTTP 5xx from the Git host is retried once.",
       SESSION_LOOKUP,
     ],
@@ -179,6 +238,9 @@ export const COMMANDS = {
       "remote branch and the clean local HEAD. Only then does it print a new sessionId.",
       "Ownership moves rather than being shared: the previous session id stops working at once.",
       "Any failed check changes nothing.",
+      "Also reports dependencies (whether the worktree's lockfiles match the last recorded setup;",
+      "current null when it predates ibni setup) and verified (whether ibni verify passed on HEAD's",
+      "tree), each with a nextAction when not. It never reinstalls or verifies on its own.",
     ],
     options: { pr: "The pull request's URL, exactly as recorded by mark-pr." },
     timed: true,
@@ -204,7 +266,12 @@ export const COMMANDS = {
     usage: "ibni record --session <id> (--verify <pass|fail> | --review <count> [--accepted <count> --reviewer <same|cross>] | --qa <count> | --before-shots <taken|skipped>)",
     summary: "Record a verify run, the finding count of a review or QA pass, or the before-shots decision.",
     why: "The agent records each verify run, browser check and review as it finishes, so ibni stats and /irrifletti can show how runs went.",
-    details: ["One result per call; stats reports them and compares the gates with Jev's triage.", SESSION_LOOKUP],
+    details: [
+      "One result per call; stats reports them and compares the gates with Jev's triage.",
+      "ibni verify records its own runs; --verify is for a host that runs the verify command another",
+      "way, and never satisfies the record-evidence or publish gate.",
+      SESSION_LOOKUP,
+    ],
     options: {
       session: "The sessionId from prepare or adopt.",
       verify: "Outcome of a full run of the repository's verify command: pass or fail.",
@@ -250,7 +317,7 @@ export const COMMANDS = {
   },
   stats: {
     usage: "ibni stats --session <id>",
-    summary: "Print the session's step timings, verify attempts, finding counts and Jev triage as JSON.",
+    summary: "Print the session's step timings, setup, verify attempts, finding counts and Jev triage as JSON.",
     why: "You need to see where a run spent its time and how often its checks failed.",
     details: [SESSION_LOOKUP],
     options: { session: "The sessionId from prepare or adopt." },
@@ -345,6 +412,7 @@ export async function main(args = process.argv.slice(2)) {
       await recordStep({ cwd: process.cwd(), sessionId: result.sessionId ?? options.session, step: operation, startedAt, result });
     }
     process.stdout.write(`${JSON.stringify(result)}\n`);
+    if (command.failed?.(result)) process.exitCode = 1;
   } catch (error) {
     process.stderr.write(`Implementation workspace error: ${error.message}\n`);
     process.exitCode = 2;

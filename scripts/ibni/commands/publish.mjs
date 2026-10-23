@@ -3,6 +3,7 @@ import { assertClean, cleanOutput, git, push, remoteBranchSha } from "../lib/git
 import { withRepositoryLock } from "../lib/lock.mjs";
 import { sessionVerifyCommand, updateMetadata } from "../lib/metadata.mjs";
 import { ownedSession } from "../lib/session.mjs";
+import { verifyRefusal } from "../lib/verification.mjs";
 import { synchronizeUnlocked } from "./sync.mjs";
 
 export async function publishWorkspace({ cwd = process.cwd(), sessionId }) {
@@ -16,7 +17,8 @@ export async function publishWorkspace({ cwd = process.cwd(), sessionId }) {
         published: false,
         requiresEvidence: true,
         reason: "the remote default branch was integrated and changed the tree; prior evidence is stale",
-        nextAction: `Rerun the repository's verify command (${sessionVerifyCommand(initial.metadata)}) and any gate the integration could affect, commit remediation if needed, run record-evidence, then publish again.`,
+        requiresVerify: true,
+        nextAction: `Run ibni verify --session ${sessionId} in the background (it runs the verify command, ${sessionVerifyCommand(initial.metadata)} unless the default branch has none, on the integrated tree) and rerun any gate the integration could affect. Commit remediation if needed and verify again; once it passes, run record-evidence, then publish again.`,
       };
     }
 
@@ -30,6 +32,18 @@ export async function publishWorkspace({ cwd = process.cwd(), sessionId }) {
 
     const headSha = cleanOutput(await git(repository.root, ["rev-parse", "HEAD"]));
     const treeSha = cleanOutput(await git(repository.root, ["rev-parse", "HEAD^{tree}"]));
+    const refusal = verifyRefusal(metadata, treeSha);
+    if (refusal) {
+      return {
+        ...synchronization,
+        operation: "publish",
+        published: false,
+        requiresEvidence: true,
+        requiresVerify: true,
+        headSha,
+        ...refusal,
+      };
+    }
     if (metadata.evidenceTreeSha !== treeSha) {
       return {
         ...synchronization,

@@ -30,10 +30,16 @@ different branch prefix. `prepare` checks the launch checkout, sweeps merged
 workspaces and creates the feature branch in a dedicated locked worktree. Record
 its JSON result in session context, especially `worktreePath`, `sessionId`,
 `branch`, `defaultBranch`, `baseSha`, `evidenceDir`, `port`, `verifyCommand`,
-`baseline` and `cleanup`. `verifyCommand` is the repository's verify command:
-the `verify` its committed `.mexxi.json` names, or `npm run verify` by default.
-Wherever this command says "the verify command", run exactly `verifyCommand`
-from the worktree root.
+`baseline`, `setup` and `cleanup`. `verifyCommand` is the repository's verify
+command: the `verify` its committed `.mexxi.json` names, or `npm run verify` by
+default. Wherever this command says "run the verify command", run
+`ibni verify --session "<sessionId>"`: it runs exactly `verifyCommand` from the
+worktree root on the committed tree, writes the output to a log in
+`evidenceDir` and records the result. Run it in the background where your host
+supports that, wait for it to finish rather than polling, and read only its
+final JSON (`passed`, `logPath`, and `logTail` when it failed). Never run the
+full `verifyCommand` by hand: `record-evidence` and `publish` accept only a
+result `ibni verify` recorded on exactly the tree being delivered.
 
 From this point on, run every repository inspection, command, delegated task,
 edit, verification, render, review, remediation, and delivery operation against
@@ -50,10 +56,16 @@ and reports them as `provisionedEnv`. Never invent, edit, or commit them.
 
 If discovery reveals a hard branch-naming requirement incompatible with the
 branch `prepare` made, stop rather than renaming it outside the lifecycle tool.
-Prepare dependencies inside the worktree with the repository's documented
-setup, and where it documents none for an npm project use
-`npm ci --prefer-offline --no-audit --no-fund`. Do not share or link mutable
-dependency directories between worktrees.
+
+`prepare` also installs dependencies in the worktree and reports it as
+`setup`: the `setup` command in `.mexxi.json`, or the root lockfile's own
+install. Do not install them by hand. When `setup.deferred` is true (the
+run was launched in a sandbox that `prepare` runs outside), run `ibni setup --session "<sessionId>"`
+before anything else. When `setup.ran` is false for another reason, read
+`setup.reason`: install by hand only if the repository documents a setup that
+`.mexxi.json` does not yet name, and say so in the pull request. Rerun
+`ibni setup` after a commit that changes a lockfile. Do not share or link
+mutable dependency directories between worktrees.
 
 ## Establish The Task Contract
 
@@ -102,13 +114,15 @@ changed the design becomes a decision under **Your part** instead of a stall.
 
 ## Preflight: Green Before Work
 
-When `prepare` returned `baseline.reused: true`, the repository's CI already
-passed its full verify on exactly `baseSha`: skip the local run and cite
-`baseline` (check, commit, `url`) as the baseline evidence, including in the
-pull request's Evidence. For any other `baseline`, run the verify command in
-the worktree. If it fails, stop and report the failure; do not begin implementation
-or classify failures as pre-existing. The worktree is retained for diagnosis,
-and cleanup protects it because no pull request was recorded.
+Before the first change, run the verify command once on the untouched
+worktree: at `baseSha`, this is the baseline run. When `prepare` returned
+`baseline.reused: true`, the repository's CI already passed its full verify on
+exactly `baseSha`, so `ibni verify` records that run as `reused` without
+running anything; cite `baseline` (check, commit, `url`) as the baseline
+evidence, including in the pull request's Evidence. If the baseline fails,
+stop and report the failure; do not begin implementation or classify failures
+as pre-existing. The worktree is retained for diagnosis, and cleanup protects
+it because no pull request was recorded.
 
 When the change will alter existing UI, capture before-shots now, while the
 worktree is still at `baseSha`: load `rendered-qa` and follow its before-shots
@@ -131,26 +145,30 @@ cheaper checks cannot prove. If a criterion genuinely requires E2E and the
 repository has no suitable infrastructure, stop and report the gap rather than
 introducing a framework as incidental work.
 
-Delegated agents may run targeted checks (a focused test, typecheck, rendered
-check, or the repository's selective verification) but never the full
-repository gauntlet; a selective pass is feedback, not the final gate. Where the
-repository uses Verifika, they run `vfk --changed` or `vfk --check <name>`; the
-`verifika` skill's full run is the orchestrator's final run of the verify
-command.
+While working, you and delegated agents run targeted checks (a focused test,
+typecheck, rendered check, or the repository's selective verification)
+directly, but never the full repository gauntlet; a selective pass is
+feedback, not the final gate. Where the repository uses Verifika, run
+`vfk --changed` or `vfk --check <name>`. Only the orchestrator runs the full
+gate, and only through `ibni verify`.
 
 ## Final Verification
 
 When implementation is settled, use the repository's intentional auto-fix
-mechanism if one exists, then run the verify command, the authoritative final
-gate. A failure means the implementation is incomplete: diagnose it from the
-failing checks' output and logs (the `verifika` skill covers this), remediate,
-and rerun it. Never weaken repository safeguards to pass. Any later code
-remediation requires another full run of the verify command. Record each full run with `ibni record --session
-"<sessionId>" --verify pass` (or `fail`), and each rendered QA or reviewer pass
-with `--qa <finding-count>` or `--review <finding-count> --accepted <count>
---reviewer same|cross` (`cross` whenever the reviewer's model is from another
-family than yours, by whatever route, `accepted` being the findings you fixed); `ibni stats` reports them beside the
-lifecycle step timings.
+mechanism if one exists. Then inspect the diff, stage only intended changes and
+commit them (load `commit-pr-writing` for the message), because `ibni verify`
+refuses a tree with uncommitted or untracked work. Then run the verify command,
+the authoritative final gate. A failure means the implementation is
+incomplete: diagnose it from the result's `logTail` and the log at `logPath`
+(the `verifika` skill covers reading it), remediate in a new commit, and run it
+again. Never weaken repository safeguards to pass. Any later code remediation
+requires another commit and another run of the verify command. `ibni verify`
+records each run itself. Record each rendered QA or reviewer pass with
+`ibni record --session "<sessionId>"` and `--qa <finding-count>` or
+`--review <finding-count> --accepted <count> --reviewer same|cross` (`cross`
+whenever the reviewer's model is from another family than yours, by whatever
+route, `accepted` being the findings you fixed); `ibni stats` reports them
+beside the lifecycle step timings.
 
 Then re-read the original request and active contract, and inspect the final
 diff to confirm the acceptance criteria and scope are covered. This is the
@@ -161,8 +179,9 @@ run's requirements re-read; later stages rely on it.
 For meaningful user-facing work, after final verification load `rendered-qa`
 and run a proportional pass on the affected routes and states. That one pass
 produces the evidence the reviewer and the pull request use. Resolve its
-`critical`, `high`, and `medium` findings before review, rerunning the verify
-command and refreshing the affected evidence when code changes. Do not
+`critical`, `high`, and `medium` findings before review, committing the fix,
+rerunning the verify command and refreshing the affected evidence when code
+changes. Do not
 commit screenshots or pixel baselines, and do not present subjective
 judgement as deterministic verification.
 
@@ -178,20 +197,23 @@ that gate leave no unresolved blockers.
 
 ## Delivery
 
-1. Inspect worktree status and the full diff. Stage only intended changes;
-   never commit an unrelated or empty change.
-2. Load `commit-pr-writing` and commit with the message it derives. Repository
-   conventions take precedence.
+1. Inspect worktree status and the full diff. Everything intended is
+   committed; never commit an unrelated or empty change.
+2. The last `ibni verify` passed on the current commit. If anything was
+   committed since, run the verify command again first.
 3. Run `ibni record-evidence --session "<sessionId>"` to record that the
-   committed tree passed the gates.
+   committed tree passed the gates. It refuses with `requiresVerify: true` and
+   a `nextAction` when `ibni verify` has not passed on exactly this tree:
+   follow it.
 4. Run `ibni publish --session "<sessionId>"`. It fetches the default branch,
    integrates it safely, and pushes only the owned feature branch without force.
 5. If `publish` returns `requiresEvidence: true`, follow its `nextAction`. When
-   `requiresRevalidation` is also true, prior evidence is stale: rerun the
-   verify command, inspect the integration diff, and refresh rendered
+   `requiresRevalidation` is also true, the integration changed the tree and
+   prior evidence is stale: run the verify command (`ibni verify`) on the
+   integrated tree, inspect the integration diff, and refresh rendered
    evidence only where the upstream change could materially affect it (a
-   review refresh follows `implement-review`). Commit any remediation, record
-   evidence, and publish again.
+   review refresh follows `implement-review`). Commit any remediation and
+   verify again, then record evidence and publish again.
 6. When rendered QA produced screenshots or GIFs, publish the ones the pull
    request should show as `rendered-qa`'s publishing section describes, and use
    the returned URLs. Republish on follow-up delivery so the media stays
@@ -204,8 +226,8 @@ that gate leave no unresolved blockers.
    `forge` field of `prepare` or `ibni info` names it. When `forge` is null,
    stop and report its `forgeReason` rather than guess. For follow-up delivery,
    update the existing pull request instead of creating another. A change to
-   `verify` or `ciCheck` in `.mexxi.json` changes the gate itself: call it out
-   in the description's merge call.
+   `verify`, `setup` or `ciCheck` in `.mexxi.json` changes the gate itself: call
+   it out in the description's merge call.
 8. Run `ibni mark-pr --session "<sessionId>" --url "<pr-url>"`.
 9. When rendered QA ended with **Could become executable checks**, write them
    one per line to a file in `evidenceDir` and run `ibni file-qa-checks

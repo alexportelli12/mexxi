@@ -2,7 +2,7 @@
 // ibni against a temporary repository, so an ibni change that breaks segwi
 // fails mexxi's own verify.
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
@@ -61,11 +61,15 @@ test("the ibni fields segwi reads exist in prepare, list, info and stats output"
   for (const field of IBNI_FIELDS.info) assert.ok(field in info, `info shows ${field}`);
   assert.equal(info.prUrl, null);
 
+  // ibni verify records its own runs where segwi reads them; this repository has no verify command, so it fails.
+  const verified = spawnSync(process.execPath, [ibniEntry, "verify", "--session", prepared.sessionId], { cwd: control, env, encoding: "utf8" });
+  assert.equal(verified.status, 1);
+  assert.equal(JSON.parse(verified.stdout).passed, false);
   ibni("record", "--session", prepared.sessionId, "--verify", "fail");
   ibni("record", "--session", prepared.sessionId, "--verify", "pass");
   const stats = ibni("stats", "--session", prepared.sessionId);
   for (const field of IBNI_FIELDS.stats) assert.ok(hasField(stats, field), `stats shows ${field}`);
-  assert.deepEqual(stats.verify.history.map((record) => record.outcome), ["fail", "pass"]);
+  assert.deepEqual(stats.verify.history.map((record) => record.outcome), ["fail", "fail", "pass"]);
 
   // The link module reads the same output the same way.
   const previousPath = process.env.MEXXI_CONFIG;

@@ -148,6 +148,7 @@ for (const runner of RUNNERS) {
     assert.ok(denyWrite.includes(other), "the other session's worktree itself");
     assert.ok(denyWrite.includes(path.join(spec.worktreeRoot, "someone-else")), "another repository's folder");
     assert.equal(report().skipSweep, "1");
+    assert.equal(report().deferSetup, "1", "prepare runs outside the sandbox, so it leaves the install to ibni setup inside");
     assert.equal(report().lockRoot, `/tmp/claude-${process.getuid()}/ibni-locks`);
     const env = report().gitConfig;
     assert.deepEqual(env, { count: "2", first: ["user.name", "You"], second: ["core.hooksPath", path.join(git, "hooks")] });
@@ -288,6 +289,19 @@ for (const runner of RUNNERS) {
     const settings = JSON.parse(readFileSync(path.join(dir, "data", "runs", spec.runId, "settings.json"), "utf8"));
     assert.ok(!settings.permissions.allow.some((rule) => rule.includes("bash") || rule.includes("curl")));
     assert.equal(events.filter((event) => event.kind === "text" && /verify command isn't on the allow list/.test(event.text)).length, 1);
+    assert.ok(settings.permissions.ask.includes("Bash(ibni verify:*)"), "ibni verify, which runs it, asks too");
+    assert.ok(!settings.permissions.ask.includes("Bash(ibni setup:*)"), "no setup command named, so ibni setup stays allowed");
+  });
+
+  test(`${runner.id}: a setup command that isn't plain makes ibni setup ask; plain ones leave both allowed`, async (t) => {
+    const { adapter, dir } = runner.adapter(t, "ask-completed");
+    const spec = specFor(makeRepo(t), { setupCommand: "bash ./bootstrap.sh" });
+    const events = await drive(adapter, spec, (all) => results(all).length === 1);
+    adapter.close(spec.runId);
+    await waitFor(() => exited(events));
+    const { ask } = JSON.parse(readFileSync(path.join(dir, "data", "runs", spec.runId, "settings.json"), "utf8")).permissions;
+    assert.ok(ask.includes("Bash(ibni setup:*)"));
+    assert.ok(!ask.includes("Bash(ibni verify:*)"));
   });
 
   /** Starts a build run with `overrides` and returns its argument array, rendered settings and the host's report. */

@@ -118,7 +118,7 @@ Specialist know-how an agent loads only when a task needs it, by matching the sk
 
 ## verify
 
-The repository's own pass/fail command for "does it work?": `npm run verify`, or the `verify` its `.mexxi.json` names. An agent's "done" is a claim; a passing verify is proof, so a run is finished only when it passes.
+The repository's own pass/fail command for "does it work?": `npm run verify`, or the `verify` its `.mexxi.json` names. An agent's "done" is a claim; a passing verify is proof, so a run is finished only when it passes. `ibni verify` runs it, so the proof is `ibni`'s own record rather than the agent's word.
 
 ## workspace
 

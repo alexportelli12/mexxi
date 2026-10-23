@@ -33,9 +33,9 @@ Your checkout stays exactly as you left it, and you can run several tasks side b
 
 An agent will say "done, all tests pass" whether or not it ran them. A claim can be talked around; a command that passes or fails cannot.
 
-Each repository has one [verify command](glossary.md#verify), `npm run verify` by default: your tests, linters and build in one pass/fail run. It must pass before work starts, so an old failure is never blamed on the change, and again at the end. When it passes, the agent records with `ibni` the exact code it passed on. `ibni` refuses to push any other code, so a change made afterwards has to be checked and recorded again. That holds in a [segwi](segwi.md) run too. Its sandbox gives the verify command a headless browser and the hosts you list, so browser tests pass there as they do for you.
+Each repository has one [verify command](glossary.md#verify), `npm run verify` by default: your tests, linters and build in one pass/fail run. It must pass before work starts, so an old failure is never blamed on the change, and again at the end. `ibni` runs it itself and records the exact code it passed on. `ibni` refuses to push any other code, so a change made afterwards has to be checked and recorded again. That holds in a [segwi](segwi.md) run too. Its sandbox gives the verify command a headless browser and the hosts you list, so browser tests pass there as they do for you.
 
-The pull request's evidence line starts with `verify ✓`. If the repository's checks were already failing, the run stops and tells you instead of building on top of them. [Decision 0010](decisions/0010-repository-names-its-verify-command.md)
+The pull request's evidence line starts with `verify ✓`. If the repository's checks were already failing, the run stops and tells you instead of building on top of them. [Decision 0010](decisions/0010-repository-names-its-verify-command.md) and [decision 0014](decisions/0014-ibni-runs-setup-and-verify.md)
 
 ## Somebody looks at the page in a real browser
 

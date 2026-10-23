@@ -20,6 +20,8 @@ export async function appendHistory(cwd, sessionId, field, item) {
 function stepOutcome(result, error) {
   if (error) return "failed";
   if (result?.published === false) return "requires-evidence";
+  if (result?.recorded === false) return result.requiresVerify ? "requires-verify" : "not-recorded";
+  if (result?.passed === false || (result?.setup?.ran && !result.setup.passed)) return "failed";
   return "succeeded";
 }
 

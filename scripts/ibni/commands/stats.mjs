@@ -1,3 +1,4 @@
+import { summarizeSetup } from "../lib/metadata.mjs";
 import { sessionWorkspace } from "../lib/session.mjs";
 import { summarizeTimings } from "../lib/timings.mjs";
 import { summarizeTriage } from "./triage.mjs";
@@ -13,6 +14,8 @@ export async function workspaceStats({ cwd = process.cwd(), sessionId }) {
     createdAt: metadata.createdAt,
     adoptions: metadata.adoptions ?? [],
     ...summarizeTimings(metadata),
+    setup: summarizeSetup(metadata.setup),
+    verification: metadata.verification ?? null,
     triage: summarizeTriage(metadata),
   };
 }

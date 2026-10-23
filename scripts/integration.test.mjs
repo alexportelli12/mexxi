@@ -214,7 +214,7 @@ test("ibni and its implementation-workspace alias run the same CLI", async () =>
   for (const shim of ["scripts/ibni/ibni", "scripts/implementation-workspace"]) {
     results.push(await execute(process.execPath, [path.join(checkout, shim)], checkout));
   }
-  assert.match(results[0].output, /^Implementation workspace error: expected prepare, sync, [\s\S]*Usage: ibni prepare/);
+  assert.match(results[0].output, /^Implementation workspace error: expected prepare, setup, verify, sync, [\s\S]*Usage: ibni prepare/);
   assert.deepEqual(results[1], results[0]);
   assert.equal(results[0].code, 2);
 });

@@ -14,6 +14,7 @@ import { COMMANDS } from "./ibni.mjs";
 import { MEDIA_EXTENSIONS } from "./lib/media.mjs";
 
 const cli = fileURLToPath(new URL("./ibni.mjs", import.meta.url));
+const VERIFY_SCRIPT = "node -e \"process.exit(require('fs').existsSync('FAIL') ? 1 : 0)\"";
 
 function run(command, args, { cwd, env, allowedExitCodes = [0] } = {}) {
   return new Promise((resolve, reject) => {
@@ -62,6 +63,10 @@ async function createFixture(t) {
   await run("git", ["init", "--quiet", "--initial-branch=trunk", seed]);
   await git(seed, "config", "user.name", "Workspace Test");
   await git(seed, "config", "user.email", "workspace@example.test");
+  // The default verify command is npm run verify; this one passes unless the
+  // tree holds a file named FAIL, so a test makes it fail with one commit.
+  await writeFile(path.join(seed, "package.json"), `${JSON.stringify({ private: true, scripts: { verify: VERIFY_SCRIPT } })}\n`);
+  await git(seed, "add", "package.json");
   await commit(seed, "README.md", "initial\n", "initial");
   await git(seed, "remote", "add", "origin", remote);
   await git(seed, "push", "--quiet", "--set-upstream", "origin", "trunk");
@@ -112,7 +117,13 @@ async function lifecycle(fixture, cwd, operation, options = {}, allowedExitCodes
   };
 }
 
+async function verify(fixture, prepared, allowedExitCodes = [0]) {
+  const result = await lifecycle(fixture, prepared.json.worktreePath, "verify", { session: prepared.json.sessionId }, allowedExitCodes);
+  return { ...result, json: result.stdout ? JSON.parse(result.stdout) : null };
+}
+
 async function recordEvidence(fixture, prepared) {
+  await verify(fixture, prepared);
   return lifecycle(
     fixture,
     prepared.json.worktreePath,
@@ -1078,14 +1089,22 @@ test("publish explains how to proceed when evidence is missing or stale", async 
 
   const missing = await lifecycle(fixture, prepared.json.worktreePath, "publish", { session: prepared.json.sessionId });
   assert.equal(missing.json.requiresEvidence, true);
+  assert.equal(missing.json.requiresVerify, true);
   assert.equal(missing.json.requiresRevalidation, false);
-  assert.match(missing.json.nextAction, /record-evidence/);
+  assert.match(missing.json.nextAction, /ibni verify --session .*record-evidence/);
+
+  await verify(fixture, prepared);
+  const unrecorded = await lifecycle(fixture, prepared.json.worktreePath, "publish", { session: prepared.json.sessionId });
+  assert.equal(unrecorded.json.requiresEvidence, true);
+  assert.equal(unrecorded.json.requiresVerify, undefined);
+  assert.match(unrecorded.json.nextAction, /^Run record-evidence/);
 
   await recordEvidence(fixture, prepared);
   await advanceRemote(fixture);
   const stale = await lifecycle(fixture, prepared.json.worktreePath, "publish", { session: prepared.json.sessionId });
   assert.equal(stale.json.requiresRevalidation, true);
-  assert.match(stale.json.nextAction, /verify command \(npm run verify\).*record-evidence.*publish again/);
+  assert.equal(stale.json.requiresVerify, true);
+  assert.match(stale.json.nextAction, new RegExp(`^Run ibni verify --session ${prepared.json.sessionId} in the background \\(it runs the verify command, npm run verify unless the default branch has none, on the integrated tree\\).*record-evidence, then publish again\\.$`));
 });
 
 // The configured URL names a forge repository while insteadOf routes the
@@ -1218,7 +1237,7 @@ test("the tool and every subcommand answer --help and -h with exit 0", async (t)
   const media = await run(process.execPath, [cli, "publish-media", "--help"], { cwd: fixture.root });
   for (const extension of MEDIA_EXTENSIONS) assert.ok(media.stdout.includes(extension), `publish-media help lists ${extension}`);
   const unknown = await run(process.execPath, [cli, "unknown", "--help"], { cwd: fixture.root, allowedExitCodes: [2] });
-  assert.match(unknown.stderr, /expected prepare, sync, /);
+  assert.match(unknown.stderr, /expected prepare, setup, verify, sync, /);
 });
 
 test("session commands find their workspace from evidenceDir and from outside any repository", async (t) => {
@@ -1348,15 +1367,16 @@ test("lifecycle steps, verify attempts and finding counts are recorded and repor
   assert.equal(stats.json.operation, "stats");
   assert.deepEqual(
     stats.json.steps.map(({ step, outcome }) => [step, outcome]),
-    [["prepare", "succeeded"], ["publish", "requires-evidence"], ["sync", "failed"], ["record-evidence", "succeeded"], ["publish", "succeeded"]],
+    [["prepare", "succeeded"], ["publish", "requires-evidence"], ["sync", "failed"], ["verify", "succeeded"], ["record-evidence", "succeeded"], ["publish", "succeeded"]],
   );
   for (const step of stats.json.steps) {
     assert.equal(step.sessionId, sessionId);
     assert.ok(step.durationMs >= 0 && Date.parse(step.endedAt) >= Date.parse(step.startedAt));
   }
   assert.match(stats.json.steps[2].error, /uncommitted or untracked work/);
-  assert.deepEqual({ ...stats.json.verify, history: undefined }, { attempts: 2, passed: 1, failed: 1, history: undefined });
-  assert.deepEqual(stats.json.verify.history.map((entry) => entry.outcome), ["fail", "pass"]);
+  // Two recorded by hand, one by ibni verify.
+  assert.deepEqual({ ...stats.json.verify, history: undefined }, { attempts: 3, passed: 2, failed: 1, history: undefined });
+  assert.deepEqual(stats.json.verify.history.map((entry) => entry.outcome), ["fail", "pass", "pass"]);
   assert.deepEqual([stats.json.review.rounds, stats.json.review.findings], [2, 4]);
   assert.deepEqual(stats.json.review.byReviewer, {
     same: { rounds: 1, findings: 3, accepted: 2 },
@@ -1537,6 +1557,7 @@ test("a fresh session adopts an open pull request's workspace and delivers a fol
   assert.match(stale.stderr, /no implementation worktree for this session/);
 
   await commit(worktreePath, "follow-up.txt", "follow-up\n", "follow-up");
+  await lifecycle(fixture, worktreePath, "verify", { session: sessionB });
   await lifecycle(fixture, worktreePath, "record-evidence", { session: sessionB });
   const published = await lifecycle(fixture, worktreePath, "publish", { session: sessionB });
   assert.equal(published.json.published, true);
@@ -2120,4 +2141,363 @@ test("SSH aliases and ssh.github.com behave as github.com, and an unresolved ali
   await setGhState(fixture.gh, 8, "MERGED");
   const cleaned = await lifecycle(fixture, fixture.control, "cleanup", { "dry-run": "false" }, [0], env);
   assert.equal(cleaned.json.results.find((row) => row.worktreePath === prepared.json.worktreePath).decision, "remove");
+});
+
+// Stubs for the package managers setup runs. Each logs its arguments and
+// working directory to calls.log and exits with the code in <tool>.exit (0 if
+// none); any npm command but ci goes to the real npm, so npm run verify works.
+async function packageManagerStub(t) {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "ibni-package-manager-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const realNpm = (await run("sh", ["-c", "command -v npm"])).stdout.trim();
+  for (const tool of ["npm", "pnpm"]) {
+    await writeFile(path.join(directory, tool), `#!/bin/sh
+if [ "${tool}" = "npm" ] && [ "$1" != "ci" ]; then exec "${realNpm}" "$@"; fi
+echo "${tool} $* in $(pwd)" >> "${directory}/calls.log"
+echo "${tool} installing"
+code=0
+if [ -f "${directory}/${tool}.exit" ]; then code="$(cat "${directory}/${tool}.exit")"; fi
+if [ "$code" != "0" ]; then echo "${tool} ERR! install failed" >&2; fi
+exit "$code"
+`, "utf8");
+    await chmod(path.join(directory, tool), 493);
+  }
+  const calls = async () => (await readFile(path.join(directory, "calls.log"), "utf8").catch(() => "")).split("\n").filter(Boolean);
+  return { directory, calls, env: (fixture) => ({ PATH: `${directory}:${ghEnv(fixture.gh).PATH}` }) };
+}
+
+async function commitToDefaultBranch(fixture, files, message) {
+  await git(fixture.seed, "pull", "--quiet", "origin", "trunk");
+  for (const [name, content] of Object.entries(files)) {
+    if (content === null) await git(fixture.seed, "rm", "--quiet", name);
+    else {
+      await writeFile(path.join(fixture.seed, name), content);
+      await git(fixture.seed, "add", name);
+    }
+  }
+  await git(fixture.seed, "commit", "--quiet", "-m", message);
+  await git(fixture.seed, "push", "--quiet", "origin", "trunk");
+}
+
+test("prepare installs from the root lockfile after env provisioning and records the setup", async (t) => {
+  const fixture = await withEnvGitignore(t);
+  const stub = await packageManagerStub(t);
+  await writeFile(path.join(fixture.control, ".env"), "SECRET=1\n");
+  await commitToDefaultBranch(fixture, { "package-lock.json": "{}\n" }, "lockfile");
+
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "npm setup" }, [0], stub.env(fixture));
+  const { setup, worktreePath, evidenceDir } = prepared.json;
+  assert.deepEqual(prepared.json.provisionedEnv, [".env"]);
+  assert.deepEqual(
+    { ...setup, durationMs: typeof setup.durationMs, ranAt: typeof setup.ranAt },
+    { ran: true, command: "npm ci --prefer-offline --no-audit --no-fund", source: "package-lock.json", passed: true, exitCode: 0, durationMs: "number", logPath: path.join(evidenceDir, "setup.log"), ranAt: "string" },
+  );
+  assert.deepEqual(await stub.calls(), [`npm ci --prefer-offline --no-audit --no-fund in ${worktreePath}`]);
+  assert.match(await readFile(setup.logPath, "utf8"), /npm installing/);
+  const metadata = JSON.parse(await metadataFile(worktreePath));
+  assert.equal(metadata.setup.passed, true);
+  assert.deepEqual(Object.keys(metadata.setup.lockfiles), ["package-lock.json"]);
+  assert.equal(metadata.verification, null);
+  const stats = await lifecycle(fixture, fixture.control, "stats", { session: prepared.json.sessionId });
+  assert.equal(stats.json.setup.source, "package-lock.json");
+  assert.equal(stats.json.setup.lockfiles, undefined, "lockfile ids stay in the metadata");
+
+  await commitToDefaultBranch(fixture, { "package-lock.json": null, "pnpm-lock.yaml": "lockfileVersion: 9\n" }, "pnpm");
+  const pnpm = await lifecycle(fixture, fixture.control, "prepare", { slug: "pnpm setup" }, [0], stub.env(fixture));
+  assert.equal(pnpm.json.setup.command, "pnpm install --frozen-lockfile --prefer-offline");
+  assert.equal(pnpm.json.setup.source, "pnpm-lock.yaml");
+  assert.equal((await stub.calls()).at(-1), `pnpm install --frozen-lockfile --prefer-offline in ${pnpm.json.worktreePath}`);
+});
+
+test("a setup in .mexxi.json wins over the lockfile, and an invalid one stops prepare before anything is made", async (t) => {
+  const fixture = await createFixture(t);
+  const stub = await packageManagerStub(t);
+  await commitToDefaultBranch(fixture, {
+    "package-lock.json": "{}\n",
+    ".mexxi.json": `${JSON.stringify({ setup: " node -e \"console.log('custom setup ran')\" " })}\n`,
+  }, "custom setup");
+  const custom = await lifecycle(fixture, fixture.control, "prepare", { slug: "custom" }, [0], stub.env(fixture));
+  assert.equal(custom.json.setup.source, ".mexxi.json");
+  assert.equal(custom.json.setup.command, "node -e \"console.log('custom setup ran')\"");
+  assert.match(await readFile(custom.json.setup.logPath, "utf8"), /custom setup ran/);
+  assert.deepEqual(await stub.calls(), []);
+
+  for (const [name, setup] of Object.entries({ "an empty setup": " ", "a non-string setup": ["npm", "ci"] })) {
+    await commitRepositorySettings(fixture, `${JSON.stringify({ setup })}\n`, name);
+    const refused = await lifecycle(fixture, fixture.control, "prepare", { slug: name }, [2], stub.env(fixture));
+    assert.match(refused.stderr, /setup that is not a non-empty command string/, name);
+  }
+  const listed = await lifecycle(fixture, fixture.control, "list");
+  assert.deepEqual(listed.json.workspaces.map((workspace) => workspace.sessionId), [custom.json.sessionId]);
+});
+
+test("without a setup or one clear lockfile, prepare installs nothing and says why", async (t) => {
+  const fixture = await createFixture(t);
+  const stub = await packageManagerStub(t);
+  const none = await lifecycle(fixture, fixture.control, "prepare", { slug: "no lockfile" }, [0], stub.env(fixture));
+  assert.deepEqual(none.json.setup, { ran: false, command: null, reason: "no lockfile and no setup in .mexxi.json; nothing was installed" });
+
+  await commitToDefaultBranch(fixture, { "yarn.lock": "# yarn\n" }, "yarn");
+  const yarn = await lifecycle(fixture, fixture.control, "prepare", { slug: "yarn" }, [0], stub.env(fixture));
+  assert.equal(yarn.json.setup.ran, false);
+  assert.match(yarn.json.setup.reason, /yarn\.lock does not name one install command; set setup/);
+
+  await commitToDefaultBranch(fixture, { "package-lock.json": "{}\n" }, "two lockfiles");
+  const both = await lifecycle(fixture, fixture.control, "prepare", { slug: "two lockfiles" }, [0], stub.env(fixture));
+  assert.equal(both.json.setup.ran, false);
+  assert.match(both.json.setup.reason, /more than one lockfile \(package-lock\.json, yarn\.lock\)/);
+  assert.deepEqual(await stub.calls(), [], "nothing is guessed");
+});
+
+test("a failed setup rolls the new workspace back and prints the end of its log", async (t) => {
+  const fixture = await createFixture(t);
+  const stub = await packageManagerStub(t);
+  await commitToDefaultBranch(fixture, { "package-lock.json": "{}\n" }, "lockfile");
+  await writeFile(path.join(stub.directory, "npm.exit"), "7");
+
+  const failed = await lifecycle(fixture, fixture.control, "prepare", { slug: "broken install" }, [2], stub.env(fixture));
+  assert.match(failed.stderr, /setup failed in the new worktree \(npm ci --prefer-offline --no-audit --no-fund, exit 7\); the workspace was rolled back/);
+  assert.match(failed.stderr, /npm ERR! install failed/);
+  const worktreePath = path.join(fixture.worktrees, path.basename(fixture.control), "broken-install");
+  const leftovers = await run("sh", ["-c", `ls -d ${fixture.worktrees}/*/broken-install* 2>/dev/null || true`]);
+  assert.equal(leftovers.stdout.trim(), "", `${worktreePath} and its evidenceDir are gone`);
+  assert.equal((await git(fixture.control, "branch", "--list", "agent/broken-install")).stdout.trim(), "");
+  assert.deepEqual((await lifecycle(fixture, fixture.control, "list")).json.workspaces, []);
+  assert.doesNotMatch((await git(fixture.control, "worktree", "list")).stdout, /broken-install/);
+});
+
+test("IBNI_DEFER_SETUP leaves the install to ibni setup, which records it", async (t) => {
+  const fixture = await createFixture(t);
+  const stub = await packageManagerStub(t);
+  await commitToDefaultBranch(fixture, { "package-lock.json": "{}\n" }, "lockfile");
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "deferred" }, [0], { ...stub.env(fixture), IBNI_DEFER_SETUP: "1" });
+  const { sessionId, worktreePath } = prepared.json;
+  assert.deepEqual(prepared.json.setup, {
+    ran: false,
+    deferred: true,
+    command: "npm ci --prefer-offline --no-audit --no-fund",
+    source: "package-lock.json",
+    reason: "IBNI_DEFER_SETUP is set, so setup runs inside the caller's sandbox instead",
+    nextAction: `Run ibni setup --session ${sessionId} to install dependencies in the worktree.`,
+  });
+  assert.deepEqual(await stub.calls(), []);
+
+  const setup = await lifecycle(fixture, worktreePath, "setup", { session: sessionId }, [0], stub.env(fixture));
+  assert.equal(setup.json.setup.passed, true);
+  assert.deepEqual(await stub.calls(), [`npm ci --prefer-offline --no-audit --no-fund in ${worktreePath}`]);
+  assert.equal(JSON.parse(await metadataFile(worktreePath)).setup.passed, true);
+
+  await writeFile(path.join(stub.directory, "npm.exit"), "1");
+  const failed = await lifecycle(fixture, worktreePath, "setup", { session: sessionId }, [1], stub.env(fixture));
+  assert.equal(JSON.parse(failed.stdout).setup.passed, false);
+  assert.match(JSON.parse(failed.stdout).setup.logTail, /install failed/);
+  assert.equal(JSON.parse(await metadataFile(worktreePath)).setup.logTail, undefined, "the tail is printed, not stored");
+});
+
+test("ibni verify runs the verify command on the committed tree and gates record-evidence and publish", async (t) => {
+  const fixture = await createFixture(t);
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "verified" });
+  const { sessionId, worktreePath, evidenceDir, baseSha } = prepared.json;
+
+  // At baseSha, before any commit, it is the baseline run.
+  const baseline = await verify(fixture, prepared);
+  assert.equal(baseline.json.baseline, true);
+  assert.equal(baseline.json.passed, true);
+  assert.equal(baseline.json.recorded, true);
+  assert.equal(baseline.json.headSha, baseSha);
+  assert.equal(baseline.json.commandSource, "default-branch");
+
+  await writeFile(path.join(worktreePath, "feature.txt"), "feature\n");
+  const dirty = await verify(fixture, prepared, [2]);
+  assert.match(dirty.stderr, /uncommitted or untracked work[\s\S]*binds its result to a committed tree/);
+  await git(worktreePath, "add", "feature.txt");
+  await git(worktreePath, "commit", "--quiet", "-m", "feature");
+  // Only the baseline tree was verified, so the commit's tree has no result.
+  const unverified = await lifecycle(fixture, worktreePath, "record-evidence", { session: sessionId });
+  assert.equal(unverified.json.recorded, false);
+  assert.match(unverified.json.reason, /another tree/);
+  assert.match(unverified.json.nextAction, new RegExp(`^Run ibni verify --session ${sessionId} in the background.*run record-evidence again\\.$`));
+
+  await commit(worktreePath, "FAIL", "\n", "break verify");
+  const failed = await verify(fixture, prepared, [1]);
+  const treeSha = (await git(worktreePath, "rev-parse", "HEAD^{tree}")).stdout.trim();
+  assert.deepEqual(
+    { ...failed.json, durationMs: typeof failed.json.durationMs, ranAt: typeof failed.json.ranAt, logTail: typeof failed.json.logTail },
+    {
+      operation: "verify", sessionId, baseline: false, treeSha, headSha: (await git(worktreePath, "rev-parse", "HEAD")).stdout.trim(),
+      passed: false, exitCode: 1, durationMs: "number", logPath: path.join(evidenceDir, `verify-${treeSha.slice(0, 12)}.log`), ranAt: "string",
+      command: "npm run verify", commandSource: "default-branch", recorded: true, logTail: "string",
+    },
+  );
+  assert.equal(failed.stdout.trim().split("\n").length, 1, "stdout is one line of JSON; the output went to the log");
+  assert.match(await readFile(failed.json.logPath, "utf8"), /> verify/);
+  const refusedEvidence = await lifecycle(fixture, worktreePath, "record-evidence", { session: sessionId });
+  assert.equal(refusedEvidence.json.recorded, false);
+  assert.equal(refusedEvidence.json.requiresVerify, true);
+  assert.match(refusedEvidence.json.reason, /last ibni verify failed on this tree/);
+  assert.match(refusedEvidence.json.nextAction, new RegExp(`^Fix the failure \\(see .*verify-.*\\.log\\) and commit, then run ibni verify --session ${sessionId}`));
+  const refusedPublish = await lifecycle(fixture, worktreePath, "publish", { session: sessionId });
+  assert.equal(refusedPublish.json.published, false);
+  assert.equal(refusedPublish.json.requiresVerify, true);
+
+  await git(worktreePath, "rm", "--quiet", "FAIL");
+  await git(worktreePath, "commit", "--quiet", "-m", "fix verify");
+  const stalePublish = await lifecycle(fixture, worktreePath, "publish", { session: sessionId });
+  assert.equal(stalePublish.json.published, false);
+  assert.match(stalePublish.json.reason, /last ibni verify ran on another tree/);
+  assert.match(stalePublish.json.nextAction, new RegExp(`ibni verify --session ${sessionId}`));
+  const passed = await verify(fixture, prepared);
+  assert.equal(passed.json.passed, true);
+
+  // Evidence recorded, then another commit: publish refuses the unverified tree.
+  assert.equal((await lifecycle(fixture, worktreePath, "record-evidence", { session: sessionId })).json.recorded, true);
+  await commit(worktreePath, "later.txt", "later\n", "later change");
+  const mismatch = await lifecycle(fixture, worktreePath, "publish", { session: sessionId });
+  assert.equal(mismatch.json.published, false);
+  assert.equal(mismatch.json.requiresVerify, true);
+  assert.match(mismatch.json.reason, /another tree/);
+  await recordEvidence(fixture, prepared);
+  assert.equal((await lifecycle(fixture, worktreePath, "publish", { session: sessionId })).json.published, true);
+
+  const stats = await lifecycle(fixture, fixture.control, "stats", { session: sessionId });
+  assert.deepEqual(stats.json.verify.history.map((entry) => entry.outcome), ["pass", "fail", "pass", "pass"]);
+  assert.equal(stats.json.verification.passed, true);
+  assert.deepEqual(stats.json.steps.filter((step) => step.step === "verify").map((step) => step.outcome), ["succeeded", "failed", "failed", "succeeded", "succeeded"]);
+});
+
+test("ibni verify holds no lock while it runs and records nothing for a tree that changed meanwhile", async (t) => {
+  const fixture = await createFixture(t);
+  await commitRepositorySettings(fixture, `${JSON.stringify({ verify: "node -e \"setTimeout(() => {}, 2500)\"" })}\n`);
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "slow verify" });
+  const { sessionId, worktreePath } = prepared.json;
+  const running = verify(fixture, prepared, [1]);
+  await new Promise((resolve) => setTimeout(resolve, 800));
+  // record takes the repository lock; it would wait if verify held it.
+  const started = Date.now();
+  await lifecycle(fixture, worktreePath, "record", { session: sessionId, qa: "0" });
+  assert.ok(Date.now() - started < 2000, "record did not wait for the verify run");
+  await commit(worktreePath, "meanwhile.txt", "meanwhile\n", "commit during verify");
+  const result = await running;
+  assert.equal(result.json.passed, true);
+  assert.equal(result.json.recorded, false);
+  assert.match(result.json.reason, /HEAD moved while verify ran/);
+  assert.equal(JSON.parse(await metadataFile(worktreePath)).verification, null);
+});
+
+test("a verify command that leaves untracked files behind is not recorded, and ibni verify names them", async (t) => {
+  const fixture = await createFixture(t);
+  await commitRepositorySettings(fixture, `${JSON.stringify({ verify: "node -e \"require('fs').writeFileSync('report.txt', 'x')\"" })}\n`);
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "messy verify" });
+  const result = await verify(fixture, prepared, [1]);
+  assert.equal(result.json.passed, true);
+  assert.equal(result.json.recorded, false);
+  assert.match(result.json.reason, /not clean when verify ended \(\?\? report\.txt\).*gitignore what the verify command writes/);
+});
+
+test("ibni verify records a green CI baseline of the exact base tree without running anything", async (t) => {
+  const fixture = await createFixture(t);
+  // The tree fails verify locally, so a passing result proves nothing ran.
+  await commitToDefaultBranch(fixture, { FAIL: "\n" }, "a tree that fails locally");
+  const sha = await optInToBaselineReuse(fixture);
+  await setCheckRuns(fixture, [checkRun(sha)]);
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "reused" });
+  assert.equal(prepared.json.baseline.reused, true);
+
+  const reused = await verify(fixture, prepared);
+  assert.equal(reused.json.passed, true);
+  assert.equal(reused.json.baseline, true);
+  assert.deepEqual([reused.json.exitCode, reused.json.durationMs, reused.json.logPath], [null, 0, null]);
+  assert.deepEqual(reused.json.reused, { check: "verify", sha, url: "https://github.com/alexportelli12/example/actions/runs/11/job/1" });
+
+  // Any other tree runs for real.
+  await commit(prepared.json.worktreePath, "feature.txt", "feature\n", "feature");
+  const real = await verify(fixture, prepared, [1]);
+  assert.equal(real.json.passed, false);
+  assert.equal(real.json.reused, undefined);
+});
+
+test("ibni verify runs the branch's verify only when the default branch has none at all", async (t) => {
+  const fixture = await createFixture(t);
+  const branchSettings = `${JSON.stringify({ verify: "node -e \"console.log('branch gate')\"" })}\n`;
+  const guarded = await lifecycle(fixture, fixture.control, "prepare", { slug: "has a gate" });
+  await commit(guarded.json.worktreePath, ".mexxi.json", branchSettings, "try to swap the gate");
+  await commit(guarded.json.worktreePath, "FAIL", "\n", "and fail the real one");
+  const kept = await verify(fixture, guarded, [1]);
+  assert.equal(kept.json.command, "npm run verify");
+  assert.equal(kept.json.commandSource, "default-branch");
+
+  await commitToDefaultBranch(fixture, { "package.json": null }, "no verify command at all");
+  const lesti = await lifecycle(fixture, fixture.control, "prepare", { slug: "lesti" });
+  await commit(lesti.json.worktreePath, ".mexxi.json", branchSettings, "name a verify command");
+  const added = await verify(fixture, lesti);
+  assert.equal(added.json.command, "node -e \"console.log('branch gate')\"");
+  assert.equal(added.json.commandSource, "branch");
+  assert.match(await readFile(added.json.logPath, "utf8"), /branch gate/);
+});
+
+test("adopt reports dependencies and verify state without acting on them", async (t) => {
+  const fixture = await createFixture(t);
+  const stub = await packageManagerStub(t);
+  await commitToDefaultBranch(fixture, { "package-lock.json": "{}\n" }, "lockfile");
+  const sessionA = await lifecycle(fixture, fixture.control, "prepare", { slug: "adopt deps" }, [0], stub.env(fixture));
+  const { worktreePath, branch } = sessionA.json;
+  await publishAndMark(fixture, sessionA, "first\n", 7);
+  let head = (await git(worktreePath, "rev-parse", "HEAD")).stdout.trim();
+  await setGhState(fixture.gh, 7, "OPEN");
+  await setGhHead(fixture.gh, 7, branch, head);
+
+  const current = await lifecycle(fixture, fixture.control, "adopt", { pr: "https://example.test/pull/7" }, [0], stub.env(fixture));
+  assert.equal(current.json.dependencies.current, true);
+  assert.match(current.json.dependencies.reason, /installed from package-lock\.json/);
+  assert.deepEqual(current.json.verified, { current: true });
+
+  // A published lockfile change: adopt says to run setup, and runs nothing.
+  const sessionB = { json: { ...sessionA.json, sessionId: current.json.sessionId } };
+  await commit(worktreePath, "package-lock.json", "{\"changed\":true}\n", "bump a dependency");
+  await recordEvidence(fixture, sessionB);
+  assert.equal((await lifecycle(fixture, worktreePath, "publish", { session: sessionB.json.sessionId })).json.published, true);
+  head = (await git(worktreePath, "rev-parse", "HEAD")).stdout.trim();
+  await setGhHead(fixture.gh, 7, branch, head);
+  const stale = await lifecycle(fixture, fixture.control, "adopt", { pr: "https://example.test/pull/7" }, [0], stub.env(fixture));
+  assert.deepEqual(stale.json.dependencies, {
+    current: false,
+    reason: "the lockfiles changed since the last setup",
+    nextAction: `Run ibni setup --session ${stale.json.sessionId} to install dependencies in the worktree.`,
+  });
+  assert.equal((await stub.calls()).length, 1, "only prepare installed");
+});
+
+test("a workspace from before ibni ran setup and verify still adopts and publishes, told what to run", async (t) => {
+  const fixture = await createFixture(t);
+  const sessionA = await lifecycle(fixture, fixture.control, "prepare", { slug: "legacy" });
+  const { worktreePath, branch } = sessionA.json;
+  await publishAndMark(fixture, sessionA, "first\n", 7);
+  const head = (await git(worktreePath, "rev-parse", "HEAD")).stdout.trim();
+  await setGhState(fixture.gh, 7, "OPEN");
+  await setGhHead(fixture.gh, 7, branch, head);
+  // Metadata as an older ibni wrote it: no setup, no verification, evidence on HEAD's tree.
+  const gitDirectory = (await git(worktreePath, "rev-parse", "--absolute-git-dir")).stdout.trim();
+  const file = path.join(gitDirectory, "implementation-workspace.json");
+  const { setup: _setup, verification: _verification, ...legacy } = JSON.parse(await readFile(file, "utf8"));
+  legacy.records = legacy.records.filter((record) => record.source !== "ibni");
+  await writeFile(file, `${JSON.stringify(legacy, null, 2)}\n`);
+
+  const adopted = await lifecycle(fixture, fixture.control, "adopt", { pr: "https://example.test/pull/7" });
+  const sessionId = adopted.json.sessionId;
+  assert.equal(adopted.json.dependencies.current, null);
+  assert.match(adopted.json.dependencies.reason, /prepared before ibni recorded its setup/);
+  assert.match(adopted.json.dependencies.nextAction, new RegExp(`ibni setup --session ${sessionId}`));
+  assert.equal(adopted.json.verified.current, false);
+  assert.match(adopted.json.verified.nextAction, new RegExp(`ibni verify --session ${sessionId}`));
+  assert.deepEqual([adopted.json.setup, adopted.json.verification], [null, null]);
+
+  await commit(worktreePath, "follow-up.txt", "follow-up\n", "follow-up");
+  const evidenced = { ...legacy, sessionId, evidenceTreeSha: (await git(worktreePath, "rev-parse", "HEAD^{tree}")).stdout.trim() };
+  await writeFile(file, `${JSON.stringify({ ...JSON.parse(await readFile(file, "utf8")), evidenceTreeSha: evidenced.evidenceTreeSha }, null, 2)}\n`);
+  const refused = await lifecycle(fixture, worktreePath, "publish", { session: sessionId });
+  assert.equal(refused.json.published, false);
+  assert.match(refused.json.reason, /evidence predates ibni verify/);
+  assert.match(refused.json.nextAction, new RegExp(`^Run ibni verify --session ${sessionId} in the background`));
+  await recordEvidence(fixture, { json: { worktreePath, sessionId } });
+  assert.equal((await lifecycle(fixture, worktreePath, "publish", { session: sessionId })).json.published, true);
 });

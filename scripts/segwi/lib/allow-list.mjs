@@ -172,12 +172,26 @@ function protectedWriteRules({ secrets, files, folders }) {
 const ASK_RULES = ["git push", "gh api", "gh repo", "gh release", "gh pr merge"].map(prefix);
 
 /**
+ * ibni verify and ibni setup run the commands the repository names, which `ibni:*` would otherwise allow whatever
+ * they are. One that isn't plain asks, as it would if the agent ran it directly (VERIFY_NOT_ALLOWED). Read from the
+ * checkout, so in a /lesti run where the default branch names no verify, the command a branch adds is not checked
+ * here; like any npm run script the agent edits, it is bounded by the sandbox, not by this list.
+ */
+export function askRules({ verifyCommand, setupCommand }) {
+  return [
+    ...ASK_RULES,
+    ...(isPlainVerifyCommand(verifyCommand) ? [] : [prefix("ibni verify")]),
+    ...(setupCommand && !isPlainVerifyCommand(setupCommand) ? [prefix("ibni setup")] : []),
+  ];
+}
+
+/**
  * `denyRead` are the secrets nothing in the sandbox needs: keys and credentials in the home directory, and
  * segwi's own state and data (its tokens, push key, run secrets and pending approvals). Only existing paths.
  * `allowedDomains` are the hosts your config adds to the network allow list (segwi.allowedDomains and the
  * repository's own), never anything the repository names.
  */
-export function renderSettings({ action, worktreeRoot, verifyCommand, tempDir, repoPath, gitCommonDir = path.join(repoPath, ".git"), branchPrefix = "agent/",
+export function renderSettings({ action, worktreeRoot, verifyCommand, setupCommand = null, tempDir, repoPath, gitCommonDir = path.join(repoPath, ".git"), branchPrefix = "agent/",
   branchPrefixes = [], permissions = "strict", controlEntries = [], existingGit = [], denyRead = [], protectedFiles = [], protectedFolders = [],
   controlCheckouts = [], allowedDomains = [], denyPatterns }) {
   const prefixes = writablePrefixes(branchPrefix, branchPrefixes);
@@ -186,7 +200,7 @@ export function renderSettings({ action, worktreeRoot, verifyCommand, tempDir, r
       allow: allowRules({ action, worktreeRoot, verifyCommand, tempDir, repoPath }),
       deny: [...denyRules(denyPatterns), ...OUTPUT_DENY, ...BROWSER_DENY, ...controlDenyRules([repoPath, ...controlCheckouts]), ...secretReadRules(denyRead),
         ...protectedWriteRules({ secrets: denyRead, files: protectedFiles, folders: protectedFolders })],
-      ask: ASK_RULES,
+      ask: askRules({ verifyCommand, setupCommand }),
       disableBypassPermissionsMode: "disable",
     },
     sandbox: {
