@@ -29,6 +29,8 @@ jobs:
           node-version: 24
           cache: npm
       - run: npm ci
+      # The mods check validates and tests claude/mods/ with the Claude Code CLI itself.
+      - run: npm install -g @anthropic-ai/claude-code@2.1.309
       # The rendered-qa browser test skips itself where Playwright's Chromium is absent, as here.
       # The segwi-web check installs its own dependencies from its lockfile.
       - run: npm run verify
