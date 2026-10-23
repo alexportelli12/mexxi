@@ -42,6 +42,7 @@ export function createRunService({ store, settings, runner, ibni, broker, server
   const live = new Map();
   const watchdog = createWatchdog(limits, (runId, reason) => void timeOut(runId, reason));
   let detectCache = null;
+  let shuttingDown = false;
   const requireSandbox = !settings.segwi.allowUnsandboxed;
   /** @type {Array<(runId: string) => void>} */
   const finishListeners = [];
@@ -131,7 +132,7 @@ export function createRunService({ store, settings, runner, ibni, broker, server
   function emitterFor(runId) {
     return (event) => {
       const state = live.get(runId);
-      if (!state) return;
+      if (!state || shuttingDown) return;
       state.chain = state.chain.then(() => onEvent(runId, event)).catch(() => {});
     };
   }
@@ -286,9 +287,13 @@ export function createRunService({ store, settings, runner, ibni, broker, server
       };
     },
 
-    shutdown() {
+    /** Ends every host before segwi exits; a runner without `shutdown` gets a stop per run. */
+    async shutdown() {
+      // The hosts' exits are segwi's doing, not the runs' outcome: the next start marks those runs as interrupted.
+      shuttingDown = true;
       watchdog.stopAll();
-      for (const id of live.keys()) runner.stop(id);
+      if (runner.shutdown) await runner.shutdown();
+      else for (const id of live.keys()) runner.stop(id);
     },
   };
 }

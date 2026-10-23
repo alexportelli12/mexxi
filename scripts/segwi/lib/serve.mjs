@@ -68,7 +68,7 @@ export async function startServer({ settings, dataDir, runner, ibni = createIbni
     async close() {
       if (closed) return;
       closed = true;
-      runs.shutdown();
+      await runs.shutdown();
       approvals.shutdown();
       broker.close();
       server.closeAllConnections();

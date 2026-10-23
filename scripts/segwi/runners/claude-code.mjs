@@ -345,5 +345,16 @@ export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir 
       signalGroup(entry.child.pid, "SIGINT");
       escalate(entry, ["SIGTERM", "SIGKILL"], killGraceMs);
     },
+    /**
+     * segwi is exiting and its timers won't outlive it, so every host's group gets SIGTERM now and
+     * SIGKILL after `graceMs`. Resolves once every group is gone.
+     */
+    async shutdown(graceMs = 2000) {
+      const pids = [...processes.values()].map((entry) => entry.child.pid).filter(Boolean);
+      pids.forEach((pid) => signalGroup(pid, "SIGTERM"));
+      const deadline = Date.now() + graceMs;
+      while (pids.some(groupAlive) && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 50));
+      pids.forEach((pid) => signalGroup(pid, "SIGKILL"));
+    },
   };
 }

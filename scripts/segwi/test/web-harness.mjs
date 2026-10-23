@@ -35,6 +35,7 @@ function createRoutingRunner(dataDir) {
     send: (runId, text) => byRun.get(runId).send(runId, text),
     stop: (runId) => byRun.get(runId)?.stop(runId),
     close: (runId) => byRun.get(runId)?.close(runId),
+    shutdown: () => Promise.all(Object.values(adapters).map((adapter) => adapter.shutdown())),
   };
 }
 

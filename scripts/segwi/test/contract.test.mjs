@@ -305,6 +305,15 @@ test("claude-code: stop ends the host's whole process group, including a child t
   await waitFor(() => !alive(pid), { what: "the grandchild to be gone" });
 });
 
+test("claude-code: shutdown ends every host's group at once, even a child that ignores SIGINT and SIGTERM", async (t) => {
+  const { adapter, events, pid } = await hostWithGrandchild(t);
+  const started = Date.now();
+  await adapter.shutdown(300);
+  assert.ok(!alive(pid), "gone when shutdown resolves");
+  assert.ok(Date.now() - started < 2000);
+  await waitFor(() => exited(events), { what: "the host to exit" });
+});
+
 test("claude-code: when the host ends on its own, what it left in its group is ended too", async (t) => {
   const { adapter, spec, events, pid } = await hostWithGrandchild(t);
   adapter.close(spec.runId);
