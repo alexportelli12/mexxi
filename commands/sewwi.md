@@ -54,7 +54,7 @@ other appropriate owner instead.
 ## Re-run Trigger Evals
 
 When a change edits the `description` of a core skill (`rendered-qa`,
-`repo-context`, `commit-pr-writing`, `verifika`), run that skill's eval set
+`repo-context`, `commit-pr-writing`, `test-design`, `verifika`), run that skill's eval set
 before reporting. These need model calls, so they are not part of `npm run
 verify` (which only checks the sets are well formed). From
 `skills/skill-creator` in the checkout, once per installed host:
@@ -63,9 +63,13 @@ verify` (which only checks the sets are well formed). From
 for host in claude opencode codex; do
   SKILL_CREATOR_HOST=$host python -m scripts.run_eval \
     --eval-set ../../evals/triggers/<skill>.json --skill-path <skill-folder> \
-    --runs-per-query 3 --timeout 120 --verbose
+    --runs-per-query 3 --timeout 120 --num-workers 1 --verbose
 done
 ```
+
+Keep `--num-workers 1`: each parallel worker installs its own copy of the
+skill, so every query sees several identical skills and usually picks another
+worker's, which scores as a miss.
 
 `<skill-folder>` is `../<skill>`, or `../../node_modules/verifika/skills/verifika`
 for `verifika`. Every query must pass on every host (`summary.failed` is 0);

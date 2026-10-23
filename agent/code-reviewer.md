@@ -59,8 +59,11 @@ Mark it reviewed or skipped with a concrete reason. Review in bounded batches
 if large; do not stop after the first finding.
 
 In `discovery`, judge correctness, regressions, architecture, maintainability,
-security, error handling, performance, tests and repository conventions. For
-meaningful user-facing changes, also judge frontend implementation,
+security, error handling, performance, tests and repository conventions. When
+the change adds or changes tests, or adds behaviour that should have one, load
+`test-design` and judge the tests by its review section: each must go red when
+the behaviour it claims breaks, and stay green when only the internals change.
+For meaningful user-facing changes, also judge frontend implementation,
 accessibility, responsive behaviour, interaction and UX consistency against
 acceptance criteria, product UX principles, established design patterns, and
 the supplied rendered-QA evidence. Load `ui-designer` and its relevant review

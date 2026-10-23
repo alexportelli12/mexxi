@@ -1,0 +1,66 @@
+[
+  {
+    "query": "I just added a bulk-discount rule to cart.ts. Write the tests it needs, and make sure each one would actually catch a regression.",
+    "should_trigger": true
+  },
+  {
+    "query": "Which of these changes in the invoice service actually need a test? I don't want another fifty tests that just restate constants.",
+    "should_trigger": true
+  },
+  {
+    "query": "I've fixed the bug where a refund larger than the order total was accepted. Write the regression test and show it fails without my fix.",
+    "should_trigger": true
+  },
+  {
+    "query": "Should the new password strength check get a unit test, a component test or an end-to-end test? Pick the level and write it.",
+    "should_trigger": true
+  },
+  {
+    "query": "Review the tests in this PR: do they assert on mocks, or would they really go red if the pricing logic broke?",
+    "should_trigger": true
+  },
+  {
+    "query": "Our src/billing folder has 300 tests and nobody knows which ones matter. Go through billing/invoices.spec.ts and tell me which to keep, rewrite or delete.",
+    "should_trigger": true
+  },
+  {
+    "query": "these specs mock everything and compute the expected value with the same formula as the code, rewrite them so they test real behaviour",
+    "should_trigger": true
+  },
+  {
+    "query": "Before I refactor the scheduling module, pin its current behaviour with tests so I know the refactor changes nothing.",
+    "should_trigger": true
+  },
+  {
+    "query": "Set up playwright.config.ts with three browser projects, traces on first retry and a webServer block that starts our dev server.",
+    "should_trigger": false
+  },
+  {
+    "query": "Migrate this repository's test runner from Jest to Vitest and get the existing suite running under it.",
+    "should_trigger": false
+  },
+  {
+    "query": "npm run verify just failed on the lint step with 12 errors; read the log and fix whatever broke.",
+    "should_trigger": false
+  },
+  {
+    "query": "Open the running app and click through the new onboarding flow on phone and desktop widths, and capture screenshots of anything broken.",
+    "should_trigger": false
+  },
+  {
+    "query": "Write the pull request description for the discount change I just finished, with the merge call and evidence up top.",
+    "should_trigger": false
+  },
+  {
+    "query": "Review this pull request for security problems: SQL injection, missing authorisation checks and secrets in the code.",
+    "should_trigger": false
+  },
+  {
+    "query": "Summarise the stack, folder structure and test setup of this repository before I start working in it.",
+    "should_trigger": false
+  },
+  {
+    "query": "Our CI test job is timing out after 30 minutes; shard it across four runners.",
+    "should_trigger": false
+  }
+]

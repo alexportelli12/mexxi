@@ -1,11 +1,12 @@
 # Testing
 
-Test observable behavior at the smallest level that gives confidence. Use the
-repository's configured test runner, assertion library, Angular test setup,
-and naming conventions; do not prescribe Vitest, Jasmine, Karma, or another
-runner globally.
+`test-design` decides whether a behaviour earns a test, the break each test
+catches, its level and how to see it fail. This reference covers how to test
+it in Angular. Use the repository's configured test runner, assertion library,
+Angular test setup and naming conventions; do not prescribe Vitest, Jasmine,
+Karma or another runner globally.
 
-## Select the Test Level
+## Choose the Angular Harness
 
 - Test pure transformations directly without Angular when no framework
   integration is involved.
@@ -15,21 +16,21 @@ runner globally.
 - Use a component fixture when template rendering, bindings, change
   propagation, DOM interaction, outputs, or injected providers matter. Do not
   use a fixture to test every private calculation.
-- Add a higher-level feature test when the important contract crosses several
-  Angular boundaries; avoid reproducing the same assertion in every layer.
+- Use a feature-level test, with the routes and providers it needs, when the
+  break crosses several Angular boundaries.
 
-## Test Behavior and Boundaries
+## Drive Angular Through Its Public Surface
 
-- Read the implementation and closest existing specs before choosing setup or
-  mocks. Treat public inputs, user events, rendered states, outputs, and
-  service calls at the boundary as the contract.
-- Mock external systems and unstable boundaries, not the implementation under
-  test. Keep test doubles small and make failure behavior explicit.
+- Treat inputs, user events, rendered states, outputs, and service calls at the
+  boundary as a component's contract. Read the closest existing specs before
+  choosing setup or test doubles.
 - For signal-based state, change it through the public API and assert the
   resulting value or rendered behavior. Trigger the repository's normal
   change-detection or stabilization step when the template requires it.
-- Cover meaningful initial, loading, empty, error, success, retry, validation,
-  and concurrency states rather than only creation and happy-path rendering.
+- Replace HTTP at the `HttpClient` boundary with the repository's testing
+  backend or provider, not by stubbing the service under test.
+- Keep `TestBed` and fixture setup local enough that each test explains its
+  scenario. Reuse helpers only when they preserve that clarity.
 
 ## Async Behavior
 
@@ -40,16 +41,6 @@ runner globally.
 - Pair fake-clock setup and cleanup, and avoid real sleeps. Test cancellation,
   duplicate suppression, queueing, and stale-result handling when those are
   product semantics, not merely implementation details.
-- Assert both the user-visible result and important boundary interactions, such
-  as the request parameters or emitted event, without asserting framework
+- Assert the user-visible result and, where it is the contract, the boundary
+  interaction (the request parameters or emitted event), never framework
   internals.
-
-## Maintainability
-
-- Prefer a small number of behavior-focused cases with clear names over broad
-  snapshots or assertions on private fields.
-- Keep setup local enough that each test explains its scenario. Reuse helpers
-  only when they preserve that clarity.
-- Follow repository test commands and deterministic validation. This reference
-  supplies Angular testing judgement; it does not replace the broader project
-  testing workflow.

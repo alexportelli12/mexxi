@@ -3,6 +3,7 @@ sources:
   - commands/wettaq.md
   - skills/implement-review/SKILL.md
   - skills/rendered-qa/SKILL.md
+  - skills/test-design/SKILL.md
   - scripts/ibni/commands/**
 reviewed: 2026-10-23
 ---
@@ -34,7 +35,7 @@ Not every change needs every step. A one-line fix skips the independent review; 
 2. **Agree what done means.** The agent reads the repository, its closest examples and its tests, then writes down what done means before any code exists, so the target is settled first. It asks you only about product decisions it cannot work out from the code.
 3. **Start from green.** The repository's [verify command](glossary.md#verify) (`npm run verify` unless its `.mexxi.json` names another) must pass before work starts. Otherwise a failure at the end could be an old one, blamed on the change. `ibni verify` runs it, so the agent only waits for the result. If CI has already proven the starting commit, `ibni verify` cites that run instead.
 4. **Screenshots before.** When the change alters existing UI, the agent captures it first, so the pull request can show before and after.
-5. **Make the change, with tests.** The agent changes the code and adds proof at the cheapest level that proves the behaviour. A date-formatting rule gets a unit test, not a browser test; a browser test is for a flow that crosses pages or services.
+5. **Make the change, with tests.** A test that passes whatever the code does proves nothing, so each test names the break it catches. The agent tests only behaviour with a right answer it can check, such as a pricing rule from the request, at the cheapest level that sees the break. A date-formatting rule gets a unit test, not a browser test; a browser test is for a flow that crosses pages or services. The agent watches each new test fail before it passes. See [test-design](../skills/test-design/SKILL.md).
 6. **Your checks again.** The agent commits the change, and `ibni verify` runs the verify command again on that commit. It is the one authoritative gate, and a failure means the work is unfinished.
 7. **Look at it in a real browser.** For user-facing work, the agent drives the running app at phone, tablet and desktop sizes and checks motion, keyboard use, touch targets and console errors. This is [rendered QA](glossary.md#rendered-qa); see [rendered-qa](../skills/rendered-qa/SKILL.md). [`/ittestja`](../commands/ittestja.md) runs the same check on its own, without changing code.
 8. **A second agent reviews it.** For substantial changes, the [code-reviewer](../agent/code-reviewer.md) judges the change. It cannot edit code, so it only reports, and the builder fixes what it finds. See [implement-review](../skills/implement-review/SKILL.md).

@@ -144,7 +144,7 @@ export async function prepareWorkspace({ cwd = process.cwd(), slug, prefix, envi
   assertWritablePrefix(branchPrefix, environment);
   const repository = await repositoryAt(cwd);
   if (repository.gitDirectory !== repository.commonDirectory) {
-    throw new WorkspaceError("/wettaq must be launched from the repository's primary control worktree");
+    throw new WorkspaceError("ibni prepare must run from the repository's primary control worktree");
   }
 
   let prepared;
@@ -224,7 +224,7 @@ function prepareLocked({ repository, config, slug, branchPrefix }) {
     const defaultBranch = await remoteDefault(repository.root, remote);
     if (branch !== defaultBranch) {
       throw new WorkspaceError(
-        "/wettaq must be launched from the checked-out default branch",
+        "ibni prepare must run from the checked-out default branch",
         `Current branch: ${branch}; remote ${remote} default: ${defaultBranch}`,
       );
     }

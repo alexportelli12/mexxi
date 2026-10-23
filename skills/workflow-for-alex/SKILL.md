@@ -156,10 +156,9 @@ such mechanisms in the repository that owns the code.
 ## Behaviour and judgement
 
 Important deterministic behaviour acceptance criteria should graduate into
-appropriate executable specifications when they are reasonably testable. Use
-the cheapest test level that meaningfully proves the behaviour; E2E is
-risk-triggered rather than universal. This is behaviour-first, not mandatory
-test-first development.
+appropriate executable specifications when they are reasonably testable.
+`test-design` owns which tests a change needs, at what level, and the proof
+that each can fail; a test that cannot fail is worse than none.
 
 Architectural appropriateness, unnecessary complexity, maintainability, UI
 hierarchy, usability, and visual coherence cannot always be reduced to
@@ -237,6 +236,7 @@ hypothetical completeness. Classify a failure before adding an instruction:
 | Failure | Likely owner to investigate |
 | --- | --- |
 | Deterministic behaviour miss | Test or executable-spec gap |
+| A test passed while its behaviour was broken, or protects nothing | `test-design` or reviewer gap |
 | Type, lint, or mechanical issue | `verify` tooling gap |
 | Repeated architecture violation | Architecture enforcement or reviewer gap |
 | Repeated Angular reasoning failure | Angular skill gap |
