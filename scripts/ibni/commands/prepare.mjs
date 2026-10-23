@@ -173,7 +173,11 @@ export async function prepareWorkspace({ cwd = process.cwd(), slug, prefix }) {
       );
     }
 
-    const cleanup = await sweepConsumedWorkspaces(repository, config);
+    // segwi sets IBNI_SKIP_SWEEP: its run may have rewritten retained worktrees, and the sweep runs git in each,
+    // outside the run's sandbox. Your own sessions still sweep.
+    const cleanup = process.env.IBNI_SKIP_SWEEP === "1"
+      ? { removed: [], kept: [], skipped: "IBNI_SKIP_SWEEP is set" }
+      : await sweepConsumedWorkspaces(repository, config);
     const baseSha = cleanOutput(await git(repository.root, ["rev-parse", "HEAD"]));
     const settings = await repositorySettings(repository.root, baseSha);
     const verifyCommand = verifyCommandFrom(settings);
@@ -258,5 +262,5 @@ export async function prepareWorkspace({ cwd = process.cwd(), slug, prefix }) {
       await rollbackAllocatedWorkspace(repository.root, allocation, baseSha);
       throw error;
     }
-  });
+  }, { env: {} });
 }

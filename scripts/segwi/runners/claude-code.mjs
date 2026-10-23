@@ -55,6 +55,28 @@ export function probeSandbox() {
   return [];
 }
 
+/**
+ * Everything in the worktree root when the run starts that isn't for it: other repositories' folders whole, and
+ * in this repository's folders (where its worktrees already are) every existing worktree and evidence folder.
+ * Those are other sessions', your own included, and planting files there would reach git commands you run later.
+ * The run's own worktree doesn't exist yet: ibni prepare makes it.
+ */
+async function existingWorkspaces(worktreeRoot, repoPath) {
+  let listing = "";
+  try {
+    ({ stdout: listing } = await execFileAsync("git", ["-C", repoPath, "worktree", "list", "--porcelain"], { timeout: 5000 }));
+  } catch {
+    // No worktree list: every folder counts as another repository's.
+  }
+  const ownFolders = new Set(listing.split("\n").filter((line) => line.startsWith("worktree ")).map((line) => path.dirname(path.resolve(line.slice(9)))));
+  // Real entries only: the sandbox resolves a symlink, so denying one would deny wherever it points.
+  const list = (dir) => { try { return readdirSync(dir, { withFileTypes: true }).filter((entry) => !entry.isSymbolicLink()).map((entry) => entry.name); } catch { return []; } };
+  return list(worktreeRoot).flatMap((name) => {
+    const folder = path.join(worktreeRoot, name);
+    return ownFolders.has(folder) ? list(folder).map((leaf) => path.join(folder, leaf)) : [folder];
+  });
+}
+
 /** The control checkout's shared git directory, where a linked worktree's commits land. */
 async function gitCommonDir(repoPath) {
   try {
@@ -216,8 +238,11 @@ export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir 
     if (spec.action !== "ask") await Promise.all(gitWritePaths(commonDir, branchPrefix).map((dir) => mkdir(dir, { recursive: true })));
     const home = os.homedir();
     const secrets = [...SECRET_PATHS.map((name) => path.join(home, name)), dataDir, ...(stateDir ? [stateDir] : [])].filter((file) => existsSync(file));
-    const existingGit = spec.action === "ask" ? [] : ["worktrees", path.join("refs", "heads", branchPrefix.replace(/\/+$/, ""))]
-      .flatMap((part) => readdirSync(path.join(commonDir, part)).map((name) => path.join(commonDir, part, name)));
+    const existingGit = spec.action === "ask" ? [] : [
+      ...["worktrees", path.join("refs", "heads", branchPrefix.replace(/\/+$/, ""))]
+        .flatMap((part) => readdirSync(path.join(commonDir, part)).map((name) => path.join(commonDir, part, name))),
+      ...await existingWorkspaces(spec.worktreeRoot, spec.repoPath),
+    ];
     const settings = renderSettings({
       action: spec.action, worktreeRoot: spec.worktreeRoot, verifyCommand: spec.verifyCommand, denyPatterns: spec.denyPatterns, repoPath: spec.repoPath,
       tempDir, gitCommonDir: commonDir, branchPrefix, controlEntries: readdirSync(spec.repoPath), existingGit, denyRead: secrets,
@@ -241,6 +266,8 @@ export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir 
     Object.assign(env, { GIT_CONFIG_COUNT: String(configCount + 1), [`GIT_CONFIG_KEY_${configCount}`]: "core.hooksPath", [`GIT_CONFIG_VALUE_${configCount}`]: path.join(commonDir, "hooks") });
     // The run's ibni commands are sandboxed and can't lock the checkout's git directory, so they lock here.
     env.IBNI_LOCK_ROOT = path.join(tempDir, "ibni-locks");
+    // ibni prepare runs outside the sandbox, and its sweep would run git in worktrees this run could rewrite.
+    env.IBNI_SKIP_SWEEP = "1";
     // A build or ready run starts outside the control checkout (see allow-list.mjs), so ibni prepare is told where it is.
     const startDir = spec.action === "ask" ? spec.repoPath : spec.worktreeRoot;
     if (spec.action !== "ask") {

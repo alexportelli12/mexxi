@@ -2,7 +2,7 @@
 // output replayed by the fake host. Add a runner to RUNNERS to hold it to the same rules.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { assertRunEvent, statusAfterResult } from "../runners/contract.mjs";
@@ -121,13 +121,15 @@ for (const runner of RUNNERS) {
   test(`${runner.id}: a build run can't change other sessions' worktrees or branches, and your git config entries stay`, async (t) => {
     const { adapter, dir, report } = runner.adapter(t, "ask-completed");
     const repo = makeRepo(t);
-    const other = path.join(tempDir(t, "segwi-other-"), "wt");
+    const other = path.join(tempDir(t, "segwi-root-"), "my-app-0123456789", "wt");
     execFileSync("git", ["-C", repo, "worktree", "add", "-q", "-b", "agent/other", other]);
     process.env.GIT_CONFIG_COUNT = "1";
     process.env.GIT_CONFIG_KEY_0 = "user.name";
     process.env.GIT_CONFIG_VALUE_0 = "You";
     t.after(() => { for (const key of ["GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0"]) delete process.env[key]; });
-    const spec = specFor(repo, { action: "build" });
+    const worktreeRoot = path.dirname(path.dirname(other));
+    mkdirSync(path.join(worktreeRoot, "someone-else"));
+    const spec = specFor(repo, { action: "build", worktreeRoot });
     const events = await drive(adapter, spec, (all) => results(all).length === 1);
     adapter.close(spec.runId);
     await waitFor(() => exited(events));
@@ -135,6 +137,9 @@ for (const runner of RUNNERS) {
     const git = path.join(repo, ".git");
     assert.ok(denyWrite.includes(path.join(git, "worktrees", "wt")), "the other worktree's metadata");
     assert.ok(denyWrite.includes(path.join(git, "refs", "heads", "agent", "other")), "the other session's branch");
+    assert.ok(denyWrite.includes(other), "the other session's worktree itself");
+    assert.ok(denyWrite.includes(path.join(spec.worktreeRoot, "someone-else")), "another repository's folder");
+    assert.equal(report().skipSweep, "1");
     assert.equal(report().lockRoot, `/tmp/claude-${process.getuid()}/ibni-locks`);
     const env = report().gitConfig;
     assert.deepEqual(env, { count: "2", first: ["user.name", "You"], second: ["core.hooksPath", path.join(git, "hooks")] });

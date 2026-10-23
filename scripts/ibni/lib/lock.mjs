@@ -28,8 +28,8 @@ export function repositoryLockPath(commonDirectory, env = process.env) {
   return path.join(path.resolve(env.IBNI_LOCK_ROOT), `${key}.lock`);
 }
 
-export async function acquireRepositoryLock(commonDirectory) {
-  const lockPath = repositoryLockPath(commonDirectory);
+export async function acquireRepositoryLock(commonDirectory, env = process.env) {
+  const lockPath = repositoryLockPath(commonDirectory, env);
   await mkdir(path.dirname(lockPath), { recursive: true });
   const owner = {
     hostname: os.hostname(),
@@ -95,8 +95,9 @@ export async function releaseRepositoryLock(lock) {
   }
 }
 
-export async function withRepositoryLock(commonDirectory, operation) {
-  const lock = await acquireRepositoryLock(commonDirectory);
+/** `env` decides the lock's place; prepare passes `{}` so it always shares the git directory's lock with your own sessions. */
+export async function withRepositoryLock(commonDirectory, operation, { env = process.env } = {}) {
+  const lock = await acquireRepositoryLock(commonDirectory, env);
   try {
     return await operation();
   } finally {

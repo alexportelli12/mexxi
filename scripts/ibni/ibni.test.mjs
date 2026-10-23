@@ -155,16 +155,18 @@ test("uses readable slug names and numeric suffixes for repeated requests", asyn
   assert.notEqual(first.json.sessionId, second.json.sessionId);
 });
 
-test("takes its repository lock under IBNI_LOCK_ROOT when that is set, and leaves the git directory alone", async (t) => {
+test("IBNI_LOCK_ROOT moves the repository lock, except prepare's, and IBNI_SKIP_SWEEP skips prepare's sweep", async (t) => {
   const fixture = await createFixture(t);
   const lockRoot = path.join(fixture.root, "locks");
-  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "locked elsewhere" }, [0], { IBNI_LOCK_ROOT: lockRoot });
-  assert.ok(prepared.json.worktreePath);
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "locked elsewhere" }, [0], { IBNI_LOCK_ROOT: lockRoot, IBNI_SKIP_SWEEP: "1" });
+  assert.equal(prepared.json.cleanup.skipped, "IBNI_SKIP_SWEEP is set");
+  const recorded = await lifecycle(fixture, prepared.json.worktreePath, "record-evidence", { session: prepared.json.sessionId }, [0], { IBNI_LOCK_ROOT: lockRoot });
+  assert.equal(recorded.json.operation, "record-evidence");
+  assert.ok(existsSync(lockRoot), "other commands lock under IBNI_LOCK_ROOT");
   const { repositoryLockPath } = await import("./lib/lock.mjs");
   const common = path.join(fixture.control, ".git");
   assert.equal(path.dirname(repositoryLockPath(common, { IBNI_LOCK_ROOT: lockRoot })), lockRoot);
   assert.equal(repositoryLockPath(common, {}), path.join(common, "opencode-implementation.lock"));
-  assert.ok(existsSync(lockRoot), "the lock folder was used");
 });
 
 test("prepares from the checkout IBNI_LAUNCH_CHECKOUT names when run from elsewhere", async (t) => {
