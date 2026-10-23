@@ -17,6 +17,19 @@ const GH = ["pr create", "pr view", "pr edit", "pr checks", "pr diff", "run view
 const NPM = ["ci", "run", "test", "audit", "view"];
 const NPX = ["prettier", "vitest", "playwright", "tsc", "eslint", "ng", "oxlint"];
 
+// The run's browser (Playwright MCP) runs outside the sandbox, so only tools that look at or drive a page are
+// allowed. Running code (browser_evaluate), uploading local files, writing files (pdf, traces, video), changing
+// routes, cookies or storage, and calling page tools ask a person; browser_run_code_unsafe runs code in the
+// Playwright server itself and is refused outright.
+const BROWSER_TOOLS = [
+  "navigate", "navigate_back", "navigate_forward", "reload", "snapshot", "take_screenshot", "click", "type", "press_key",
+  "press_sequentially", "fill_form", "select_option", "check", "uncheck", "hover", "drag", "drop", "handle_dialog", "wait_for",
+  "resize", "tabs", "close", "console_messages", "network_requests", "emulate_media", "find", "keydown", "keyup",
+  "mouse_click_xy", "mouse_down", "mouse_up", "mouse_move_xy", "mouse_drag_xy", "mouse_wheel",
+  "verify_element_visible", "verify_list_visible", "verify_text_visible", "verify_value",
+].map((tool) => `mcp__playwright__browser_${tool}`);
+const BROWSER_DENY = ["mcp__playwright__browser_run_code_unsafe"];
+
 export const SANDBOX_DOMAINS = ["github.com", "*.github.com", "*.githubusercontent.com", "registry.npmjs.org"];
 
 const prefix = (command) => `Bash(${command}:*)`;
@@ -68,7 +81,7 @@ export function allowRules({ action, worktreeRoot, verifyCommand, tempDir, repoP
     "Bash(set -o pipefail)",
     ...NPX.map((tool) => prefix(`npx ${tool}`)),
     ...["node --test", "ocr delegate", "ffmpeg", "mkdir"].map(prefix),
-    "mcp__playwright__*",
+    ...BROWSER_TOOLS,
     ...reads,
     ...["Edit", "Write"].flatMap((tool) => [worktreeRoot, tempDir].map((root) => `${tool}(${absolute(root)})`)),
   ];
@@ -108,7 +121,7 @@ export function renderSettings({ action, worktreeRoot, verifyCommand, tempDir, r
   return {
     permissions: {
       allow: allowRules({ action, worktreeRoot, verifyCommand, tempDir, repoPath }),
-      deny: [...denyRules(denyPatterns), ...OUTPUT_DENY, ...controlDenyRules(repoPath)],
+      deny: [...denyRules(denyPatterns), ...OUTPUT_DENY, ...BROWSER_DENY, ...controlDenyRules(repoPath)],
       disableBypassPermissionsMode: "disable",
     },
     sandbox: {

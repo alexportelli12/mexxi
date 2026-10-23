@@ -127,7 +127,13 @@ for (const runner of RUNNERS) {
     const runDir = path.join(dir, "data", "runs", spec.runId);
     const settings = JSON.parse(readFileSync(path.join(runDir, "settings.json"), "utf8"));
     const { allow, deny } = settings.permissions;
-    assert.ok(allow.includes("Bash(ibni:*)") && allow.includes("Bash(npm run verify)") && allow.includes("mcp__playwright__*"));
+    assert.ok(allow.includes("Bash(ibni:*)") && allow.includes("Bash(npm run verify)"));
+    // The browser runs outside the sandbox: named page tools only, never a wildcard, and never its code runner.
+    assert.ok(allow.includes("mcp__playwright__browser_navigate") && allow.includes("mcp__playwright__browser_click"));
+    for (const risky of ["mcp__playwright__*", "mcp__playwright__browser_evaluate", "mcp__playwright__browser_run_code_unsafe", "mcp__playwright__browser_file_upload",
+      "mcp__playwright__browser_route", "mcp__playwright__browser_unroute", "mcp__playwright__browser_pdf_save", "mcp__playwright__browser_set_storage_state"]) {
+      assert.ok(!allow.includes(risky), `${risky} is not allowed`);
+    }
     assert.ok(!allow.includes("Bash(npm run verify:*)"), "the verify command is exact, never a prefix");
     assert.ok(allow.includes("Bash(git fetch)") && allow.includes("Bash(git fetch origin)"));
     assert.ok(allow.includes(`Edit(/${spec.worktreeRoot}/**)`) && allow.includes(`Read(/${spec.worktreeRoot}/**)`));
@@ -137,7 +143,7 @@ for (const runner of RUNNERS) {
       assert.ok(!allow.some((rule) => rule.startsWith(`Bash(${forbidden}`)), `${forbidden} is not allowed`);
     }
     assert.deepEqual(deny, ["Bash(npm publish:*)", "Bash(git push --force:*)", "Bash(git *--output*)", "Bash(gh *--output*)",
-      `Edit(/${spec.repoPath}/*)`]);
+      "mcp__playwright__browser_run_code_unsafe", `Edit(/${spec.repoPath}/*)`]);
     assert.equal(settings.permissions.disableBypassPermissionsMode, "disable");
     assert.equal(settings.sandbox.enabled, true);
     assert.equal(settings.sandbox.allowUnsandboxedCommands, false);
@@ -165,6 +171,7 @@ for (const runner of RUNNERS) {
     await waitFor(() => exited(events));
     const mcp = JSON.parse(readFileSync(path.join(dir, "data", "runs", spec.runId, "mcp.json"), "utf8"));
     assert.ok(mcp.mcpServers.playwright.args.includes("--blocked-origins=http://127.0.0.1:4280;http://localhost:4280;http://[::1]:4280"));
+    assert.ok(mcp.mcpServers.playwright.args.some((arg) => arg.startsWith("--user-agent=") && arg.endsWith(" segwi-run-browser")), "the browser marks its requests");
   });
 
   test(`${runner.id}: behind tailscale serve, the run's browser is also blocked from the tailnet name`, async (t) => {

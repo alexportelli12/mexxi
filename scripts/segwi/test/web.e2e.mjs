@@ -6,6 +6,7 @@
 import assert from "node:assert/strict";
 import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
+import http from "node:http";
 import net from "node:net";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
@@ -328,6 +329,24 @@ e2e("every screen passes the axe scan, and every control is at least 44 by 44 on
   const result = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
   assert.deepEqual(result.violations.filter((violation) => ["serious", "critical"].includes(violation.impact)).map((violation) => violation.id), []);
   await close();
+});
+
+e2e("a browser marked as a run's own gets 403 from segwi, directly, by another host name and through a redirect", async () => {
+  const context = await browser.newContext({ userAgent: "Mozilla/5.0 (X11; Linux x86_64) Chrome/140.0.0.0 Safari/537.36 segwi-run-browser", serviceWorkers: "block" });
+  const redirector = http.createServer((req, res) => res.writeHead(302, { Location: `${harness.url}/approvals` }).end());
+  await new Promise((resolve) => redirector.listen(0, "127.0.0.1", resolve));
+  try {
+    const page = await context.newPage();
+    const port = new URL(harness.url).port;
+    for (const url of [`${harness.url}/approvals`, `http://localhost:${port}/`, `http://localhost.:${port}/`, `http://127.0.0.1:${redirector.address().port}/`]) {
+      const response = await page.goto(url);
+      assert.equal(response.status(), 403, url);
+      assert.match(await page.textContent("body"), /A run's own browser can't use segwi/, url);
+    }
+  } finally {
+    await context.close();
+    redirector.close();
+  }
 });
 
 e2e("the Reconnecting banner shows when the server goes away and clears when it is back", async () => {

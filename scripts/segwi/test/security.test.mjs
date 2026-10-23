@@ -111,13 +111,25 @@ test("tailscale-header: only loopback names and the configured tailnet name are 
   assert.equal(post.status, 403);
   assert.match(post.json.error, /neither a loopback name nor segwi.auth.web.hostname/);
   assert.equal((await request(server, "GET", "/", { headers: rebound })).status, 403, "the app shell too");
-  for (const host of ["my-machine.example.ts.net.evil.example", "evil.my-machine.example.ts.net", "100.64.0.7"]) {
+  for (const host of ["my-machine.example.ts.net.evil.example", "evil.my-machine.example.ts.net", "100.64.0.7", "my-machine.example.ts.net.", "localhost.", "127.0.0.1."]) {
     assert.equal((await request(server, "GET", "/api/repos", { headers: { ...identity, Host: host } })).status, 403, host);
   }
-  for (const host of ["my-machine.example.ts.net", "MY-MACHINE.example.ts.net.", "my-machine.example.ts.net:443", "127.0.0.1", "localhost:4280", "[::1]"]) {
+  for (const host of ["my-machine.example.ts.net", "MY-MACHINE.example.ts.net", "my-machine.example.ts.net:443", "127.0.0.1", "localhost:4280", "[::1]"]) {
     assert.equal((await request(server, "GET", "/api/repos", { headers: { ...identity, Host: host } })).status, 200, host);
   }
   assert.equal(server.store.listRuns().length, 0);
+});
+
+test("a run's own browser is refused everywhere, whatever the Host, identity or origin", async (t) => {
+  for (const auth of [{ mode: "localhost-only" }, { mode: "tailscale-header", allowed: ["you@example.com"] }]) {
+    const { server } = await boot(t, { auth });
+    const agent = { "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) Chrome/140.0.0.0 Safari/537.36 segwi-run-browser", ...(auth.mode === "tailscale-header" ? { "Tailscale-User-Login": "you@example.com" } : {}) };
+    for (const [method, route] of [["GET", "/"], ["GET", "/approvals"], ["GET", "/api/approvals"], ["GET", "/api/stream"], ["POST", "/api/approvals/0123456789abcdef01234567"], ["POST", "/mcp"], ["POST", "/internal/approvals"]]) {
+      const response = await request(server, method, route, { headers: agent, body: method === "POST" ? { decision: "allow" } : undefined });
+      assert.equal(response.status, 403, `${auth.mode} ${method} ${route}`);
+    }
+    assert.ok(server.store.listAudit(20).some((row) => row.detail === "403 a run's own browser"));
+  }
 });
 
 test("tailscale-header mode refuses to start without a tailnet name", async (t) => {

@@ -12,6 +12,7 @@ import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { playwrightArguments } from "../../lib/browser.mjs";
 import { isPlainVerifyCommand, renderSettings, VERIFY_NOT_ALLOWED } from "../lib/allow-list.mjs";
+import { RUN_BROWSER_MARK } from "../lib/auth.mjs";
 import { canaryTestedVersions } from "../lib/canary-state.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -89,6 +90,9 @@ export function buildArgs({ spec, sessionId, settingsFile, mcpFile }) {
   ];
 }
 
+// The run's browser says so in every request (see RUN_BROWSER_MARK in lib/auth.mjs).
+const RUN_BROWSER_AGENT = `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 ${RUN_BROWSER_MARK}`;
+
 /** Every origin segwi answers on: loopback at its port and, behind tailscale serve, the tailnet name. */
 const ownOrigins = ({ bindPort, tailnetName }) => [
   ...(bindPort ? [`http://127.0.0.1:${bindPort}`, `http://localhost:${bindPort}`, `http://[::1]:${bindPort}`] : []),
@@ -105,7 +109,10 @@ export function renderMcpConfig({ spec }) {
       },
       // The browser runs outside the sandbox, and behind tailscale serve it would carry your identity,
       // so it must never reach segwi itself, or the agent could open the app and tap Approve.
-      playwright: { command: "npx", args: ["-y", ...playwrightArguments(spec.browser), ...(ownOrigins(spec) ? [`--blocked-origins=${ownOrigins(spec)}`] : [])] },
+      playwright: {
+        command: "npx",
+        args: ["-y", ...playwrightArguments(spec.browser), `--user-agent=${RUN_BROWSER_AGENT}`, ...(ownOrigins(spec) ? [`--blocked-origins=${ownOrigins(spec)}`] : [])],
+      },
     },
   };
 }

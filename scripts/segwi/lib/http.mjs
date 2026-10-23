@@ -2,7 +2,7 @@
 // built web app (or a one-line 503 until it is built). Bodies are never logged.
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import { PROXY_HEADERS, assertSameOriginWrite } from "./auth.mjs";
+import { PROXY_HEADERS, RUN_BROWSER_MARK, assertSameOriginWrite } from "./auth.mjs";
 import { isLoopbackAddress } from "./bind.mjs";
 import { audit } from "./audit.mjs";
 import { canaryHealth } from "./canary-state.mjs";
@@ -195,6 +195,12 @@ export function createHandler({ store, settings, authenticate, runs, approvals, 
 
   return async function handler(req, res) {
     securityHeaders(res);
+    // A run's own browser runs outside the sandbox; it must never use the app, the API or MCP, or it could approve its own calls.
+    if (String(req.headers["user-agent"] ?? "").includes(RUN_BROWSER_MARK)) {
+      audit(store, { actor: "anonymous", origin: "web", action: `${req.method} ${new URL(req.url ?? "/", "http://localhost").pathname.slice(0, 100)}`, outcome: "rejected", detail: "403 a run's own browser" });
+      res.writeHead(403, { "Content-Type": "text/plain; charset=utf-8" }).end("A run's own browser can't use segwi.\n");
+      return undefined;
+    }
     const url = new URL(req.url ?? "/", "http://localhost");
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) return handleApi(req, res, url);
     if (url.pathname === "/mcp") return mcp ? mcp(req, res) : res.writeHead(404).end();

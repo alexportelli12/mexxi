@@ -6,6 +6,13 @@
 import { isLoopbackAddress } from "./bind.mjs";
 import { HttpError } from "./errors.mjs";
 
+/**
+ * A run's browser (Playwright MCP) runs outside the sandbox. It puts this in its user agent, and segwi refuses
+ * any request that carries it. Unlike an origin list, that holds through redirects and however the host is
+ * spelled, and no browser tool a run may use can change the user agent.
+ */
+export const RUN_BROWSER_MARK = "segwi-run-browser";
+
 export const PROXY_HEADERS = ["tailscale-user-login", "tailscale-user-name", "x-forwarded-for", "forwarded"];
 const LOOPBACK_NAMES = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
@@ -21,10 +28,10 @@ export function assertAuthConfig(web) {
   }
 }
 
-/** The name in a Host header, lower-case, without its port or a trailing dot. */
+/** The name in a Host header, lower-case, without its port. A trailing dot is kept, so "localhost." matches nothing. */
 function hostName(host = "") {
   const name = host.startsWith("[") ? host.slice(0, host.indexOf("]") + 1) : host.split(":")[0];
-  return name.toLowerCase().replace(/\.$/, "");
+  return name.toLowerCase();
 }
 
 /** Returns the identity, or throws an HttpError (401 or 403). */
