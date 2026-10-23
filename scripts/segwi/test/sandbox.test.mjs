@@ -47,6 +47,17 @@ test("inside the sandbox a command off the allow list still waits for a person, 
   assert.equal(results[0]?.isError, true, results[0]?.text);
 });
 
+test("git --output is refused wherever it appears, and git fetch with options or git grep goes to a person", { skip, timeout: 180_000 }, async (t) => {
+  const bash = (command) => ({ tool: "Bash", input: { command, description: "check" } });
+  const { results, approvals } = await runScripted(t, {
+    script: [bash("git diff HEAD --output=diff.txt"), bash("git log -1 --output log.txt"), bash("git fetch --upload-pack=touch origin"), bash("git grep -O cat README"), bash("git status --short"), { text: "Done." }],
+    decide: () => "deny",
+  });
+  for (const index of [0, 1]) assert.match(results[index]?.text ?? "", /has been denied/, `turn ${index}`);
+  assert.deepEqual(approvals.map((approval) => approval.exact), ["git fetch --upload-pack=touch origin", "git grep -O cat README"]);
+  assert.equal(results[4]?.isError, false, "an ordinary git command still runs unasked");
+});
+
 test("control: with only the sandbox turned off, the same command reaches segwi once a person allows it", { skip, timeout: 180_000 }, async (t) => {
   const { results, audit, approvals, run } = await runScripted(t, { script: [direct, { text: "Done." }], settingsPatch: { sandbox: { enabled: false } } });
 

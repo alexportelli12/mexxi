@@ -107,14 +107,16 @@ for (const runner of RUNNERS) {
     const runDir = path.join(dir, "data", "runs", spec.runId);
     const settings = JSON.parse(readFileSync(path.join(runDir, "settings.json"), "utf8"));
     const { allow, deny } = settings.permissions;
-    assert.ok(allow.includes("Bash(ibni:*)") && allow.includes("Bash(npm run verify:*)") && allow.includes("mcp__playwright__*"));
+    assert.ok(allow.includes("Bash(ibni:*)") && allow.includes("Bash(npm run verify)") && allow.includes("mcp__playwright__*"));
+    assert.ok(!allow.includes("Bash(npm run verify:*)"), "the verify command is exact, never a prefix");
+    assert.ok(allow.includes("Bash(git fetch)") && allow.includes("Bash(git fetch origin)"));
     assert.ok(allow.includes(`Edit(/${spec.worktreeRoot}/**)`) && allow.includes(`Read(/${spec.worktreeRoot}/**)`));
     // mexxi's command-fixer mod prefixes a piped verify with exactly this; it is allowed as an exact command, never as a prefix.
     assert.ok(allow.includes("Bash(set -o pipefail)") && !allow.some((rule) => rule.startsWith("Bash(set -o pipefail:")));
-    for (const forbidden of ["python3", "node -e", "curl", "wget", "rm", "cp", "kill", "git push", "gh api"]) {
+    for (const forbidden of ["python3", "node -e", "curl", "wget", "rm", "cp", "kill", "git push", "gh api", "git grep", "git fetch:"]) {
       assert.ok(!allow.some((rule) => rule.startsWith(`Bash(${forbidden}`)), `${forbidden} is not allowed`);
     }
-    assert.deepEqual(deny, ["Bash(npm publish:*)", "Bash(git push --force:*)"]);
+    assert.deepEqual(deny, ["Bash(npm publish:*)", "Bash(git push --force:*)", "Bash(git *--output*)", "Bash(gh *--output*)"]);
     assert.equal(settings.permissions.disableBypassPermissionsMode, "disable");
     assert.equal(settings.sandbox.enabled, true);
     assert.equal(settings.sandbox.allowUnsandboxedCommands, false);

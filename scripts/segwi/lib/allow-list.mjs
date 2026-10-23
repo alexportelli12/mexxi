@@ -1,10 +1,17 @@
 // The rendered Claude Code settings for a run. The allow list is derived from
 // real /wettaq and /lesti sessions (see the plan's Spike results): everything a
 // normal run does is allowed, so a person is only asked about the unusual.
-// Interpreters, network clients, rm/cp/mv, kill, git push and gh api stay off it.
+// Shells, interpreters run directly, network clients, rm/cp/mv, kill, git push
+// and gh api stay off it. It is not a boundary for code, though: npm run, the npx
+// test tools and node --test run the repository's own code, which the agent can
+// edit. The sandbox is what bounds that code.
 import { denyRules } from "../../lib/claude-settings.mjs";
 
-const GIT = ["status", "diff", "log", "show", "add", "commit", "grep", "ls-files", "rev-parse", "fetch", "check-ignore", "rm", "mv"];
+// Not grep or fetch with arguments: git grep -O and git fetch --upload-pack run a program of the caller's choosing.
+const GIT = ["status", "diff", "log", "show", "add", "commit", "ls-files", "rev-parse", "check-ignore", "rm", "mv"];
+const GIT_EXACT = ["git fetch", "git fetch origin"];
+// --output makes git diff, log and show write a file anywhere, wherever it appears in the command.
+const OUTPUT_DENY = ["Bash(git *--output*)", "Bash(gh *--output*)"];
 const GH = ["pr create", "pr view", "pr edit", "pr checks", "pr diff", "run view", "run list"];
 const NPM = ["ci", "run", "test", "audit", "view"];
 const NPX = ["prettier", "vitest", "playwright", "tsc", "eslint", "ng", "oxlint"];
@@ -34,8 +41,11 @@ export function isPlainVerifyCommand(command) {
 export function allowRules({ worktreeRoot, verifyCommand, tempDir }) {
   const roots = [worktreeRoot, tempDir];
   return [
-    ...["ibni", ...(isPlainVerifyCommand(verifyCommand) ? [verifyCommand] : []), "vfk", "npx vfk", "npx verifika"].map(prefix),
+    ...["ibni", "vfk", "npx vfk", "npx verifika"].map(prefix),
+    // The verify command exactly as the repository names it, never as a prefix that would also allow what follows it.
+    ...(isPlainVerifyCommand(verifyCommand) ? [`Bash(${verifyCommand.trim()})`] : []),
     ...GIT.map((sub) => prefix(`git ${sub}`)),
+    ...GIT_EXACT.map((command) => `Bash(${command})`),
     ...GH.map((sub) => prefix(`gh ${sub}`)),
     ...NPM.map((sub) => prefix(`npm ${sub}`)),
     "Bash(npm install)",
@@ -52,7 +62,7 @@ export function renderSettings({ worktreeRoot, verifyCommand, tempDir, denyPatte
   return {
     permissions: {
       allow: allowRules({ worktreeRoot, verifyCommand, tempDir }),
-      deny: denyRules(denyPatterns),
+      deny: [...denyRules(denyPatterns), ...OUTPUT_DENY],
       disableBypassPermissionsMode: "disable",
     },
     sandbox: {
