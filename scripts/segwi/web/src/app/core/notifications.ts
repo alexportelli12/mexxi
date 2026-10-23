@@ -2,7 +2,7 @@ import { Injectable, inject, signal } from '@angular/core';
 import { ApiError, ApiService } from './api';
 import { readSetting, writeSetting } from './draft';
 
-export type NotificationState = 'checking' | 'unsupported' | 'needs-home-screen' | 'denied' | 'off' | 'on';
+export type NotificationState = 'checking' | 'unsupported' | 'needs-home-screen' | 'not-set-up' | 'denied' | 'off' | 'on';
 
 const SUBSCRIPTION_SETTING = 'push-subscription';
 
@@ -41,6 +41,12 @@ export class NotificationsService {
     if (needsHomeScreen()) return this.state.set('needs-home-screen');
     if (!this.supported()) return this.state.set('unsupported');
     if (Notification.permission === 'denied') return this.state.set('denied');
+    try {
+      await this.api.pushKey();
+    } catch (error) {
+      // A 404 means the server has no push keys yet; any other failure is left for "Turn on" to report.
+      if (error instanceof ApiError && error.status === 404) return this.state.set('not-set-up');
+    }
     try {
       const registration = await navigator.serviceWorker.getRegistration();
       const subscription = await registration?.pushManager.getSubscription();

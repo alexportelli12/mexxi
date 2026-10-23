@@ -2,11 +2,13 @@
 // spawns the real approver from the rendered MCP config, a person answers through
 // the REST API, and the host receives the decision.
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
 import http from "node:http";
 import { Readable } from "node:stream";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { createHandler } from "../lib/http.mjs";
 import { startServer } from "../lib/serve.mjs";
 import { fakeAdapter, makeRepo, makeSettings, request, tempDir, waitFor } from "./helpers.mjs";
@@ -243,4 +245,48 @@ test("the deny list is rendered in deny form, and a deny-listed command never ma
   assert.ok(!settings.permissions.allow.some((rule) => /git push/.test(rule)));
   assert.equal(server.store.listApprovals({ status: "pending" }).length + server.store.listApprovals({ status: "expired" }).length, 0);
   assert.deepEqual(host.report().approverReplies, []);
+});
+
+// The fake host must wait as long as real Claude Code does: MCP_TOOL_TIMEOUT, not the MCP SDK's 60 s default.
+// A short injected timeout keeps this fast: the first run proves the variable is what the host waits on,
+// the second that a hold longer than a too-short wait survives once the variable allows it.
+test("the fake host waits for the approver as long as MCP_TOOL_TIMEOUT says", async (t) => {
+  const dir = tempDir(t, "segwi-slow-approver-");
+  const sdk = path.dirname(fileURLToPath(import.meta.resolve("@modelcontextprotocol/sdk/server/mcp.js")));
+  const zod = import.meta.resolve("zod");
+  const slowApprover = path.join(dir, "slow-approver.mjs");
+  writeFileSync(slowApprover, `
+    import { McpServer } from ${JSON.stringify(pathToFileURL(path.join(sdk, "mcp.js")).href)};
+    import { StdioServerTransport } from ${JSON.stringify(pathToFileURL(path.join(sdk, "stdio.js")).href)};
+    import { z } from ${JSON.stringify(zod)};
+    const server = new McpServer({ name: "segwi", version: "0.0.0" });
+    server.registerTool("approve", { inputSchema: { tool_name: z.string(), input: z.record(z.string(), z.unknown()), tool_use_id: z.string().optional() } },
+      async ({ input }) => { await new Promise((resolve) => setTimeout(resolve, 1200)); return { content: [{ type: "text", text: JSON.stringify({ behavior: "allow", updatedInput: input }) }] }; });
+    await server.connect(new StdioServerTransport());
+  `);
+  const mcpConfig = path.join(dir, "mcp.json");
+  writeFileSync(mcpConfig, JSON.stringify({ mcpServers: { segwi: { command: process.execPath, args: [slowApprover], env: {} } } }));
+  const fixture = path.join(dir, "approve.jsonl");
+  writeFileSync(fixture, `${JSON.stringify({ segwi_fixture: "approve", tool_name: "Bash", input: { command: "ls" }, tool_use_id: "toolu_1" })}\n`);
+
+  const runHost = (name, toolTimeout) => new Promise((resolve) => {
+    const reportFile = path.join(dir, `${name}.json`);
+    const host = spawn(process.execPath, [fileURLToPath(new URL("./fake-host.mjs", import.meta.url)), fixture, reportFile, "--mcp-config", mcpConfig], {
+      env: { ...process.env, MCP_TOOL_TIMEOUT: String(toolTimeout) }, stdio: ["pipe", "pipe", "ignore"],
+    });
+    host.stdin.write('{"type":"user"}\n');
+    host.on("exit", (code) => {
+      let replies = [];
+      try { replies = JSON.parse(readFileSync(reportFile, "utf8")).approverReplies; } catch { /* no report */ }
+      resolve({ code, replies });
+    });
+    setTimeout(() => host.stdin.end(), 3000);
+  });
+
+  const tooShort = await runHost("short", 300);
+  assert.notEqual(tooShort.code, 0, "a 300 ms wait can't outlast a 1.2 s approval");
+  assert.deepEqual(tooShort.replies, []);
+  const generous = await runHost("generous", 10_000);
+  assert.equal(generous.code, 0);
+  assert.equal(generous.replies[0].behavior, "allow");
 });

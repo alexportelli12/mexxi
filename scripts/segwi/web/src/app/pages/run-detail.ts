@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, DestroyRef, afterNextRender, computed, effect, inject, input, signal, untracked } from '@angular/core';
+import { ChangeDetectionStrategy, Component, DestroyRef, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 import { ApiError, ApiService } from '../core/api';
@@ -25,12 +25,18 @@ const atBottom = (): boolean => window.innerHeight + window.scrollY >= document.
 const reducedMotion = (): boolean => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** Only a plain https link is shown as one: a run's PR address comes from outside. */
+/** A short name for a PR link, so a long address never wraps mid-word: "Pull request #42". */
+export const prName = (url: string): string => {
+  const number = /\/pull\/(\d+)/.exec(url)?.[1];
+  return number ? `Pull request #${number}` : 'Pull request';
+};
+
 export const safeLink = (url: string | null): string | null => (url && /^https:\/\//.test(url) ? url : null);
 
 @Component({
   imports: [RouterLink, ApprovalCard, Banner, Button, Card, CopyButton, EmptyState, RelativeTime, Sheet, Skeleton, StatusPill],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: { '(window:scroll)': 'onScroll()', '(window:resize)': 'onScroll()' },
+  host: { '(window:scroll)': 'onScroll()', '(window:resize)': 'refreshAway()' },
   template: `
     <h1 class="text-2xl font-semibold">{{ title }}</h1>
 
@@ -59,7 +65,7 @@ export const safeLink = (url: string | null): string | null => (url && /^https:\
           <dt class="text-muted">Pull request</dt>
           <dd class="flex flex-wrap items-center gap-x-2">
             @if (prLink()) {
-              <a [href]="prLink()" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-11 items-center break-all underline underline-offset-4">{{ prLink() }}</a>
+              <a [href]="prLink()" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-11 items-center underline underline-offset-4">{{ prLabel() }}</a>
               <segwi-copy-button [text]="prLink()!" label="the pull request link" />
             } @else { – }
           </dd>
@@ -118,7 +124,7 @@ export const safeLink = (url: string | null): string | null => (url && /^https:\
           <segwi-status-pill [status]="run()!.status" [reason]="run()!.reason" />
           @switch (run()!.status) {
             @case ('completed') {
-              @if (prLink()) { <a [href]="prLink()" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-11 items-center break-all underline underline-offset-4">{{ prLink() }}</a> }
+              @if (prLink()) { <a [href]="prLink()" target="_blank" rel="noopener noreferrer" class="inline-flex min-h-11 items-center underline underline-offset-4">{{ prLabel() }}</a> }
               @else { <p class="text-muted">The run finished without a pull request.</p> }
             }
             @case ('failed') { <p>{{ run()!.reason ?? 'The run failed.' }}</p> }
@@ -127,12 +133,11 @@ export const safeLink = (url: string | null): string | null => (url && /^https:\
         </segwi-card>
       }
 
-      @if (away()) {
-        <button segwi-button variant="primary" type="button" class="fixed right-4 bottom-[calc(10rem+env(safe-area-inset-bottom))] z-30 shadow-lg lg:bottom-28" (click)="jump()">Jump to latest</button>
-      }
-
-      @if (!isFinal()) {
-        <div class="sticky-bar flex flex-col gap-3">
+      <div [class]="isFinal() ? 'sticky-anchor' : 'sticky-bar flex flex-col gap-3'">
+        @if (away()) {
+          <button segwi-button variant="primary" type="button" class="jump-to-latest shadow-lg" (click)="jump()">Jump to latest</button>
+        }
+        @if (!isFinal()) {
           @if (run()!.status === 'needs_input') {
             <form class="flex flex-col gap-2" (submit)="send($event)">
               <label for="reply" class="text-sm text-muted">Your reply</label>
@@ -146,11 +151,11 @@ export const safeLink = (url: string | null): string | null => (url && /^https:\
           }
           @if (actionError()) { <p class="text-sm text-failed" role="alert">{{ actionError() }}</p> }
           <button segwi-button type="button" class="self-start" (click)="confirming.set(true)">Stop…</button>
-        </div>
-      }
+        }
+      </div>
 
       <segwi-sheet [open]="confirming()" heading="Stop this run?" (closed)="confirming.set(false)">
-        <p class="text-muted">Stop this run? The agent stops now; its branch and any open PR stay.</p>
+        <p class="text-muted">The agent stops now; its branch and any open PR stay.</p>
         <div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
           <button segwi-button type="button" autofocus (click)="confirming.set(false)">Keep running</button>
           <button segwi-button variant="danger" type="button" [disabled]="stopping()" (click)="stop()">Stop run</button>
@@ -175,11 +180,15 @@ export class RunDetailPage {
   protected readonly stopping = signal(false);
   protected readonly confirming = signal(false);
   protected readonly away = signal(false);
+  /** Set once the reader scrolls; "Jump to latest" never shows on a page they haven't moved. */
+  private userScrolled = false;
+  private jumping = false;
   private readonly overrides = signal<Record<string, boolean>>({});
 
   protected readonly steps = computed(() => this.run()?.steps ?? []);
   protected readonly isFinal = computed(() => !!this.run() && isFinal(this.run()!.status));
   protected readonly prLink = computed(() => safeLink(this.run()?.prUrl ?? null));
+  protected readonly prLabel = computed(() => prName(this.prLink() ?? ''));
   protected readonly approvals = computed(() => this.live.shownApprovals().filter((entry) => entry.approval.runId === this.id()));
   protected readonly actionText = computed(() => {
     const run = this.run();
@@ -204,7 +213,7 @@ export class RunDetailPage {
     this.live.runUpdates.pipe(takeUntilDestroyed(destroyRef)).subscribe((message) => {
       if (message.runId === this.id()) void this.load();
     });
-    afterNextRender(() => this.onScroll());
+    
   }
 
   protected async load(): Promise<void> {
@@ -234,18 +243,31 @@ export class RunDetailPage {
   private followIf(wasAtBottom: boolean): void {
     setTimeout(() => {
       if (wasAtBottom) window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'instant' });
-      this.onScroll();
+      this.refreshAway();
     });
   }
 
   protected onScroll(): void {
+    if (this.jumping) {
+      // Our own smooth scroll passes through the middle of the page; it must not bring the button back.
+      if (atBottom()) this.jumping = false;
+      else return;
+    }
+    this.userScrolled = !atBottom();
+    this.refreshAway();
+  }
+
+  protected refreshAway(): void {
     const scrollable = document.documentElement.scrollHeight > window.innerHeight + 40;
-    this.away.set(scrollable && !atBottom());
+    this.away.set(this.userScrolled && scrollable && !atBottom());
   }
 
   protected jump(): void {
+    this.jumping = true;
+    this.userScrolled = false;
     window.scrollTo({ top: document.documentElement.scrollHeight, behavior: reducedMotion() ? 'instant' : 'smooth' });
     this.away.set(false);
+    setTimeout(() => (this.jumping = false), 1500);
   }
 
   protected stepLabel = (step: Step): string => (step.type === 'message' ? (step.from === 'you' ? 'You' : 'Agent') : STEP_LABELS[step.type]);

@@ -22,7 +22,7 @@ import type { Run } from '../models';
   template: `
     <h1 class="text-2xl font-semibold">{{ title }}</h1>
 
-    <nav class="-mt-1 flex flex-wrap gap-2" aria-label="Filter runs">
+    <nav class="flex flex-wrap gap-2" aria-label="Filter runs">
       @for (chip of filters; track chip.id) {
         <a [routerLink]="[]" [queryParams]="{ filter: chip.id === 'all' ? null : chip.id }" replaceUrl
           [attr.aria-current]="filter() === chip.id ? 'true' : null"
