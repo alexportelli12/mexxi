@@ -207,6 +207,57 @@ for (const runner of RUNNERS) {
     assert.equal(mcp.mcpServers.segwi.env.SEGWI_RUN_SECRET, "per-run-secret");
   });
 
+  test(`${runner.id}: a run drops NODE_ENV, reaches the hosts config adds, and gets segwi's browser launcher as CHROME_BIN`, async (t) => {
+    process.env.NODE_ENV = "production";
+    t.after(() => { delete process.env.NODE_ENV; });
+    const shell = "/opt/browsers/chrome-headless-shell";
+    const { adapter, dir, report } = runner.adapter(t, "ask-completed", { headlessShell: () => shell });
+    const spec = specFor(makeRepo(t), { action: "build", allowedDomains: ["fonts.googleapis.com", "github.com"] });
+    const events = await drive(adapter, spec, (all) => results(all).length === 1);
+    adapter.close(spec.runId);
+    await waitFor(() => exited(events));
+
+    const settings = JSON.parse(readFileSync(path.join(dir, "data", "runs", spec.runId, "settings.json"), "utf8"));
+    assert.deepEqual(settings.sandbox.network.allowedDomains, ["github.com", "*.github.com", "*.githubusercontent.com", "registry.npmjs.org", "fonts.googleapis.com"]);
+    const host = report();
+    // segwi's service runs with NODE_ENV=production, under which npm ci would leave out the repository's dev tools.
+    assert.equal(host.nodeEnv, null);
+    assert.equal(host.chromeBin, fileURLToPath(new URL("../bin/chromium.mjs", import.meta.url)));
+    assert.equal(host.headlessShell, shell);
+    assert.match(host.args.at(-1), /CHROME_BIN already names a headless Chromium/);
+    assert.ok(!events.some((event) => event.kind === "text" && /No chrome-headless-shell/.test(event.text)));
+  });
+
+  test(`${runner.id}: without a headless shell a build run says so and leaves CHROME_BIN alone, and an ask run never looks`, async (t) => {
+    let looked = 0;
+    const build = runner.adapter(t, "ask-completed", { headlessShell: () => { looked += 1; return null; } });
+    const buildSpec = specFor(makeRepo(t), { action: "build" });
+    const buildEvents = await drive(build.adapter, buildSpec, (all) => results(all).length === 1);
+    build.adapter.close(buildSpec.runId);
+    await waitFor(() => exited(buildEvents));
+    assert.ok(buildEvents.some((event) => event.kind === "text" && /No chrome-headless-shell is installed/.test(event.text)));
+    assert.equal(build.report().chromeBin, process.env.CHROME_BIN ?? null);
+    assert.doesNotMatch(build.report().args.at(-1), /CHROME_BIN/);
+
+    const ask = runner.adapter(t, "ask-completed", { headlessShell: () => { looked += 1; return "/opt/browsers/chrome-headless-shell"; } });
+    const askSpec = specFor(makeRepo(t));
+    const askEvents = await drive(ask.adapter, askSpec, (all) => results(all).length === 1);
+    ask.adapter.close(askSpec.runId);
+    await waitFor(() => exited(askEvents));
+    assert.equal(looked, 1, "only the build run looked for a browser");
+    assert.equal(ask.report().headlessShell, null);
+  });
+
+  test(`${runner.id}: a run started without the sandbox (segwi.allowUnsandboxed) never gets the browser launcher, which turns Chromium's own sandbox off`, async (t) => {
+    const { adapter, report } = runner.adapter(t, "ask-completed", { sandboxProblems: () => ["no bubblewrap"], headlessShell: () => "/opt/browsers/chrome-headless-shell" });
+    const spec = specFor(makeRepo(t), { action: "build" });
+    const events = await drive(adapter, spec, (all) => results(all).length === 1);
+    adapter.close(spec.runId);
+    await waitFor(() => exited(events));
+    assert.equal(report().headlessShell, null);
+    assert.equal(report().chromeBin, process.env.CHROME_BIN ?? null);
+  });
+
   test(`${runner.id}: the run's browser is blocked from segwi's own origins`, async (t) => {
     const { adapter, dir } = runner.adapter(t, "ask-completed");
     const spec = specFor(makeRepo(t), { bindPort: 4280 });

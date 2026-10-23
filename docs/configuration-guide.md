@@ -83,6 +83,14 @@ A [segwi](segwi.md) run asks you only about what its allow list and [permissions
 { "segwi": { "branchPrefixes": ["security/"], "repositories": [{ "name": "my-app", "path": "~/workspace/my-app", "actions": ["build", "ask"], "permissions": "strict" }] } }
 ```
 
+### Let a segwi run's build reach a host it needs
+
+A run's network reaches only GitHub and the npm registry, so a build that downloads Google Fonts into its pages fails there. Add the hosts to the one repository that needs them, then check with `node scripts/segwi/smoke.mjs --repo my-app` ([more](segwi.md#let-a-runs-checks-pass-in-the-sandbox)):
+
+```json
+{ "segwi": { "repositories": [{ "name": "my-app", "path": "~/workspace/my-app", "actions": ["build"], "allowedDomains": ["fonts.googleapis.com", "fonts.gstatic.com"] }] } }
+```
+
 ### Use another verify command, or reuse a CI run that already passed
 
 In the repository's `.mexxi.json`:

@@ -58,7 +58,7 @@ export function fakeAdapter(t, fixture, options = {}) {
   const reportFile = path.join(dir, "report.json");
   const file = path.isAbsolute(fixture) ? fixture : path.join(fixturesDir, "claude-code", `${fixture}.jsonl`);
   const adapter = createClaudeCodeAdapter({
-    bin: process.execPath, binArgs: [fakeHost, file, reportFile], dataDir: path.join(dir, "data"), killGraceMs: [200, 200], sandboxProblems: () => [], ...options,
+    bin: process.execPath, binArgs: [fakeHost, file, reportFile], dataDir: path.join(dir, "data"), killGraceMs: [200, 200], sandboxProblems: () => [], headlessShell: () => null, ...options,
   });
   return { adapter, report: () => JSON.parse(readFileSync(reportFile, "utf8")), dir };
 }
