@@ -5,7 +5,9 @@
 // and gh api stay off it. It is not a boundary for code, though: npm run, the npx
 // test tools and node --test run the repository's own code, which the agent can
 // edit. The sandbox is what bounds that code.
+import { statSync } from "node:fs";
 import path from "node:path";
+import { sanitizePrefix } from "../../ibni/lib/config.mjs";
 import { denyRules } from "../../lib/claude-settings.mjs";
 
 // Not grep or fetch with arguments: git grep -O and git fetch --upload-pack run a program of the caller's choosing.
@@ -88,16 +90,27 @@ export function allowRules({ action, worktreeRoot, verifyCommand, tempDir, repoP
 }
 
 /**
- * The parts of the control checkout's git directory a run's commits and fetches in its linked worktree write:
- * objects, its own branches, remote and tag refs, reflogs and worktree metadata. Not HEAD, the index,
- * packed-refs, info, config, hooks or the default branch: rewriting those would bring planted code into your
- * checkout the next time you, or ibni prepare, update it. The adapter creates any that don't exist yet.
+ * The branch prefixes a build or ready run may write, each as ibni prepare spells it in a branch name:
+ * workflow.branchPrefix and then segwi.branchPrefixes, without repeats. ibni prepare refuses any other.
  */
-export function gitWritePaths(gitCommonDir, branchPrefix) {
+export function writablePrefixes(branchPrefix, branchPrefixes = []) {
+  return [...new Set([branchPrefix, ...branchPrefixes].map((prefix) => `${sanitizePrefix(prefix.replace(/\/+$/, ""))}/`))];
+}
+
+/** The folder a prefix's branches live in under the git directory's refs/heads. */
+export const branchFolder = (gitCommonDir, prefix) => path.join(gitCommonDir, "refs", "heads", prefix.replace(/\/+$/, ""));
+
+/**
+ * The parts of the control checkout's git directory a run's commits and fetches in its linked worktree write:
+ * objects, its own branches (under `prefixes` only), remote and tag refs, reflogs and worktree metadata. Not HEAD,
+ * the index, packed-refs, info, config, hooks or the default branch: rewriting those would bring planted code into
+ * your checkout the next time you, or ibni prepare, update it. The adapter creates any that don't exist yet.
+ */
+export function gitWritePaths(gitCommonDir, prefixes) {
   return [
-    "objects", path.join("refs", "heads", branchPrefix.replace(/\/+$/, "")), path.join("refs", "remotes"), path.join("refs", "tags"),
-    path.join("logs", "refs"), "worktrees",
-  ].map((part) => path.join(gitCommonDir, part));
+    path.join(gitCommonDir, "objects"), ...prefixes.map((prefix) => branchFolder(gitCommonDir, prefix)),
+    ...[path.join("refs", "remotes"), path.join("refs", "tags"), path.join("logs", "refs"), "worktrees"].map((part) => path.join(gitCommonDir, part)),
+  ];
 }
 
 /**
@@ -109,10 +122,10 @@ export function gitWritePaths(gitCommonDir, branchPrefix) {
  * deny the git directory. ibni runs outside the sandbox (see renderSettings). An ask run starts in the
  * checkout and writes nothing there.
  */
-function filesystemRules({ action, worktreeRoot, tempDir, repoPath, gitCommonDir, branchPrefix, controlEntries = [], existingGit = [], denyRead = [] }) {
+function filesystemRules({ action, worktreeRoot, tempDir, repoPath, gitCommonDir, prefixes, controlEntries = [], existingGit = [], denyRead = [] }) {
   if (action === "ask") return { allowWrite: [tempDir], denyWrite: [repoPath], denyRead };
   return {
-    allowWrite: [worktreeRoot, tempDir, ...gitWritePaths(gitCommonDir, branchPrefix)],
+    allowWrite: [worktreeRoot, tempDir, ...gitWritePaths(gitCommonDir, prefixes)],
     denyWrite: [
       ...["config", "hooks", "modules"].map((name) => path.join(gitCommonDir, name)),
       // Other sessions' worktree metadata and branches, as they stand when the run starts, are not this run's to change.
@@ -134,28 +147,51 @@ const controlDenyRules = (repoPath) => [`Edit(/${repoPath}/*)`];
 /** The Read tool runs outside the sandbox, so denyRead alone doesn't stop it; each secret path is denied to it too. */
 const secretReadRules = (paths) => paths.flatMap((file) => [`Read(/${file})`, `Read(/${file}/**)`]);
 
+const isFolder = (file) => {
+  try {
+    return statSync(file).isDirectory();
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * The file tools run outside the sandbox too, and in auto mode a model, not a person, judges a write outside the
+ * worktree. So the paths whose contents later run as you, or steer the agent, are denied to them in every mode. A
+ * folder gets only the `/*` form, as the control checkout does: a rule without a glob becomes a read-only sandbox
+ * mount, and over the mexxi clone that would cover its git directory too, so a run in it could no longer commit.
+ */
+const protectedWriteRules = (paths) => [...new Set(paths)].map((file) => (isFolder(file) ? `Edit(/${file}/*)` : `Edit(/${file})`));
+
+// What a run never does unasked, in any mode, though in sandboxed mode it would run inside the sandbox, which can
+// reach GitHub: push, or change a repository through gh. ibni publish is the run's own way to push.
+const ASK_RULES = ["git push", "gh api", "gh repo", "gh release", "gh pr merge"].map(prefix);
+
 /**
  * `denyRead` are the secrets nothing in the sandbox needs: keys and credentials in the home directory, and
  * segwi's own state and data (its tokens, push key, run secrets and pending approvals). Only existing paths.
  */
 export function renderSettings({ action, worktreeRoot, verifyCommand, tempDir, repoPath, gitCommonDir = path.join(repoPath, ".git"), branchPrefix = "agent/",
-  controlEntries = [], existingGit = [], denyRead = [], denyPatterns }) {
+  branchPrefixes = [], permissions = "strict", controlEntries = [], existingGit = [], denyRead = [], denyEdit = [], denyPatterns }) {
+  const prefixes = writablePrefixes(branchPrefix, branchPrefixes);
   return {
     permissions: {
       allow: allowRules({ action, worktreeRoot, verifyCommand, tempDir, repoPath }),
-      deny: [...denyRules(denyPatterns), ...OUTPUT_DENY, ...BROWSER_DENY, ...controlDenyRules(repoPath), ...secretReadRules(denyRead)],
+      deny: [...denyRules(denyPatterns), ...OUTPUT_DENY, ...BROWSER_DENY, ...controlDenyRules(repoPath), ...secretReadRules(denyRead), ...protectedWriteRules([...denyRead, ...denyEdit])],
+      ask: ASK_RULES,
       disableBypassPermissionsMode: "disable",
     },
     sandbox: {
       enabled: true,
-      // Claude Code otherwise runs every sandboxed Bash command unasked, so the allow list would never be read.
-      autoAllowBashIfSandboxed: false,
+      // Only in sandboxed mode does a command inside the sandbox run unasked. Otherwise the allow list is read
+      // first, and what it doesn't cover goes to a person (strict) or auto mode's classifier (auto).
+      autoAllowBashIfSandboxed: permissions === "sandboxed",
       allowUnsandboxedCommands: false,
       // ibni prepare must fast-forward the checkout, so it alone runs outside, and only as a single plain command,
       // never a compound one. It runs in the checkout, whose git config the run can't change. Every other ibni
       // command stays inside: the run can point its own worktree at a git config of its choosing.
       ...(action === "ask" ? {} : { excludedCommands: ["ibni prepare *"] }),
-      filesystem: filesystemRules({ action, worktreeRoot, tempDir, repoPath, gitCommonDir, branchPrefix, controlEntries, existingGit, denyRead }),
+      filesystem: filesystemRules({ action, worktreeRoot, tempDir, repoPath, gitCommonDir, prefixes, controlEntries, existingGit, denyRead }),
       network: { allowedDomains: SANDBOX_DOMAINS },
     },
   };

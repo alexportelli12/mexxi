@@ -41,3 +41,15 @@ test("the canary defaults to a small model and a short run, and refuses a model 
   await assert.rejects(resolveConfig({ segwi: { canary: { model: "haiku; rm" } } }, { home }), ConfigError);
   await assert.rejects(resolveConfig({ segwi: { canary: { maxTurns: 0 } } }, { home }), ConfigError);
 });
+
+test("runs use auto permissions and only workflow.branchPrefix by default, and an unknown mode or a bad prefix is refused", async () => {
+  const { segwi } = await resolveConfig({}, { home });
+  assert.equal(segwi.permissions, "auto");
+  assert.deepEqual(segwi.branchPrefixes, []);
+  const repository = { name: "my-app", path: "~/workspace/my-app", actions: ["build"] };
+  const set = await resolveConfig({ segwi: { permissions: "strict", branchPrefixes: ["security/"], repositories: [{ ...repository, permissions: "sandboxed" }] } }, { home });
+  assert.equal(set.segwi.repositories[0].permissions, "sandboxed");
+  for (const segwi of [{ permissions: "yolo" }, { branchPrefixes: ["security"] }, { branchPrefixes: ["../x/"] }, { branchPrefixes: ["Security/"] }, { repositories: [{ ...repository, permissions: "bypass" }] }]) {
+    await assert.rejects(resolveConfig({ segwi }, { home }), ConfigError, JSON.stringify(segwi));
+  }
+});

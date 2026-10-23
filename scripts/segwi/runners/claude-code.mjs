@@ -11,7 +11,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { playwrightArguments } from "../../lib/browser.mjs";
-import { gitWritePaths, isPlainVerifyCommand, renderSettings, VERIFY_NOT_ALLOWED } from "../lib/allow-list.mjs";
+import { branchFolder, gitWritePaths, isPlainVerifyCommand, renderSettings, VERIFY_NOT_ALLOWED, writablePrefixes } from "../lib/allow-list.mjs";
 import { RUN_BROWSER_MARK } from "../lib/auth.mjs";
 import { canaryTestedVersions } from "../lib/canary-state.mjs";
 
@@ -19,22 +19,49 @@ const execFileAsync = promisify(execFile);
 const serverEntry = fileURLToPath(new URL("../server.mjs", import.meta.url));
 const testedVersions = JSON.parse(readFileSync(new URL("./claude-code.tested.json", import.meta.url), "utf8"));
 
+// What happens to a call off the allow list, in each permissions mode (segwi.permissions). Auto mode asks nobody
+// first, so it says what to do instead when a call is refused: stop and ask, which shows as "Needs your reply".
+const PERMISSION_PROMPTS = {
+  strict: "A person must approve any tool call outside this run's allow list, and the run waits until they answer from their phone. ",
+  sandboxed: "Commands that run inside the sandbox run without asking. A person must approve any other tool call outside this run's allow list, "
+    + "and the run waits until they answer from their phone. ",
+  auto: "Claude Code's auto mode reviews each tool call outside this run's allow list and may refuse it. "
+    + "If an action is refused, never retry it in pieces or rephrase it, and don't reach the same result another way, even where the refusal suggests one: "
+    + "stop and ask the person what to do, saying what you were trying to do and why, then wait for their reply. ",
+};
 // Concrete on purpose: with a vaguer prompt, a real build run edited files through heredocs and sed, and each edit
 // waited on a person. Later runs also waited on a cat and ls chain, which the allow list doesn't cover, and on an
 // inline multi-line PR body. The packed-refs line is there because the sandbox keeps that file read-only on purpose.
-const SYSTEM_PROMPT = "A person must approve any tool call outside this run's allow list, and the run waits until they answer from their phone. "
-  + "Change files only with the Edit and Write tools, never with shell redirection, heredocs, tee or sed -i. "
+const SYSTEM_PROMPT = "Change files only with the Edit and Write tools, never with shell redirection, heredocs, tee or sed -i. "
   + "Read, list and search files only with the Read, Glob and Grep tools, never with cat, head, ls, find or grep in Bash. "
   + "Keep each Bash call to plain commands, without variable assignments or subshells. "
   + "Give gh pr create and gh pr edit their description with --body-file, after writing it with the Write tool, never inline with --body. "
   + "git commit here prints \"Unable to create '.../packed-refs.lock': Read-only file system\" and still succeeds: that is expected, so leave it alone. "
   + "This holds even where other guidance suggests editing through the shell.";
 const ASK_PROMPT = " This run only answers a question: read what you need and change nothing.";
+
+/**
+ * How a build or ready run must call ibni prepare. A real run chained it after an echo, so the whole call stayed in
+ * the sandbox and couldn't lock the checkout's git directory, and another passed --prefix for a branch the sandbox
+ * can't write.
+ */
+function preparePrompt(prefixes) {
+  const [own, ...others] = prefixes;
+  const prefix = others.length
+    ? `Pass --prefix to ibni prepare only when the repository's own instructions require one of ${others.join(", ")}; otherwise leave it out, and the branch goes under ${own}. No other prefix can be written here.`
+    : `Never pass --prefix to ibni prepare: this run may write only branches under ${own}, even where a repository instruction asks for another prefix.`;
+  return " Run ibni prepare as a Bash call of its own, with nothing before or after it (no echo, cd, ;, && or |): only then does it run outside the sandbox, "
+    + `where it can update your checkout. ${prefix}`;
+}
 const RESULT_DETAIL_MAX = 8000;
 // What Claude Code's sandbox needs on Linux. Without them it runs commands unsandboxed and says nothing.
 const SANDBOX_TOOLS = ["bwrap", "socat"];
 // Credentials nothing inside the sandbox needs; gh's own config stays readable, because gh pr view needs it.
 const SECRET_PATHS = [".ssh", ".gnupg", ".aws", ".netrc", ".git-credentials", ".npmrc", ".docker", ".codex", ".claude/.credentials.json", ".claude.json"];
+// What the file tools may never write, besides the secrets: what runs as you or steers an agent later (shell and git
+// config, ~/.config with its systemd units, ~/.local/bin, Claude Code's own config), and mexxi itself, where ibni lives.
+const PROTECTED_HOME = [".bashrc", ".bash_profile", ".bash_login", ".profile", ".zshrc", ".zshenv", ".zprofile", ".zlogin", ".gitconfig", ".config", ".local/bin", ".claude"];
+const MEXXI_ROOT = path.resolve(fileURLToPath(new URL("../../../", import.meta.url)));
 const INPUT_KEYS = ["command", "description", "file_path", "path", "pattern", "url", "query", "skill", "subagent_type", "prompt"];
 
 function onPath(name) {
@@ -105,6 +132,13 @@ export function actionMessage({ action, task }) {
   return task;
 }
 
+/** The appended system prompt for a run, from its action, permissions mode and writable branch prefixes. */
+export function systemPrompt(spec) {
+  const permissions = PERMISSION_PROMPTS[spec.permissions] ?? PERMISSION_PROMPTS.strict;
+  if (spec.action === "ask") return permissions + SYSTEM_PROMPT + ASK_PROMPT;
+  return permissions + SYSTEM_PROMPT + preparePrompt(writablePrefixes(spec.branchPrefix ?? "agent/", spec.branchPrefixes));
+}
+
 /** The host's argument array. Pure, so a test can pin it. */
 export function buildArgs({ spec, sessionId, settingsFile, mcpFile }) {
   return [
@@ -113,15 +147,17 @@ export function buildArgs({ spec, sessionId, settingsFile, mcpFile }) {
     "--setting-sources", "user",
     // Not plan mode for ask: it lets network commands such as curl run unasked
     // and switches to a larger model than --model names (see the plan's Spike results).
-    "--permission-mode", "default",
+    // Auto mode (segwi.permissions) leaves calls off the allow list to its classifier, inside the same sandbox.
+    "--permission-mode", spec.permissions === "auto" ? "auto" : "default",
     "--settings", settingsFile,
     "--max-turns", String(spec.limits.maxTurns),
     ...(spec.model ? ["--model", spec.model] : []),
     "--add-dir", spec.worktreeRoot,
+    // Wired in every mode: auto mode asks it too, once its classifier has refused several calls in a row.
     "--permission-prompt-tool", "mcp__segwi__approve",
     "--mcp-config", mcpFile,
     "--strict-mcp-config",
-    "--append-system-prompt", spec.action === "ask" ? SYSTEM_PROMPT + ASK_PROMPT : SYSTEM_PROMPT,
+    "--append-system-prompt", systemPrompt(spec),
   ];
 }
 
@@ -166,6 +202,25 @@ function resultText(content) {
   return "";
 }
 
+// How Claude Code words a call it refused itself, as real 2.1.309 runs wrote it: the auto mode classifier, a deny
+// rule (the guard's list or segwi's own) and a PreToolUse hook such as mexxi's guard. A person's denial is already on
+// the run as an approval, so the approval tool's own wording is not one of these.
+const REFUSALS = [
+  { pattern: /^Permission for this action was denied by the Claude Code auto mode classifier\. Reason: (.+?)(?:\. If you have other tasks|\s*$)/s, reason: (match) => `auto mode: ${match[1].trim().replace(/\.$/, "")}` },
+  { pattern: /^Permission to use \S+(?: with command .*)? has been denied\.?\s*$/s, reason: () => "a deny rule" },
+  { pattern: /^PreToolUse:\S+ hook error: (?:\[[^\]]*\]: )?(.+?)(?:;|\.\s|\n|$)/s, reason: (match) => match[1].trim() },
+];
+const REFUSAL_REASON_MAX = 300;
+
+/** Why Claude Code refused a call, from its error result, or null when it ran (or a person decided). */
+export function refusalReason(text) {
+  for (const { pattern, reason } of REFUSALS) {
+    const match = pattern.exec(text);
+    if (match) return reason(match).slice(0, REFUSAL_REASON_MAX);
+  }
+  return null;
+}
+
 // The message types the host is known to write. A new one is not an error for a
 // run, but the canary counts it, because it means the stream format moved.
 const KNOWN_MESSAGE_TYPES = new Set(["system", "assistant", "user", "result", "rate_limit_event"]);
@@ -187,10 +242,10 @@ export function mapMessage(message) {
   } else if (message.type === "user" && Array.isArray(message.message?.content)) {
     for (const block of message.message.content) {
       if (block.type === "tool_result") {
-        events.push({
-          kind: "step", phase: "result", toolUseId: String(block.tool_use_id), ok: block.is_error !== true,
-          detail: resultText(block.content).slice(0, RESULT_DETAIL_MAX),
-        });
+        const text = resultText(block.content);
+        events.push({ kind: "step", phase: "result", toolUseId: String(block.tool_use_id), ok: block.is_error !== true, detail: text.slice(0, RESULT_DETAIL_MAX) });
+        const reason = block.is_error === true ? refusalReason(text) : null;
+        if (reason) events.push({ kind: "refusal", toolUseId: String(block.tool_use_id), reason });
       }
     }
   } else if (message.type === "result") {
@@ -244,19 +299,23 @@ export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir 
     const mcpFile = path.join(runDir, "mcp.json");
     const tempDir = `/tmp/claude-${process.getuid?.() ?? 0}`;
     const commonDir = await gitCommonDir(spec.repoPath);
-    const branchPrefix = spec.branchPrefix ?? "agent/";
-    // The sandbox can only open a path that exists, and ibni prepare makes the first branch under the prefix later.
-    if (spec.action !== "ask") await Promise.all(gitWritePaths(commonDir, branchPrefix).map((dir) => mkdir(dir, { recursive: true })));
+    const prefixes = writablePrefixes(spec.branchPrefix ?? "agent/", spec.branchPrefixes);
+    // The sandbox can only open a path that exists, and ibni prepare makes the first branch under a prefix later.
+    if (spec.action !== "ask") await Promise.all(gitWritePaths(commonDir, prefixes).map((dir) => mkdir(dir, { recursive: true })));
     const home = os.homedir();
     const secrets = [...SECRET_PATHS.map((name) => path.join(home, name)), dataDir, ...(stateDir ? [stateDir] : [])].filter((file) => existsSync(file));
+    const ownFolders = new Set(prefixes.map((prefix) => branchFolder(commonDir, prefix)));
     const existingGit = spec.action === "ask" ? [] : [
-      ...["worktrees", path.join("refs", "heads", branchPrefix.replace(/\/+$/, ""))]
-        .flatMap((part) => readdirSync(path.join(commonDir, part)).map((name) => path.join(commonDir, part, name))),
+      ...[path.join(commonDir, "worktrees"), ...ownFolders]
+        .flatMap((dir) => readdirSync(dir).map((name) => path.join(dir, name)))
+        // A listed prefix inside another (agent/ and agent/security/) is this run's to write, not another session's.
+        .filter((entry) => !ownFolders.has(entry)),
       ...await existingWorkspaces(spec.worktreeRoot, spec.repoPath),
     ];
     const settings = renderSettings({
       action: spec.action, worktreeRoot: spec.worktreeRoot, verifyCommand: spec.verifyCommand, denyPatterns: spec.denyPatterns, repoPath: spec.repoPath,
-      tempDir, gitCommonDir: commonDir, branchPrefix, controlEntries: readdirSync(spec.repoPath), existingGit, denyRead: secrets,
+      tempDir, gitCommonDir: commonDir, branchPrefix: prefixes[0], branchPrefixes: prefixes, permissions: spec.permissions, controlEntries: readdirSync(spec.repoPath), existingGit, denyRead: secrets,
+      denyEdit: [...PROTECTED_HOME.map((name) => path.join(home, name)).filter((file) => existsSync(file)), MEXXI_ROOT],
     });
     await writeFile(settingsFile, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
     await writeFile(mcpFile, `${JSON.stringify(renderMcpConfig({ spec }), null, 2)}\n`, { mode: 0o600 });
@@ -283,6 +342,8 @@ export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir 
     const startDir = spec.action === "ask" ? spec.repoPath : spec.worktreeRoot;
     if (spec.action !== "ask") {
       env.IBNI_LAUNCH_CHECKOUT = spec.repoPath;
+      // ibni prepare runs outside the sandbox, so it refuses a branch prefix the sandbox won't let the run write later.
+      env.IBNI_BRANCH_PREFIXES = prefixes.join("\n");
       await mkdir(startDir, { recursive: true });
     }
     // Its own process group, so a stop reaches what the host started (MCP servers, browsers, background

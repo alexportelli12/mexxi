@@ -2,9 +2,12 @@
 // output replayed by the fake host. Add a runner to RUNNERS to hold it to the same rules.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
+import { mapMessage } from "../runners/claude-code.mjs";
 import { assertRunEvent, statusAfterResult } from "../runners/contract.mjs";
 import { fakeAdapter, makeRepo, makeSettings, tempDir, waitFor } from "./helpers.mjs";
 
@@ -175,9 +178,10 @@ for (const runner of RUNNERS) {
     for (const forbidden of ["python3", "node -e", "curl", "wget", "rm", "cp", "kill", "git push", "gh api", "git grep", "git fetch:"]) {
       assert.ok(!allow.some((rule) => rule.startsWith(`Bash(${forbidden}`)), `${forbidden} is not allowed`);
     }
+    const editDenied = deny.filter((rule) => rule.startsWith("Edit(") && rule !== `Edit(/${spec.repoPath}/*)`);
     assert.deepEqual(deny, ["Bash(npm publish:*)", "Bash(git push --force:*)", "Bash(git *--output*)", "Bash(gh *--output*)",
       "mcp__playwright__browser_run_code_unsafe", `Edit(/${spec.repoPath}/*)`,
-      ...settings.sandbox.filesystem.denyRead.flatMap((file) => [`Read(/${file})`, `Read(/${file}/**)`])]);
+      ...settings.sandbox.filesystem.denyRead.flatMap((file) => [`Read(/${file})`, `Read(/${file}/**)`]), ...editDenied]);
     assert.equal(settings.permissions.disableBypassPermissionsMode, "disable");
     assert.equal(settings.sandbox.enabled, true);
     assert.equal(settings.sandbox.allowUnsandboxedCommands, false);
@@ -233,6 +237,92 @@ for (const runner of RUNNERS) {
     const settings = JSON.parse(readFileSync(path.join(dir, "data", "runs", spec.runId, "settings.json"), "utf8"));
     assert.ok(!settings.permissions.allow.some((rule) => rule.includes("bash") || rule.includes("curl")));
     assert.equal(events.filter((event) => event.kind === "text" && /verify command isn't on the allow list/.test(event.text)).length, 1);
+  });
+
+  /** Starts a build run with `overrides` and returns its argument array, rendered settings and the host's report. */
+  async function rendered(t, overrides = {}) {
+    const { adapter, dir, report } = runner.adapter(t, "ask-completed");
+    const spec = specFor(makeRepo(t), { action: "build", ...overrides });
+    const events = await drive(adapter, spec, (all) => results(all).length === 1);
+    adapter.close(spec.runId);
+    await waitFor(() => exited(events));
+    const settings = JSON.parse(readFileSync(path.join(dir, "data", "runs", spec.runId, "settings.json"), "utf8"));
+    const { args } = report();
+    return { spec, dir, args, prompt: args.at(-1), mode: args[args.indexOf("--permission-mode") + 1], settings, report: report() };
+  }
+
+  test(`${runner.id}: each permissions mode changes only who decides, never the deny list, denied writes or denied reads`, async (t) => {
+    const runs = Object.fromEntries(await Promise.all(["auto", "sandboxed", "strict"].map(async (permissions) => [permissions, await rendered(t, { permissions })])));
+    assert.deepEqual(Object.fromEntries(Object.entries(runs).map(([name, run]) => [name, [run.mode, run.settings.sandbox.autoAllowBashIfSandboxed]])), {
+      auto: ["auto", false], sandboxed: ["default", true], strict: ["default", false],
+    });
+    // A spec without a mode keeps today's behaviour.
+    assert.equal((await rendered(t)).mode, "default");
+    const boundary = (run) => ({
+      deny: run.settings.permissions.deny, disableBypass: run.settings.permissions.disableBypassPermissionsMode,
+      sandbox: { ...run.settings.sandbox, autoAllowBashIfSandboxed: undefined, filesystem: { ...run.settings.sandbox.filesystem, allowWrite: undefined } },
+      writable: run.settings.sandbox.filesystem.allowWrite.length,
+    });
+    for (const name of ["auto", "sandboxed"]) {
+      // Each run has its own repository and data folder, so those paths are made generic before comparing.
+      const generic = (run) => JSON.parse(JSON.stringify(boundary(run)).replaceAll(run.spec.repoPath, "<repo>").replaceAll(run.dir, "<data>"));
+      assert.deepEqual(generic(runs[name]), generic(runs.strict), `${name} keeps strict's boundary`);
+    }
+    for (const run of Object.values(runs)) {
+      assert.equal(run.settings.sandbox.enabled, true);
+      assert.equal(run.settings.sandbox.allowUnsandboxedCommands, false);
+      // The approval tool stays wired in every mode: auto mode falls back to it after repeated refusals.
+      assert.equal(run.args[run.args.indexOf("--permission-prompt-tool") + 1], "mcp__segwi__approve");
+    }
+    // Auto mode never asks first, so the agent is told what to do when something is refused.
+    assert.match(runs.auto.prompt, /If an action is refused, never retry it in pieces or rephrase it/);
+    assert.match(runs.auto.prompt, /stop and ask the person what to do/);
+    assert.doesNotMatch(runs.strict.prompt, /refused/);
+    assert.match(runs.sandboxed.prompt, /inside the sandbox run without asking/);
+  });
+
+  test(`${runner.id}: in every mode the file tools may never write the secrets, your shell and git config, agent config or mexxi itself, and pushes and GitHub API calls ask`, async (t) => {
+    // The file tools run outside the sandbox, so in auto mode only these rules, not a person, keep them out.
+    const home = os.homedir();
+    const mexxiRoot = path.resolve(fileURLToPath(new URL("../../../", import.meta.url)));
+    for (const permissions of ["auto", "sandboxed", "strict"]) {
+      const { settings } = await rendered(t, { permissions });
+      const { deny, ask } = settings.permissions;
+      const protectedPaths = [...settings.sandbox.filesystem.denyRead, mexxiRoot,
+        ...[".bashrc", ".zshrc", ".profile", ".gitconfig", ".config", ".local/bin", ".claude"].map((name) => path.join(home, name)).filter((file) => existsSync(file))];
+      for (const file of protectedPaths) {
+        // A folder only in the `/*` form: a rule without a glob becomes a read-only sandbox mount, which over the mexxi
+        // clone would also cover its git directory, so a run in that repository could no longer commit.
+        const folder = statSync(file).isDirectory();
+        assert.ok(deny.includes(folder ? `Edit(/${file}/*)` : `Edit(/${file})`), `${permissions}: ${file} is denied to the file tools`);
+        if (folder) assert.ok(!deny.includes(`Edit(/${file})`), `${permissions}: ${file} is never mounted read-only`);
+      }
+      assert.deepEqual(ask, ["Bash(git push:*)", "Bash(gh api:*)", "Bash(gh repo:*)", "Bash(gh release:*)", "Bash(gh pr merge:*)"], permissions);
+    }
+  });
+
+  test(`${runner.id}: a build run may write only workflow.branchPrefix and segwi.branchPrefixes branches, and is told to prepare alone without --prefix`, async (t) => {
+    const plain = await rendered(t, { branchPrefix: "agent/" });
+    const heads = (run) => run.settings.sandbox.filesystem.allowWrite.filter((dir) => dir.includes(`${path.sep}refs${path.sep}heads`));
+    assert.deepEqual(heads(plain), [path.join(plain.spec.repoPath, ".git", "refs", "heads", "agent")]);
+    assert.equal(plain.report.branchPrefixes, "agent/");
+    assert.match(plain.prompt, /Run ibni prepare as a Bash call of its own, with nothing before or after it/);
+    assert.match(plain.prompt, /Never pass --prefix to ibni prepare: this run may write only branches under agent\//);
+
+    const listed = await rendered(t, { branchPrefix: "agent/", branchPrefixes: ["security/", "agent/"] });
+    assert.deepEqual(heads(listed), ["agent", "security"].map((name) => path.join(listed.spec.repoPath, ".git", "refs", "heads", name)));
+    for (const dir of heads(listed)) assert.ok(existsSync(dir), `${dir} exists for the sandbox`);
+    assert.equal(listed.report.branchPrefixes, "agent/\nsecurity/");
+    assert.match(listed.prompt, /Pass --prefix to ibni prepare only when the repository's own instructions require one of security\//);
+
+    // A listed prefix inside another is not mistaken for another session's branch folder.
+    const nested = await rendered(t, { branchPrefix: "agent/", branchPrefixes: ["agent/security/"] });
+    assert.ok(!nested.settings.sandbox.filesystem.denyWrite.includes(path.join(nested.spec.repoPath, ".git", "refs", "heads", "agent", "security")));
+
+    // An ask run prepares nothing, so it is told nothing about it.
+    const ask = await rendered(t, { action: "ask", branchPrefixes: ["security/"] });
+    assert.doesNotMatch(ask.prompt, /ibni prepare/);
+    assert.equal(ask.report.branchPrefixes, null);
   });
 
   test(`${runner.id}: an agent that stops to ask something leaves the run needing input, and a reply continues it`, async (t) => {
@@ -319,6 +409,25 @@ for (const runner of RUNNERS) {
 test("the recorded real fixture notes the CLI version it came from", () => {
   const sidecar = JSON.parse(readFileSync(new URL("./fixtures/claude-code/ask-completed.json", import.meta.url), "utf8"));
   assert.equal(sidecar.cliVersion, "2.1.309");
+});
+
+// The refusal texts as real Claude Code 2.1.309 runs wrote them: the auto mode classifier's, a deny rule's and a guard hook's.
+const CLASSIFIER_REFUSAL = "Permission for this action was denied by the Claude Code auto mode classifier. Reason: The server-side auto mode classifier judged this action dangerous (it gave no explanation). If you have other tasks that don't depend on this action, continue working on those. IMPORTANT: You *may* attempt to accomplish this action using other tools that might naturally be used to accomplish this goal.";
+const DENY_RULE_REFUSAL = "Permission to use Bash with command npm publish --dry-run has been denied.";
+const HOOK_REFUSAL = "PreToolUse:Bash hook error: [node /home/someone/mexxi/scripts/hooks/guard.mjs]: mexxi guard blocked this command: git push to main changes a protected branch (the default branch or guard.protectedBranches); deliver through a feature branch and a pull request. Do not retry it in pieces.\n";
+const toolResult = (text, isError = true) => ({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "toolu_1", is_error: isError, content: text }] } });
+
+test("claude-code: a refused call maps to its result and a refusal with the reason, whoever refused it", () => {
+  const refusal = (text) => mapMessage(toolResult(text)).map(assertRunEvent).filter((event) => event.kind === "refusal");
+  assert.deepEqual(refusal(CLASSIFIER_REFUSAL), [{ kind: "refusal", toolUseId: "toolu_1", reason: "auto mode: The server-side auto mode classifier judged this action dangerous (it gave no explanation)" }]);
+  assert.deepEqual(refusal(DENY_RULE_REFUSAL), [{ kind: "refusal", toolUseId: "toolu_1", reason: "a deny rule" }]);
+  assert.deepEqual(refusal(HOOK_REFUSAL), [{ kind: "refusal", toolUseId: "toolu_1", reason: "mexxi guard blocked this command: git push to main changes a protected branch (the default branch or guard.protectedBranches)" }]);
+  assert.equal(mapMessage(toolResult(CLASSIFIER_REFUSAL))[0].kind, "step", "the call's own result still comes first");
+  // A person's denial is already on the run as an approval, and a failing command or the sandbox's refusal is a failed step.
+  for (const text of ["A person denied this in segwi.", "touch: cannot touch 'x': Read-only file system", "Exit code 1\nnpm ERR! Permission to use the registry has been denied."]) {
+    assert.deepEqual(refusal(text), [], text);
+  }
+  assert.deepEqual(mapMessage(toolResult(DENY_RULE_REFUSAL, false)).filter((event) => event.kind === "refusal"), [], "only an error result is a refusal");
 });
 
 /** A host that starts a child ignoring SIGINT and SIGTERM, then waits; returns the adapter and the child's pid. */

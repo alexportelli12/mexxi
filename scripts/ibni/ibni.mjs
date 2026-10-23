@@ -66,7 +66,7 @@ export const COMMANDS = {
     ],
     options: {
       slug: "Short task name for the branch and worktree folder.",
-      prefix: "Branch prefix; defaults to workflow.branchPrefix in config.json.",
+      prefix: "Branch prefix; defaults to workflow.branchPrefix in config.json. In a segwi run, only one IBNI_BRANCH_PREFIXES lists.",
     },
     timed: true,
     run: (options) => prepareWorkspace({ cwd: process.env.IBNI_LAUNCH_CHECKOUT || process.cwd(), slug: options.slug, prefix: options.prefix }),

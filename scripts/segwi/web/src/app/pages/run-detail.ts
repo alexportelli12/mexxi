@@ -19,7 +19,7 @@ import { StatusPill } from '../ui/status-pill';
 import { actionLabels, commandFor, titles } from '../words';
 
 const BOTTOM_SLACK_PX = 160;
-const STEP_LABELS: Record<Step['type'], string> = { edit: 'Edit', command: 'Command', test: 'Test', read: 'Read', message: 'Message' };
+const STEP_LABELS: Record<Step['type'], string> = { edit: 'Edit', command: 'Command', test: 'Test', read: 'Read', message: 'Message', refusal: 'Blocked' };
 
 const atBottom = (): boolean => window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - BOTTOM_SLACK_PX;
 const reducedMotion = (): boolean => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;

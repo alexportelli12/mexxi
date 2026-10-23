@@ -108,14 +108,55 @@ async function rollbackAllocatedWorkspace(root, allocation, baseSha) {
   }
 }
 
-export async function prepareWorkspace({ cwd = process.cwd(), slug, prefix }) {
+const normalPrefix = (value) => sanitizePrefix(value.replace(/\/+$/, ""));
+
+/**
+ * segwi names, one per line, the only branch prefixes its sandbox lets a run write. A branch under any other
+ * would be made here, outside the sandbox, and then fail at the run's first commit, so it is refused up front.
+ */
+function assertWritablePrefix(prefix, environment) {
+  if (!environment.IBNI_BRANCH_PREFIXES) return;
+  const writable = environment.IBNI_BRANCH_PREFIXES.split("\n").filter(Boolean).map(normalPrefix);
+  if (writable.includes(normalPrefix(prefix))) return;
+  throw new WorkspaceError(
+    `--prefix ${prefix} isn't one this run can write`,
+    `This segwi run may only write branches under ${writable.map((name) => `${name}/`).join(", ")}. Run ibni prepare without --prefix, `
+      + `or, if the repository's instructions require ${normalPrefix(prefix)}/, add it to segwi.branchPrefixes in config.json and start a new run.`,
+  );
+}
+
+// segwi's sandbox keeps the checkout's git directory read-only. It runs ibni prepare outside only as a call of its own,
+// so a chained one (`echo …; ibni prepare …`) fails here, at the lock, and the agent learns the form that works.
+// Only in a segwi run, which names the checkout in IBNI_LAUNCH_CHECKOUT; elsewhere the error stays as it was.
+function cannotWriteGitDirectory(error, repository, environment) {
+  return Boolean(environment.IBNI_LAUNCH_CHECKOUT) && ["EROFS", "EACCES", "EPERM"].includes(error?.code) && typeof error.path === "string"
+    && (error.path === repository.commonDirectory || error.path.startsWith(`${repository.commonDirectory}${path.sep}`));
+}
+
+export async function prepareWorkspace({ cwd = process.cwd(), slug, prefix, environment = process.env }) {
   if (!slug) throw new WorkspaceError("prepare requires --slug <short-name>");
   const config = await workspaceConfig();
+  // The same prefix the branch gets: an empty --prefix means the configured one, as it does when allocating.
+  const branchPrefix = prefix || config.workflow.branchPrefix.replace(/\/$/, "");
+  assertWritablePrefix(branchPrefix, environment);
   const repository = await repositoryAt(cwd);
   if (repository.gitDirectory !== repository.commonDirectory) {
     throw new WorkspaceError("/wettaq must be launched from the repository's primary control worktree");
   }
 
+  try {
+    return await prepareLocked({ repository, config, slug, branchPrefix });
+  } catch (error) {
+    if (!cannotWriteGitDirectory(error, repository, environment)) throw error;
+    throw new WorkspaceError(
+      `can't write the repository's git directory (${error.code}: ${error.path})`,
+      "In a segwi run, ibni prepare leaves the sandbox only as a Bash call of its own: run `ibni prepare --slug <name>` "
+        + "with nothing before or after it (no echo, cd, ;, && or |).",
+    );
+  }
+}
+
+function prepareLocked({ repository, config, slug, branchPrefix }) {
   return withRepositoryLock(repository.commonDirectory, async () => {
     const controlCleanHint = [
       "If the listed files are transient workflow artifacts (rendered-inspection",
@@ -188,7 +229,7 @@ export async function prepareWorkspace({ cwd = process.cwd(), slug, prefix }) {
       repository.root,
       pushUrl,
       slug,
-      prefix ?? config.workflow.branchPrefix.replace(/\/$/, ""),
+      branchPrefix,
       config,
     );
     // Retained workspaces of every repository share this machine's ports.

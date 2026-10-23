@@ -87,6 +87,8 @@
     "runner": "claude-code",
     "model": "",
     "allowUnsandboxed": false,
+    "permissions": "auto",
+    "branchPrefixes": [],
     "repositories": [],
     "auth": {
       "web": {

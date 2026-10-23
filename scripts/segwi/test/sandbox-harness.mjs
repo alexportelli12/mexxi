@@ -73,11 +73,13 @@ export function sandboxPrerequisiteProblem() {
  * reads them, for example `{ sandbox: { enabled: false } }`, or a function of `{ repo, worktreeRoot, home, hostDataDir }` that
  * returns one. A "$cwd" key in the patch starts Claude Code in that directory instead of the repository. Without a
  * patch, Claude Code gets exactly what segwi renders and starts where segwi starts it.
+ * `segwi` overrides segwi's own settings, such as `{ permissions: "sandboxed", branchPrefixes: ["security/"] }`. Auto mode
+ * needs Claude Code's real classifier, which the fake model can't play, so these runs are strict unless a test says otherwise.
  * @returns {Promise<{ results: Array<{ isError: boolean, text: string } | undefined>, approvals: object[], audit: object[],
  *   run: object, server: object, repo: string, worktreeRoot: string, home: string }>}
  *   `results[i]` is the tool result for script turn i. The segwi server is closed when the test ends.
  */
-export async function runScripted(t, { script, action = "ask", decide = () => "allow", prepare = async () => {}, settingsPatch = null }) {
+export async function runScripted(t, { script, action = "ask", decide = () => "allow", prepare = async () => {}, settingsPatch = null, segwi = {} }) {
   const context = {};
   const model = await startFakeAnthropic(script.map((turn) => (typeof turn === "function" ? () => turn(context) : turn)));
   t.after(() => model.close());
@@ -133,7 +135,7 @@ export async function runScripted(t, { script, action = "ask", decide = () => "a
     if (event.kind === "exit") exited();
     emit(event);
   });
-  const settings = makeSettings({ repos: [{ name: "my-app", path: repo, actions: [action] }], worktreeRoot });
+  const settings = makeSettings({ repos: [{ name: "my-app", path: repo, actions: [action] }], worktreeRoot, segwi });
   const server = await startServer({ settings, dataDir, runner: adapter, ibni: noIbni, staticRoot: null });
   t.after(() => server.close());
   // Once in a while Claude Code's last session writes race the first removal of its home; this one runs after the server is closed.

@@ -18,7 +18,7 @@ A specialist role, such as the code-reviewer, that a coding agent can hand part 
 
 ## approval
 
-A question segwi asks you when an agent wants to run something outside its allow list, such as a `curl` to the internet. It shows the exact command, and only a person can answer it, in the web app. No answer within the time limit counts as a denial, so a run never gets more freedom by waiting. See [segwi](segwi.md).
+A question segwi asks you when an agent wants to run something outside its allow list, such as a `curl` to the internet. The run's permissions mode decides which of those reach you. It shows the exact command, and only a person can answer it, in the web app. No answer within the time limit counts as a denial, so a run never gets more freedom by waiting. See [segwi](segwi.md).
 
 ## baseline
 

@@ -42,3 +42,21 @@ test("a command title is its first line cut to 120 characters, and a result's de
 test("a result with no matching call is ignored", () => {
   assert.deepEqual(foldEvents([result(1, "missing", true, "x")], {}), []);
 });
+
+test("a refusal becomes its own failed step after the call, naming the command and why", () => {
+  const steps = foldEvents([
+    call(1, "a", "Bash", { command: "git push origin HEAD:main" }),
+    result(2, "a", false, "Permission for this action was denied by the Claude Code auto mode classifier. Reason: [Push to default branch]."),
+    row(3, "refusal", { toolUseId: "a", reason: "auto mode: [Push to default branch]" }),
+    call(4, "b", "Write", { file_path: "/repo/x" }),
+    row(5, "refusal", { toolUseId: "b", reason: "a deny rule" }),
+    row(6, "refusal", { toolUseId: "missing", reason: "a deny rule" }),
+  ], {});
+  assert.deepEqual(steps.map((step) => [step.type, step.title, step.ok]), [
+    ["command", "git push origin HEAD:main", false],
+    ["refusal", "Refused: git push origin HEAD:main — auto mode: [Push to default branch]", false],
+    ["edit", "/repo/x", null],
+    ["refusal", "Refused: /repo/x — a deny rule", false],
+    ["refusal", "Refused: a call — a deny rule", false],
+  ]);
+});

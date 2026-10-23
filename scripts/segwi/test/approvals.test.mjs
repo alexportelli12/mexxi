@@ -18,13 +18,13 @@ const TOKEN = `ghp_${"a1B2c3D4e5".repeat(4).slice(0, 36)}`;
 const noIbni = { findNewWorkspace: async () => null, summary: async () => { throw new Error("no ibni in this test"); }, list: async () => [] };
 const COMMAND = (token) => `curl https://example.com -H 'Authorization: token ${token}'`;
 
-async function boot(t, { fixture = "approval-loop", auth, limits, approvalTimeoutMs, token = "" } = {}) {
+async function boot(t, { fixture = "approval-loop", auth, limits, approvalTimeoutMs, token = "", segwi, repository = {} } = {}) {
   process.env.FAKE_HOST_TOKEN = token;
   t.after(() => { delete process.env.FAKE_HOST_TOKEN; });
   const repo = makeRepo(t);
   const dir = tempDir(t, "segwi-data-");
   const host = fakeAdapter(t, fixture);
-  const settings = makeSettings({ repos: [{ name: "my-app", path: repo, actions: ["build", "ready", "ask"] }], auth, limits });
+  const settings = makeSettings({ repos: [{ name: "my-app", path: repo, actions: ["build", "ready", "ask"], ...repository }], auth, limits, segwi });
   const server = await startServer({ settings, dataDir: dir, runner: host.adapter, ibni: noIbni, staticRoot: null, approvalTimeoutMs });
   t.after(() => server.close());
   return { server, host, dir, repo, settings };
@@ -332,6 +332,41 @@ test("the deny list is rendered in deny form, and a deny-listed command never ma
   assert.ok(!settings.permissions.allow.some((rule) => /git push/.test(rule)));
   assert.equal(server.store.listApprovals({ status: "pending" }).length + server.store.listApprovals({ status: "expired" }).length, 0);
   assert.deepEqual(host.report().approverReplies, []);
+});
+
+// --- auto mode ---
+
+test("in auto mode each refusal shows on the run as its own step and in the audit log, and the run waits for your reply", async (t) => {
+  const { server, host } = await boot(t, { fixture: "auto-refused", segwi: { permissions: "auto" } });
+  const runId = (await startRun(server, "Ship it")).json.run.id;
+  await waitFor(() => server.store.getRun(runId).status === "needs_input", { what: "the run to stop and ask" });
+  const args = host.report().args;
+  assert.equal(args[args.indexOf("--permission-mode") + 1], "auto");
+
+  const { steps } = (await request(server, "GET", `/api/runs/${runId}`)).json.run;
+  assert.deepEqual(steps.filter((step) => step.type === "refusal").map((step) => step.detail), [
+    "Refused: git push origin HEAD:main — auto mode: The server-side auto mode classifier judged this action dangerous (it gave no explanation)",
+    "Refused: npm publish — a deny rule",
+  ]);
+  const refusals = server.store.listAudit(100).filter((row) => row.action === "run.refused");
+  assert.equal(refusals.length, 2);
+  assert.ok(refusals.every((row) => row.target === runId && row.outcome === "rejected"));
+  assert.match(refusals.map((row) => row.detail).join("\n"), /Refused: npm publish — a deny rule/);
+  assert.equal(server.store.listApprovals({ status: "pending" }).length, 0, "nothing reached a person");
+});
+
+test("a repository's own permissions mode wins over segwi.permissions, and an ask run stays strict", async (t) => {
+  const modeOf = async (options, action) => {
+    const { server, host } = await boot(t, { fixture: "ask-completed", ...options });
+    const runId = (await request(server, "POST", "/api/runs", { body: { repo: "my-app", action, task: "What is here?" } })).json.run.id;
+    await waitFor(() => server.store.getRun(runId).status !== "running" && server.store.getRun(runId).status !== "queued", { what: "the run to end its turn" });
+    const { args } = host.report();
+    return args[args.indexOf("--permission-mode") + 1];
+  };
+  assert.equal(await modeOf({ segwi: { permissions: "auto" } }, "build"), "auto");
+  assert.equal(await modeOf({ segwi: { permissions: "auto" }, repository: { permissions: "strict" } }, "build"), "default");
+  assert.equal(await modeOf({ segwi: { permissions: "strict" }, repository: { permissions: "auto" } }, "ready"), "auto");
+  assert.equal(await modeOf({ segwi: { permissions: "auto" } }, "ask"), "default");
 });
 
 // The fake host must wait as long as real Claude Code does: MCP_TOOL_TIMEOUT, not the MCP SDK's 60 s default.
