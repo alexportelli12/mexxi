@@ -26,6 +26,8 @@ const TABLE = [
   [bash("cat README.md > out.txt"), "other"],
   [bash("cat a | tee b"), "other"],
   [bash("python3 script.py"), "other"],
+  ...["ls; touch x", "ls && touch x", "ls || touch x", "ls | sh", "cat a | wc -l", "ls\ntouch x", "ls\rtouch x", "diff <(ls) <(ls a)",
+    "cat $(echo x)", "ls `touch x`", "ls | xargs rm", "find . -name x | xargs cat", "head x < y", "ls & touch x"].map((command) => [bash(command), "other"]),
   [{ tool: "mcp__playwright__browser_click", input: {}, worktreeRoot: root }, "other"],
 ];
 

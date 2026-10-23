@@ -13,7 +13,8 @@ export const RISK_LABELS = {
 const NETWORK = /\b(?:curl|wget|nc|ssh|scp|rsync|ftp)\b|https?:\/\//;
 const GIT_REMOTE = /\bgit\s+(?:push|pull|fetch|clone|remote)\b|(?:^|[\s;&|(])gh\s/;
 const READ_ONLY_START = /^(?:ls|cat|head|tail|grep|rg|wc|pwd|stat|file|tree|du|df)\b/;
-const NOT_READ_ONLY = /[>;&`]|\$\(|\|\s*(?:tee|sh|bash)\b/;
+// A command that chains, pipes, substitutes or redirects can do anything after its first word, so it is never "read".
+const NOT_READ_ONLY = /[;&|`<>\n\r]|\$\(|\bxargs\b/;
 const WRITE_TOOLS = new Set(["Edit", "Write", "NotebookEdit"]);
 const READ_TOOLS = new Set(["Read", "Glob", "Grep"]);
 
