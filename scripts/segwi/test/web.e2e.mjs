@@ -48,9 +48,11 @@ test("a run started from New appears with its steps and waits for a reply", asyn
   const { page, close } = await open("/new");
   await page.getByLabel("Repository").selectOption("my-app");
   await page.getByRole("radio", { name: /Build/ }).check({ force: true });
-  assert.equal(await page.getByTestId("what-happens").textContent(), "Runs /wettaq in my-app on a new branch; you'll get a PR");
+  // The line re-renders after the change is detected, so wait for the text rather than reading it straight away.
+  const whatHappens = (text) => page.getByTestId("what-happens").filter({ hasText: text }).waitFor({ timeout: 5000 });
+  await whatHappens("Runs /wettaq in my-app on a new branch; you'll get a PR");
   await page.getByRole("radio", { name: /Ask/ }).check({ force: true });
-  assert.equal(await page.getByTestId("what-happens").textContent(), "Answers in my-app without changing anything");
+  await whatHappens("Answers in my-app without changing anything");
   await page.getByRole("radio", { name: /Build/ }).check({ force: true });
   await page.getByLabel("Task").fill("List the tracked files");
   await page.getByRole("button", { name: "Start" }).click();
