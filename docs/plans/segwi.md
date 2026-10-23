@@ -30,7 +30,7 @@ Other facts the adapter relies on, all observed:
 | `dontAsk` | runs | refused | refused |
 | `auto` | runs | the classifier decides; the prompt tool is never called | refused |
 
-segwi uses **`--permission-mode default`**, so the fallback isn't needed. `acceptEdits` would allow edits in the launch directory, which is the control checkout, without asking. Built-in read-only commands (`ls`, `cat`, `grep`, `uname`) never prompt in any mode. A deny-list command never reaches the prompt tool, as §11.7 requires.
+segwi uses **`--permission-mode default`** for every action, so the fallback isn't needed. A later real run ruled out `plan` for `ask`. It ran `curl -sI` without asking. It also switched from the model given, Haiku, to Sonnet, so a one-word reply cost about 400 times as much. An `ask` run is kept read-only by its prompt and the allow list instead: it has no worktree, so any edit asks a person. `acceptEdits` would allow edits in the launch directory, which is the control checkout, without asking. Built-in read-only commands (`ls`, `cat`, `grep`, `uname`) never prompt in any mode. A deny-list command never reaches the prompt tool, as §11.7 requires.
 
 **Allow list.** Derived from the 25 most recent `/wettaq` (and its old name `/implement`) and `/lesti` sessions, with the 87 transcripts of the agents they delegated to: 9,330 tool calls from 2026-10-12 to 2026-10-22.
 
@@ -128,7 +128,7 @@ flowchart LR
 **A run.** The repo must be in `segwi.repositories`, and its control checkout must be clean and on its default branch (ibni's precondition); otherwise the server returns 409. The adapter starts the host headless with a fixed action:
 - `build` → `/wettaq <task>`
 - `ready` → `/lesti`
-- `ask` → a read-only question, in plan mode
+- `ask` → a question that changes nothing, in the same permission mode as the others
 
 The task text is the only free input. The run is linked to its ibni workspace once `prepare` reports it.
 
@@ -143,7 +143,7 @@ Adapters spawn with argument arrays only and receive no caller-supplied flags, p
 **claude-code adapter (v1).** Flags, confirmed by the spike:
 ```
 claude -p --input-format stream-json --output-format stream-json --verbose
-  --session-id <uuid> --setting-sources user --permission-mode default (plan for ask)
+  --session-id <uuid> --setting-sources user --permission-mode default
   --settings <rendered segwi-claude-settings.json> --max-turns <n> [--model <m>]
   --add-dir <paths.worktreeRoot>
   --permission-prompt-tool mcp__segwi__approve --mcp-config <rendered> --strict-mcp-config
