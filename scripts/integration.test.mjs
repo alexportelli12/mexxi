@@ -12,6 +12,7 @@ import { playwrightArguments, registrationCommands } from "./lib/browser.mjs";
 import { ConfigError, loadConfig, resolveConfig } from "./lib/config.mjs";
 import { renderHostFiles } from "./lib/render.mjs";
 import { claudeHooks } from "./lib/host-hooks.mjs";
+import { pathEnvironment, serviceSearchPath } from "./lib/segwi-install.mjs";
 import { check } from "./check-config.mjs";
 
 const checkout = fileURLToPath(new URL("../", import.meta.url));
@@ -1308,7 +1309,7 @@ async function segwiHome(t, segwi) {
   await configure(home, { segwi });
   await registerPlaywright(home);
   const stub = systemctlStub();
-  const options = { home, checkout, hookDirectory: path.join(home, "git-hooks"), systemctl: stub.systemctl, platform: "linux" };
+  const options = { home, checkout, hookDirectory: path.join(home, "git-hooks"), systemctl: stub.systemctl, platform: "linux", nodePath: "/opt/node/bin/node", searchPath: "/home/someone/.local/bin:/usr/bin" };
   return { home, options, stub, reconfigure: (next) => configure(home, { segwi: next }) };
 }
 
@@ -1340,13 +1341,14 @@ test("enabling the service writes three recorded units and starts them through s
   assert.deepEqual((await readdir(path.join(home, ".config/systemd/user"))).sort(), unitNames);
   const service = await readFile(unitFile(home, "segwi.service"), "utf8");
   assert.ok(service.startsWith("# Managed by mexxi's installer. Edits are overwritten.\n"));
-  assert.match(service, new RegExp(`^ExecStart=${process.execPath.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} ${segwiLinkTarget.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} serve$`, "m"));
-  for (const line of ["Restart=on-failure", "RestartSec=5", "NoNewPrivileges=yes", "RestrictSUIDSGID=yes", "LockPersonality=yes", "UMask=0077", "Environment=NODE_ENV=production"]) {
+  assert.match(service, new RegExp(`^ExecStart=${"/opt/node/bin/node".replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} ${segwiLinkTarget.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} serve$`, "m"));
+  for (const line of ["Restart=on-failure", "RestartSec=5", "NoNewPrivileges=yes", "RestrictSUIDSGID=yes", "LockPersonality=yes", "UMask=0077", "Environment=NODE_ENV=production", 'Environment="PATH=/opt/node/bin:/home/someone/.local/bin:/usr/bin"']) {
     assert.match(service, new RegExp(`^${line}$`, "m"), line);
   }
   assert.doesNotMatch(service, /^(ProtectHome|ProtectSystem|PrivateTmp)=/m);
   const canary = await readFile(unitFile(home, "segwi-canary.service"), "utf8");
   assert.match(canary, /^Type=oneshot$/m);
+  assert.match(canary, /^Environment="PATH=\/opt\/node\/bin:\/home\/someone\/\.local\/bin:\/usr\/bin"$/m);
   assert.match(canary, /^ExecStart=\S+ \S+\/scripts\/segwi\/server\.mjs canary$/m);
   const timer = await readFile(unitFile(home, "segwi-canary.timer"), "utf8");
   for (const line of ["OnCalendar=*-*-* 03:30", "RandomizedDelaySec=15m", "Persistent=true", "WantedBy=timers.target"]) assert.ok(timer.includes(`\n${line}\n`), line);
@@ -1430,7 +1432,43 @@ test("--check reports a unit that was edited or deleted by hand, and the next in
   await install(options);
   await install({ ...options, check: true });
   assert.ok((await readFile(unitFile(home, "segwi.service"), "utf8")).includes("ExecStart="));
-  assert.deepEqual(stub.calls, [["daemon-reload"], ["enable", "--now", "segwi.service", "segwi-canary.timer"]]);
+  // The timer was missing, so enable --now starts it; segwi.service changed under a running service.
+  assert.deepEqual(stub.calls, [["daemon-reload"], ["enable", "--now", "segwi.service", "segwi-canary.timer"], ["restart", "segwi.service"]]);
+});
+
+test("a unit that changed is restarted after the reload, and --dry-run shows it", async (t) => {
+  const { options, stub } = await segwiHome(t, withService);
+  await install(options);
+  stub.calls.length = 0;
+  // A new PATH changes both services: segwi.service is restarted, the oneshot canary is not.
+  const moved = { ...options, searchPath: "/home/someone/.local/bin:/usr/local/bin:/usr/bin" };
+  const dryRun = await install({ ...moved, dryRun: true });
+  assert.deepEqual(dryRun.segwi.commands, ["systemctl --user daemon-reload", "systemctl --user enable --now segwi.service segwi-canary.timer", "systemctl --user restart segwi.service"]);
+  assert.deepEqual(stub.calls, []);
+  await install(moved);
+  assert.deepEqual(stub.calls, [["daemon-reload"], ["enable", "--now", "segwi.service", "segwi-canary.timer"], ["restart", "segwi.service"]]);
+  stub.calls.length = 0;
+  await install(moved);
+  assert.deepEqual(stub.calls, [], "nothing changed, so nothing restarts");
+});
+
+test("the units' PATH starts with node's directory and leaves out relative and per-session entries", () => {
+  assert.equal(
+    serviceSearchPath({
+      searchPath: "/usr/lib/git-core:/run/user/1000/fnm_multishells/42_1/bin:/home/a/.local/bin:.::bin:/usr/bin:/home/a/.local/bin",
+      nodePath: "/home/a/.local/share/fnm/node-versions/v24.15.0/installation/bin/node",
+      transient: ["/run/user/1000", "/usr/lib/git-core", undefined],
+    }),
+    "/home/a/.local/share/fnm/node-versions/v24.15.0/installation/bin:/home/a/.local/bin:/usr/bin",
+  );
+  assert.equal(serviceSearchPath({ searchPath: undefined, nodePath: "/usr/bin/node" }), "/usr/bin");
+});
+
+test("the PATH line is quoted and escaped for systemd's Environment=", () => {
+  assert.deepEqual(pathEnvironment("/usr/bin:/home/a/my tools:/opt/100%/bin:/opt/$HOME"), ['Environment="PATH=/usr/bin:/home/a/my tools:/opt/100%%/bin:/opt/$HOME"']);
+  assert.deepEqual(pathEnvironment('/opt/a"b:/opt/c\\d'), ['Environment="PATH=/opt/a\\"b:/opt/c\\\\d"']);
+  assert.deepEqual(pathEnvironment("/usr/bin:/bad\nline"), ['Environment="PATH=/usr/bin"']);
+  assert.deepEqual(pathEnvironment(""), []);
 });
 
 test("without systemctl the units are still written, and the commands are handed back to run", async (t) => {

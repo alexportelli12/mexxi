@@ -11,7 +11,7 @@ import { desiredSettings, planSettingsMerge, writeSettingsMerge } from "./lib/cl
 import { ConfigError, abbreviateHome, configPath, loadConfig, minimalConfig, resolveConfig } from "./lib/config.mjs";
 import { codexHooks, planCodexHooks, writeCodexHooks } from "./lib/host-hooks.mjs";
 import { codexCommandSkill, renderDrift, renderHostFiles, writeRendered } from "./lib/render.mjs";
-import { applyUnits, commandLine, noSystemctl, planUnits, retiredSegwiLink, segwiLink, userSystemctl } from "./lib/segwi-install.mjs";
+import { applyUnits, commandLine, noSystemctl, planUnits, retiredSegwiLink, segwiLink, serviceSearchPath, userSystemctl } from "./lib/segwi-install.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const postMergeHook = `#!/bin/sh
@@ -353,11 +353,16 @@ export async function install(options = {}) {
   conflicts.push(...(codexHooksPlan?.conflicts ?? []));
   // segwi's systemd user units are recorded in their own state file, so they
   // go the way they came: only on Linux, only while both keys are on.
+  const nodePath = options.nodePath ?? process.execPath;
   const segwiUnits = await planUnits({
     unitsDir: options.systemdUser ?? path.join(home, ".config/systemd/user"),
     stateFile: path.join(home, ".local/share/mexxi/state/segwi-units.json"),
     wanted: config.segwi.enabled && config.segwi.service.systemdUserUnit && (options.platform ?? process.platform) === "linux",
-    checkout, nodePath: options.nodePath ?? process.execPath,
+    checkout, nodePath,
+    searchPath: serviceSearchPath({
+      searchPath: options.searchPath ?? process.env.PATH, nodePath,
+      transient: [process.env.XDG_RUNTIME_DIR, process.env.GIT_EXEC_PATH],
+    }),
   });
   conflicts.push(...segwiUnits.conflicts);
   // The claude CLI runs with this home, so a test's throwaway home is the

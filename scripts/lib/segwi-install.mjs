@@ -47,10 +47,45 @@ function unitArgument(value) {
   return /[\s"'\\;]/.test(value) ? `"${escaped}"` : escaped;
 }
 
-/** The three unit files as [name, content]. */
-export function renderUnits({ checkout, nodePath }) {
+/**
+ * The PATH the units run with, from the one the installer ran with. node's own
+ * directory comes first, so the service finds the node it was installed with and
+ * the CLIs npm put beside it. Relative entries are dropped, and so are those under
+ * `transient` roots: the session's runtime directory (where fnm keeps a per-shell
+ * link that dies with the shell) and git's exec path, which git puts in front
+ * when the post-merge hook reinstalls. Either would make the unit differ from
+ * one install to the next and restart segwi for nothing.
+ */
+export function serviceSearchPath({ searchPath, nodePath, transient = [] }) {
+  const roots = transient.filter(Boolean).map((root) => path.resolve(root));
+  const isTransient = (directory) => roots.some((root) => directory === root || directory.startsWith(`${root}/`));
+  const directories = [path.dirname(nodePath), ...(searchPath ?? "").split(":")]
+    .filter((directory) => path.isAbsolute(directory) && !isTransient(path.resolve(directory)));
+  return [...new Set(directories)].join(":");
+}
+
+/**
+ * An `Environment=PATH=...` line, or none when there is no PATH. Unlike a command
+ * line, systemd gives `$` no meaning here, but still expands `%` specifiers and
+ * unquotes C-style, so the whole assignment is quoted. A directory with a
+ * control character is dropped: systemd rejects the whole value otherwise.
+ */
+export function pathEnvironment(searchPath) {
+  const directories = (searchPath ?? "").split(":").filter((directory) => directory && !/[\x00-\x1f\x7f]/.test(directory));
+  if (!directories.length) return [];
+  const value = `PATH=${directories.join(":")}`.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("%", "%%");
+  return [`Environment="${value}"`];
+}
+
+/**
+ * The three unit files as [name, content]. `searchPath` is the PATH the
+ * installer ran with: a user service otherwise gets systemd's bare default,
+ * which misses a node, claude, gh or ibni installed under the home directory.
+ */
+export function renderUnits({ checkout, nodePath, searchPath }) {
   const server = path.join(checkout, "scripts", "segwi", "server.mjs");
   const command = (subcommand) => [nodePath, server, subcommand].map(unitArgument).join(" ");
+  const environment = ["Environment=NODE_ENV=production", ...pathEnvironment(searchPath)];
   return [
     ["segwi.service", [
       UNIT_HEADER,
@@ -62,7 +97,7 @@ export function renderUnits({ checkout, nodePath }) {
       `ExecStart=${command("serve")}`,
       "Restart=on-failure",
       "RestartSec=5",
-      "Environment=NODE_ENV=production",
+      ...environment,
       "# Hardening that cannot get in the agent's way. Filesystem sandboxing (ProtectHome,",
       "# ProtectSystem, PrivateTmp) is left out on purpose: a run writes worktrees, ~/.claude",
       "# and the npm cache, and the Claude Code sandbox confines what a run may reach.",
@@ -83,7 +118,7 @@ export function renderUnits({ checkout, nodePath }) {
       "[Service]",
       "Type=oneshot",
       `ExecStart=${command("canary")}`,
-      "Environment=NODE_ENV=production",
+      ...environment,
       "UMask=0077",
       "",
     ].join("\n")],
@@ -119,16 +154,17 @@ async function readText(file) {
  * install does, `owned` is the state it records and `commands` the systemctl
  * calls around the file changes.
  */
-export async function planUnits({ unitsDir, stateFile, wanted, checkout, nodePath }) {
+export async function planUnits({ unitsDir, stateFile, wanted, checkout, nodePath, searchPath }) {
   const state = await readJson(stateFile, "its state file");
   const recorded = Array.isArray(state?.units) ? state.units.filter((unit) => typeof unit?.path === "string") : [];
   const desired = wanted
-    ? renderUnits({ checkout, nodePath }).map(([name, content]) => ({ name, path: path.join(unitsDir, name), content, sha256: sha256(content) }))
+    ? renderUnits({ checkout, nodePath, searchPath }).map(([name, content]) => ({ name, path: path.join(unitsDir, name), content, sha256: sha256(content) }))
     : [];
   const drift = [];
   const conflicts = [];
   const write = [];
   const remove = [];
+  const rewritten = [];
   for (const unit of desired) {
     const current = await readText(unit.path);
     const isRecorded = recorded.some((entry) => entry.path === unit.path);
@@ -140,6 +176,7 @@ export async function planUnits({ unitsDir, stateFile, wanted, checkout, nodePat
     } else if (sha256(current) !== unit.sha256) {
       drift.push(`${unit.path} differs from what mexxi renders`);
       write.push(unit);
+      rewritten.push(unit.name);
     }
   }
   for (const entry of recorded) {
@@ -153,6 +190,11 @@ export async function planUnits({ unitsDir, stateFile, wanted, checkout, nodePat
   if (stopping.length) commands.push(["disable", "--now", ...stopping]);
   if (write.length || remove.length) commands.push(["daemon-reload"]);
   if (write.length) commands.push(["enable", "--now", ...ENABLED_UNITS]);
+  // enable --now leaves a unit that is already running on its old definition, so
+  // one whose file changed is restarted. A fresh unit was just started, and the
+  // canary service is a oneshot that its next run picks up after daemon-reload.
+  const restarting = ENABLED_UNITS.filter((name) => rewritten.includes(name));
+  if (restarting.length) commands.push(["restart", ...restarting]);
   return {
     drift, conflicts, write, remove, owned, commands, unitsDir, stateFile,
     stateChanged: JSON.stringify(owned.units) !== JSON.stringify(recorded.map(({ path: unitPath, sha256: hash }) => ({ path: unitPath, sha256: hash }))),

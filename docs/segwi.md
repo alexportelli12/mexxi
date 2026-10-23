@@ -26,7 +26,7 @@ segwi is opt-in and off by default. With the `segwi` key unset, nothing about yo
 
 ## Turn it on
 
-segwi needs Node.js 22.13 or newer, the same as the rest of mexxi. Add the key to `~/.config/mexxi/config.json`. Every setting is optional apart from the repositories you want to use. The [configuration page](configuration/index.md) lists them all.
+segwi needs Node.js 22.22.3 or newer on 22.x, or 24.15 or newer. That is newer than the rest of mexxi needs, because the web app's Angular build tools require it. Add the key to `~/.config/mexxi/config.json`. Every setting is optional apart from the repositories you want to use. The [configuration page](configuration/index.md) lists them all.
 
 ```json
 {
@@ -57,7 +57,19 @@ With `enabled` on, the installer links `segwi` into `~/.local/bin`, as it does f
 
 The installer records each unit in `~/.local/share/mexxi/state/segwi-units.json`. It never overwrites a unit it did not write: a file with the same name is a conflict, and the install stops. `--dry-run` lists the files and the `systemctl --user` commands it would run, and `install --check` reports a unit you edited or deleted. The installer also runs `systemctl --user daemon-reload` and `enable --now` for you. Without `systemctl`, it writes the files and prints the commands to run instead.
 
+The units run with the `PATH` the installer ran with, so a run finds the same `node`, `claude`, `gh` and `ibni` as your shell. Install again after you move one of them. When a unit changes, the installer restarts `segwi.service` so the new one takes effect.
+
+A user service runs only while you are logged in, unless lingering is on. Turn it on once so segwi keeps running after you log out:
+
+```bash
+loginctl enable-linger "$USER"
+```
+
 Turn `service.systemdUserUnit` or `enabled` off and the next install stops and removes exactly the units it recorded. Turning `enabled` off also removes the `segwi` link. Without the service, start the server yourself with `segwi serve`.
+
+segwi reads its config only when it starts. After you change the `segwi` key, restart it with `systemctl --user restart segwi.service`, or stop `segwi serve` and start it again.
+
+The server listens on `127.0.0.1:<port>`. In the commands and addresses below, `<port>` is `segwi.bind.port`, which is 4280 by default.
 
 ## Who may sign in
 
@@ -75,7 +87,7 @@ MCP clients never use the web sign-in. They always send a bearer token, describe
 [Tailscale](https://tailscale.com/) gives your devices a private network, and `tailscale serve` shares one local port with it over HTTPS. Set `segwi.auth.web.mode` to `tailscale-header`, list your Tailscale login in `allowed`, set `hostname` to the name `tailscale serve status` shows, such as `my-machine.example.ts.net`, restart segwi, and run:
 
 ```bash
-tailscale serve --bg http://127.0.0.1:4280
+tailscale serve --bg http://127.0.0.1:<port>
 ```
 
 Then open `https://my-machine.example.ts.net` on a device signed in to your tailnet. Use the address `tailscale serve status` shows.
@@ -93,7 +105,7 @@ segwi token rotate
 The token is printed once, and only its hash is stored. Run the command again to replace it, and the old one stops working at once. Then add the server to your client. For Claude Code:
 
 ```bash
-claude mcp add --transport http segwi http://127.0.0.1:4280/mcp --header "Authorization: Bearer <token>"
+claude mcp add --transport http segwi http://127.0.0.1:<port>/mcp --header "Authorization: Bearer <token>"
 ```
 
 For a client that reads a JSON file:
@@ -103,7 +115,7 @@ For a client that reads a JSON file:
   "mcpServers": {
     "segwi": {
       "type": "http",
-      "url": "http://127.0.0.1:4280/mcp",
+      "url": "http://127.0.0.1:<port>/mcp",
       "headers": { "Authorization": "Bearer <token>" }
     }
   }
