@@ -80,4 +80,32 @@ describe('ApprovalCard', () => {
     expect((await render({ tool: 'WebFetch' })).element.querySelector('h2')?.textContent).toBe('URL');
     expect((await render({ tool: 'mcp__x__y' })).element.querySelector('h2')?.textContent).toBe('Call');
   });
+
+  it('shows the new text of a Write', async () => {
+    const { element } = await render({ tool: 'Write', exact: '/w/notes.md', content: { kind: 'write', text: '# Notes\n\u001b[31mred' } });
+    const block = element.querySelector('[data-testid="content-write"]')!;
+    expect(block.textContent).toBe('# Notes\n\\x1b[31mred');
+    expect(element.querySelector('h3')?.textContent).toBe('New file content');
+  });
+
+  it('shows an Edit as removed and added text, and says when it replaces every match', async () => {
+    const content = { kind: 'edit' as const, oldText: 'const a = 1;\nconst b = 2;', newText: 'const a = 10;\u202E', replaceAll: true };
+    const { element } = await render({ tool: 'Edit', exact: '/w/app.ts', content });
+    expect(element.querySelector('[data-testid="content-old"]')?.textContent).toBe('const a = 1;\nconst b = 2;');
+    expect(element.querySelector('[data-testid="content-new"]')?.textContent).toBe('const a = 10;U+202E');
+    expect(element.querySelector('[data-testid="replace-all"]')).not.toBeNull();
+    const single = await render({ tool: 'Edit', exact: '/w/app.ts', content: { ...content, replaceAll: false } });
+    expect(single.element.querySelector('[data-testid="replace-all"]')).toBeNull();
+  });
+
+  it('shows a NotebookEdit cell and its new source, with missing fields named', async () => {
+    const { element } = await render({ tool: 'NotebookEdit', exact: '/w/a.ipynb', content: { kind: 'notebook', cellId: null, editMode: 'insert', cellType: 'code', text: "print('hi')" } });
+    expect([...element.querySelectorAll('[data-testid="content-cell"] dd')].map((cell) => cell.textContent)).toEqual(['new cell', 'insert', 'code']);
+    expect(element.querySelector('[data-testid="content-notebook"]')?.textContent).toBe("print('hi')");
+  });
+
+  it('shows no content section for a call that changes no file', async () => {
+    const { element } = await render({ content: null });
+    expect(element.querySelector('segwi-approval-content')).toBeNull();
+  });
 });

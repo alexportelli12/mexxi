@@ -157,6 +157,37 @@ test("an approval shows control and bidi characters as marked codes, whole, and 
   await close();
 });
 
+test("file approvals show what would be written, readable on a phone", async () => {
+  const run = await post("/api/runs", { repo: "my-app", action: "build", task: "Update the notes and the app" });
+  const next = async (tool) => waitFor(async () => (await approvals()).find((entry) => entry.runId === run.run.id && entry.tool === tool), { what: `the ${tool} approval` });
+  const show = async (approval) => {
+    const { page, close } = await open(`/approvals/${approval.id}`);
+    const card = page.locator(`#approval-${approval.id}`);
+    await card.waitFor();
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "no sideways scrolling at 390 px");
+    return { card, close };
+  };
+  // These need the server to send `content` for Edit, Write and NotebookEdit calls.
+  const write = await next("Write");
+  let view = await show(write);
+  assert.equal(await view.card.getByTestId("content-write").textContent(), "# Notes\n\nFirst line\n\tTabbed \\x1b[31mred\\x1b[0m\n");
+  await view.close();
+  await post(`/api/approvals/${write.id}`, { decision: "deny" });
+  const edit = await next("Edit");
+  view = await show(edit);
+  assert.equal(await view.card.getByTestId("content-old").textContent(), "const a = 1;\nconst b = 2;");
+  assert.equal(await view.card.getByTestId("content-new").textContent(), "const a = 10;\nconst b = 20;");
+  await view.card.getByTestId("replace-all").waitFor();
+  await view.close();
+  await post(`/api/approvals/${edit.id}`, { decision: "deny" });
+  const notebook = await next("NotebookEdit");
+  view = await show(notebook);
+  assert.deepEqual(await view.card.getByTestId("content-cell").locator("dd").allTextContents(), ["cell-7", "replace", "code"]);
+  assert.equal(await view.card.getByTestId("content-notebook").textContent(), "print('hello')\n");
+  await view.close();
+  await post(`/api/approvals/${notebook.id}`, { decision: "deny" });
+});
+
 test("stopping asks first, and Keep running is the focused choice", async () => {
   const target = await runWith("Replace the footer links");
   const { page, close } = await open(`/runs/${target.id}`);

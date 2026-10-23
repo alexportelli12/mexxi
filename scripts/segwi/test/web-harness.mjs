@@ -14,9 +14,10 @@ import { makeSettings } from "./helpers.mjs";
 
 // Which recording a task replays. A task that mentions example.com asks for approval; one that
 // starts with "Audit every" produces a long run; "Print hidden characters" asks to approve a command
-// full of control and bidi characters. Anything else stops to ask for a reply.
-const FIXTURES = { default: "build-needs-input", approval: "approval-loop", long: "long-run", escapes: "approval-escapes" };
-const FIXTURE_FOR_TASK = [["approval", /example\.com/], ["long", /^Audit every/], ["escapes", /^Print hidden characters/]];
+// full of control and bidi characters; "Update the notes" asks to approve a Write, an Edit and a
+// NotebookEdit in turn. Anything else stops to ask for a reply.
+const FIXTURES = { default: "build-needs-input", approval: "approval-loop", long: "long-run", escapes: "approval-escapes", files: "approval-files" };
+const FIXTURE_FOR_TASK = [["approval", /example\.com/], ["long", /^Audit every/], ["escapes", /^Print hidden characters/], ["files", /^Update the notes/]];
 
 /** A runner that picks a recording by the task text, so one server can show every flow. */
 function createRoutingRunner(dataDir) {

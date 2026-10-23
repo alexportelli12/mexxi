@@ -7,6 +7,7 @@ import { ApprovalTapGuard } from '../core/tap-guard';
 import { untilTime } from '../core/time';
 import { escapeCount, visibleSegments } from '../core/visible-text';
 import type { Approval } from '../models';
+import { ApprovalContent } from './approval-content';
 import { Button } from './button';
 import { Card } from './card';
 import { CopyButton } from './copy-button';
@@ -18,7 +19,7 @@ const EXACT_LABELS: Record<string, string> = { Bash: 'Command', Edit: 'File', Wr
 /** One approval: what exactly would run, where, why, and the two answers. Enter never approves. */
 @Component({
   selector: 'segwi-approval-card',
-  imports: [Button, Card, CopyButton, RouterLink, VisibleText],
+  imports: [ApprovalContent, Button, Card, CopyButton, RouterLink, VisibleText],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { '[id]': '"approval-" + approval().id', class: 'block' },
   template: `
@@ -42,6 +43,10 @@ const EXACT_LABELS: Record<string, string> = { Bash: 'Command', Edit: 'File', Wr
         <!-- Shown whole: a scrolling box, never cut, with hidden characters as chips. -->
         <pre class="font-code max-h-60 overflow-auto rounded-card border border-border bg-bg p-3 text-sm whitespace-pre-wrap break-words" tabindex="0" data-testid="approval-exact" [attr.aria-label]="'Exact ' + approval().tool + ' call'"><segwi-visible-text [text]="approval().exact" /></pre>
       </div>
+
+      @if (approval().content; as content) {
+        <segwi-approval-content [content]="content" />
+      }
 
       <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-[15px]">
         <dt class="text-muted">Runs in</dt>
