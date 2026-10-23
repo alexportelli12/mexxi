@@ -24,7 +24,7 @@
     "@axe-core/playwright": "4.14.0",
     "@tailwindcss/postcss": "^4.1.12",
     "jsdom": "^30.0.0",
-    "playwright-core": "1.63.0",
+    "playwright-core": "1.64.1",
     "postcss": "^8.5.3",
     "tailwindcss": "^4.1.12",
     "typescript": "~6.0.2",
