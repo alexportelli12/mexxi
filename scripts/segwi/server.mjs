@@ -22,6 +22,7 @@ export const COMMANDS = {
     why: "A leaked token should be cheap to replace, so rotating it takes one command.",
   },
   vapid: {
+    implemented: true,
     summary: "Create the keys push notifications are signed with.",
     why: "Your phone can only trust a push that is signed, so segwi needs its own key pair.",
   },
@@ -99,6 +100,7 @@ export async function main(args = process.argv.slice(2)) {
   }
   if (first === "serve") return serve(args.slice(1));
   if (first === "approver") return (await import("./lib/approver.mjs")).runApprover(args.slice(1));
+  if (first === "vapid") return (await import("./lib/vapid-cli.mjs")).runVapid(args.slice(1));
   if (first === "token") return (await import("./lib/token-cli.mjs")).runToken(args.slice(1));
   process.stderr.write(`segwi ${first}: not yet implemented\n`);
   process.exitCode = 2;

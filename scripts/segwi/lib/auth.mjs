@@ -40,15 +40,15 @@ export function createAuthenticator(web) {
   };
 }
 
-/** Writes must come from the app's own origin, as JSON. */
-export function assertSameOriginWrite(req) {
+/** Writes must come from the app's own origin, as JSON (a DELETE has no body, so it passes `json: false`). */
+export function assertSameOriginWrite(req, { json = true } = {}) {
   const origin = req.headers.origin;
   const host = req.headers.host;
   const sameOrigin = origin !== undefined
     ? host !== undefined && (origin === `http://${host}` || origin === `https://${host}`)
     : req.headers["sec-fetch-site"] === "same-origin";
   if (!sameOrigin) throw new HttpError(403, "Writes must come from the app's own origin.");
-  if (!/^application\/json\s*(;|$)/i.test(req.headers["content-type"] ?? "")) {
+  if (json && !/^application\/json\s*(;|$)/i.test(req.headers["content-type"] ?? "")) {
     throw new HttpError(415, "Send the body as application/json.");
   }
 }

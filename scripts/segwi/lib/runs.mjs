@@ -43,10 +43,15 @@ export function createRunService({ store, settings, runner, ibni, broker, server
   /** @type {Array<(runId: string) => void>} */
   const finishListeners = [];
 
+  /** @type {Array<(status: string, run: object) => void>} */
+  const statusListeners = [];
+
   function setStatus(runId, status, reason = null, fields = {}) {
+    const before = store.getRun(runId)?.status;
     const run = store.updateRun(runId, { status, reason, ...fields, ...(FINAL.has(status) ? { endedAt: new Date().toISOString() } : {}) });
     const row = store.addEvent(runId, "status", { status, reason, branch: run.branch, prUrl: run.prUrl, verify: run.verify });
     broker.publish(row);
+    if (before !== status) statusListeners.forEach((listener) => listener(status, publicRun(run)));
     if (FINAL.has(status)) {
       watchdog.clear(runId);
       runner.close?.(runId);
@@ -201,6 +206,9 @@ export function createRunService({ store, settings, runner, ibni, broker, server
     /** Called with the run id whenever a run reaches a final status (approvals expire then). */
     onFinish: (listener) => finishListeners.push(listener),
 
+    /** Called with the new status and the run each time a run's status changes. */
+    onStatus: (listener) => statusListeners.push(listener),
+
     /** A person is being asked: the run waits, and idleness is not counted. */
     markWaiting(id) {
       const run = store.getRun(id);
@@ -241,6 +249,8 @@ export function createRunService({ store, settings, runner, ibni, broker, server
       const { available, version: runnerVersion, testedVersions, problems, sandbox } = healthCache.detected;
       return {
         ok: available, version,
+        // The caps the app needs to size its inputs and word a timed-out run.
+        limits: { taskMaxChars: limits.taskMaxChars, inputMaxChars: limits.inputMaxChars, idleTimeoutMinutes: limits.idleTimeoutMinutes },
         runner: { id: runner.id, available, version: runnerVersion, tested: runnerVersion !== null && testedVersions.includes(runnerVersion), problems },
         sandbox,
       };

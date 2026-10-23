@@ -12,6 +12,7 @@ import { assertLoopbackBind, assertPortOutsideWorkflow } from "./bind.mjs";
 import { createHandler } from "./http.mjs";
 import { createIbniLink } from "./ibni-link.mjs";
 import { createMcpHandler } from "./mcp.mjs";
+import { createPushService } from "./push.mjs";
 import { ensurePrivateDir, stateDir as defaultStateDir } from "./paths.mjs";
 import { createRunService } from "./runs.mjs";
 import { createBroker } from "./sse.mjs";
@@ -23,10 +24,10 @@ const DEFAULT_STATIC = path.join(here, "..", "web", "dist", "web", "browser");
 const version = JSON.parse(readFileSync(path.join(here, "..", "..", "..", "package.json"), "utf8")).version ?? "0.0.0";
 
 /**
- * @param {{ settings: object, dataDir: string, runner?: object, ibni?: object, staticRoot?: string|null, approvalTimeoutMs?: number, stateDir?: string, mcpConfirmTtlMs?: number }} options
- *   `runner`, `ibni`, `approvalTimeoutMs`, `stateDir` and `mcpConfirmTtlMs` are injected by tests; the CLI uses the configured runner and the real ibni.
+ * @param {{ settings: object, dataDir: string, runner?: object, ibni?: object, staticRoot?: string|null, approvalTimeoutMs?: number, stateDir?: string, mcpConfirmTtlMs?: number, pushOptions?: { allowEndpoint?: Function, agent?: object } }} options
+ *   `runner`, `ibni`, `approvalTimeoutMs`, `stateDir`, `mcpConfirmTtlMs` and `pushOptions` are injected by tests; the CLI uses the configured runner and the real ibni.
  */
-export async function startServer({ settings, dataDir, runner, ibni = createIbniLink(), staticRoot = DEFAULT_STATIC, approvalTimeoutMs, stateDir = defaultStateDir(), mcpConfirmTtlMs }) {
+export async function startServer({ settings, dataDir, runner, ibni = createIbniLink(), staticRoot = DEFAULT_STATIC, approvalTimeoutMs, stateDir = defaultStateDir(), mcpConfirmTtlMs, pushOptions = {} }) {
   ensurePrivateDir(dataDir);
   const store = openStore(path.join(dataDir, "segwi.db"));
   const { bind, auth, runner: runnerId } = settings.segwi;
@@ -44,13 +45,16 @@ export async function startServer({ settings, dataDir, runner, ibni = createIbni
   let serverUrl = "";
   const runs = createRunService({ store, settings, runner: theRunner, ibni, broker, serverUrl: () => serverUrl });
   const approvals = createApprovalService({ store, settings, runs, broker, timeoutMs: approvalTimeoutMs });
+  const push = createPushService({ store, settings, stateDir, ...pushOptions });
+  runs.onStatus((status, run) => push.notify(status, run));
   runs.recover();
   const handler = createHandler({
-    store, settings, authenticate: createAuthenticator(auth.web), runs, approvals, broker,
+    store, settings, authenticate: createAuthenticator(auth.web), runs, approvals, broker, push,
     staticRoot: staticRoot && readableDir(staticRoot) ? staticRoot : null, version,
     mcp: createMcpHandler({ store, settings, runs, approvals, stateDir, confirmTtlMs: mcpConfirmTtlMs }),
   });
-  const server = http.createServer((req, res) => void handler(req, res));
+  // A request still running when the server closes may find the store shut; it has nobody left to answer.
+  const server = http.createServer((req, res) => void handler(req, res).catch(() => res.destroy()));
   await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(bind.port, bind.host, resolve);
@@ -60,7 +64,7 @@ export async function startServer({ settings, dataDir, runner, ibni = createIbni
   audit(store, { actor: "system", origin: "system", action: "server.start", outcome: "ok", detail: `listening on ${bind.host}:${port}` });
   let closed = false;
   return {
-    port, url: serverUrl, store, runs, approvals,
+    port, url: serverUrl, store, runs, approvals, push,
     async close() {
       if (closed) return;
       closed = true;

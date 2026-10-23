@@ -14,8 +14,8 @@ const run = (...args) => spawnSync(process.execPath, [server, ...args], { encodi
 test("--help lists every subcommand with its why, and marks the ones that don't work yet", () => {
   const { status, stdout } = run("--help");
   assert.equal(status, 0);
-  assert.match(stdout, /vapid .*\(not yet implemented\)/);
-  assert.doesNotMatch(stdout, /(serve|token) .*not yet implemented/);
+  assert.match(stdout, /canary .*\(not yet implemented\)/);
+  assert.doesNotMatch(stdout, /(serve|token|vapid) .*not yet implemented/);
   for (const [name, { why }] of Object.entries(COMMANDS)) {
     assert.ok(stdout.includes(name), name);
     assert.ok(stdout.includes(`Why: ${why}`), `${name} shows its why`);
@@ -23,7 +23,7 @@ test("--help lists every subcommand with its why, and marks the ones that don't 
 });
 
 test("a subcommand that does not exist yet says so and fails", () => {
-  const { status, stderr } = run("vapid");
+  const { status, stderr } = run("canary");
   assert.equal(status, 2);
   assert.match(stderr, /not yet implemented/);
 });

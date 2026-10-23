@@ -20,7 +20,14 @@
             "tsConfig": "tsconfig.app.json",
             "styles": [
               "src/styles.css"
-            ]
+            ],
+            "assets": [
+              {
+                "glob": "**/*",
+                "input": "public"
+              }
+            ],
+            "deployUrl": "/"
           },
           "configurations": {
             "production": {
@@ -36,7 +43,15 @@
                   "maximumError": "8kB"
                 }
               ],
-              "outputHashing": "all"
+              "outputHashing": "all",
+              "optimization": {
+                "scripts": true,
+                "styles": {
+                  "minify": true,
+                  "inlineCritical": false
+                },
+                "fonts": false
+              }
             },
             "development": {
               "optimization": false,

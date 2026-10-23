@@ -216,7 +216,7 @@ test("an ask run completes, shows readable steps, and a repeated clientId return
   assert.equal(typeof health.sandbox.available, "boolean");
   for (const header of ["content-security-policy", "x-content-type-options", "referrer-policy"]) assert.ok(health[header] === undefined && (await request(server, "GET", "/api/health")).headers[header]);
   assert.match((await request(server, "GET", "/api/health")).headers["cache-control"], /no-store/);
-  assert.match((await request(server, "GET", "/")).text, /not built/);
+  assert.match((await request(server, "GET", "/")).text, /Build the web app/);
   assert.ok(server.store.listAudit(200).some((row) => row.action === "POST /api/runs" && row.outcome === "ok"));
 });
 

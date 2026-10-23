@@ -11,7 +11,9 @@ import { parse, schemas as schemasFor } from "./validate.mjs";
 const BODY_LIMIT = 64 * 1024;
 // The approver forwards a whole tool input (a Write can carry a file), so its route allows more.
 const INTERNAL_BODY_LIMIT = 1024 * 1024;
-const CSP = "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+// No inline script or style: the web build turns Angular's critical-CSS inlining off instead of loosening this.
+const CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
+const NOT_BUILT = "Build the web app: npm --prefix scripts/segwi/web run build\n";
 const TYPES = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json",
   ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".webmanifest": "application/manifest+json", ".woff2": "font/woff2",
@@ -46,10 +48,16 @@ export async function readBody(req, limit = BODY_LIMIT) {
   }
 }
 
+function cacheHeaders(file) {
+  const name = path.basename(file);
+  if (name === "sw.js") return { "Cache-Control": "no-cache", "Service-Worker-Allowed": "/" };
+  return { "Cache-Control": name === "index.html" || name.endsWith(".webmanifest") ? "no-cache" : "public, max-age=3600" };
+}
+
 async function serveStatic(res, root, pathname) {
   if (!root) {
     res.writeHead(503, { "Content-Type": "text/plain; charset=utf-8" });
-    res.end("The segwi web app is not built yet.\n");
+    res.end(NOT_BUILT);
     return;
   }
   let decoded;
@@ -69,18 +77,18 @@ async function serveStatic(res, root, pathname) {
   }
   try {
     const body = await readFile(file);
-    res.writeHead(200, { "Content-Type": TYPES[path.extname(file)] ?? "application/octet-stream", "Cache-Control": file.endsWith("index.html") ? "no-cache" : "public, max-age=3600" });
+    res.writeHead(200, { "Content-Type": TYPES[path.extname(file)] ?? "application/octet-stream", ...cacheHeaders(file) });
     res.end(body);
   } catch {
     res.writeHead(503, { "Content-Type": "text/plain; charset=utf-8" });
-    res.end("The segwi web app is not built yet.\n");
+    res.end(NOT_BUILT);
   }
 }
 
 /**
- * @param {{ store: object, settings: object, authenticate: Function, runs: object, approvals: object, broker: object, staticRoot: string|null, version: string, mcp?: Function|null }} deps
+ * @param {{ store: object, settings: object, authenticate: Function, runs: object, approvals: object, broker: object, push: object, staticRoot: string|null, version: string, mcp?: Function|null }} deps
  */
-export function createHandler({ store, settings, authenticate, runs, approvals, broker, staticRoot, version, mcp = null }) {
+export function createHandler({ store, settings, authenticate, runs, approvals, broker, push, staticRoot, version, mcp = null }) {
   const parsers = schemasFor(settings);
   const routes = [
     ["GET", "/api/health", "none", async () => runs.health(version)],
@@ -99,6 +107,20 @@ export function createHandler({ store, settings, authenticate, runs, approvals, 
       // A run's own browser reaches this app through the same tailnet URL; refuse its decisions.
       assertNotFromThisMachine(req, settings.segwi.auth.web.mode);
       return { approval: approvals.decide(params.id, body.decision, identity) };
+    }],
+    ["GET", "/api/push/key", "none", async () => {
+      const publicKey = push.publicKey();
+      if (!publicKey) throw new HttpError(404, "Push isn't set up. Run segwi vapid init.");
+      return { publicKey };
+    }],
+    ["POST", "/api/push/subscriptions", "pushSubscription", async ({ body, identity }) => {
+      const id = push.subscribe(body, identity);
+      // Only the push service's host is recorded; the endpoint itself identifies the device.
+      return { status: 201, body: { id }, detail: new URL(body.endpoint).host };
+    }],
+    ["DELETE", "/api/push/subscriptions/:id", "none", async ({ params }) => {
+      push.unsubscribe(params.id);
+      return { status: 204 };
     }],
     ["GET", "/api/audit", "audit", async ({ query }) => ({ audit: store.listAudit(query.limit ?? 50) })],
   ].map(([method, template, schema, handler]) => ({
@@ -125,15 +147,14 @@ export function createHandler({ store, settings, authenticate, runs, approvals, 
       template = `${req.method} ${route.candidate.template}`;
       target = route.match.groups?.id ?? "";
       let body = {};
-      if (req.method === "POST") {
-        assertSameOriginWrite(req);
-        body = parse(parsers[route.candidate.schema], await readBody(req));
-      }
+      if (req.method === "POST" || req.method === "DELETE") assertSameOriginWrite(req, { json: req.method === "POST" });
+      if (req.method === "POST") body = parse(parsers[route.candidate.schema], await readBody(req));
       const query = req.method === "GET" ? parse(parsers[route.candidate.schema], Object.fromEntries(url.searchParams)) : {};
       const result = await route.candidate.handler({ params: route.match.groups ?? {}, query, body, req, identity });
       const status = result.status ?? 200;
-      audit(store, { actor: identity, origin: "web", action: template, target, outcome: "ok" });
-      sendJson(res, status, result.body ?? result);
+      audit(store, { actor: identity, origin: "web", action: template, target, outcome: "ok", detail: result.detail ?? "" });
+      if (status === 204) res.writeHead(204, { "Cache-Control": "no-store" }).end();
+      else sendJson(res, status, result.body ?? result);
     } catch (error) {
       const known = error instanceof HttpError;
       if (!known) console.error(`segwi: ${template}: ${error.stack ?? error}`);
@@ -180,6 +201,12 @@ export function createHandler({ store, settings, authenticate, runs, approvals, 
     if (url.pathname === "/internal" || url.pathname.startsWith("/internal/")) return handleInternal(req, res, url);
     if (req.method !== "GET" && req.method !== "HEAD") {
       res.writeHead(405).end();
+      return undefined;
+    }
+    try {
+      authenticate(req); // the app shell is behind the same identity check as the API
+    } catch (error) {
+      res.writeHead(error.status ?? 403, { "Content-Type": "text/plain; charset=utf-8" }).end(`${error.message}\n`);
       return undefined;
     }
     try {

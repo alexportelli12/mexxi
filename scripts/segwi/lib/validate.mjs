@@ -34,6 +34,10 @@ export function schemas(settings) {
       runId: z.string().min(1).max(64), toolName: z.string().min(1).max(200),
       input: z.record(z.string(), z.unknown()), toolUseId: z.string().min(1).max(200),
     }),
+    pushSubscription: z.strictObject({
+      endpoint: z.string().max(1000),
+      keys: z.strictObject({ p256dh: z.string().min(1).max(200), auth: z.string().min(1).max(100) }),
+    }),
     none: z.strictObject({}),
   };
 }

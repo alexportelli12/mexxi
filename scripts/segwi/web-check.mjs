@@ -25,12 +25,12 @@ export function needsInstall(directory = webDirectory) {
 
 export const GZIP_LIMIT_BYTES = 200 * 1024;
 
-/** Gzip size of the scripts and stylesheets a built index.html loads directly, never its lazy chunks. */
+/** Gzip size of the scripts, preloaded chunks and stylesheets a built index.html loads directly, never its lazy chunks. */
 export function initialGzipBytes(browserDirectory) {
   const html = readFileSync(path.join(browserDirectory, "index.html"), "utf8");
   const references = new Set([
     ...[...html.matchAll(/<script[^>]*\ssrc="([^"]+)"/g)].map((match) => match[1]),
-    ...[...html.matchAll(/<link[^>]*\srel="stylesheet"[^>]*\shref="([^"]+)"/g)].map((match) => match[1]),
+    ...[...html.matchAll(/<link[^>]*\srel="(?:stylesheet|modulepreload)"[^>]*\shref="([^"]+)"/g)].map((match) => match[1]),
   ]);
   let total = 0;
   for (const reference of references) {

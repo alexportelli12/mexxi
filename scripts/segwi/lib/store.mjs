@@ -7,8 +7,7 @@ import { cleanDeep, cleanText } from "./clean.mjs";
 export const FINAL = new Set(["completed", "failed", "stopped", "timed_out"]);
 export const ACTIVE = ["queued", "running", "needs_input", "needs_approval"];
 
-// Version 1 is the p2 schema, version 2 adds approvals (p3). Push subscriptions
-// (p5) arrive as version 3.
+// Version 1 is the p2 schema, version 2 adds approvals (p3), version 3 push subscriptions (p5).
 const MIGRATIONS = [
   `CREATE TABLE runs (
      id TEXT PRIMARY KEY, repo TEXT NOT NULL, action TEXT NOT NULL, task TEXT NOT NULL, status TEXT NOT NULL,
@@ -40,6 +39,11 @@ const MIGRATIONS = [
    );
    CREATE INDEX approvals_status ON approvals (status, created_at);
    CREATE INDEX approvals_run ON approvals (run_id);`,
+  // Version 3: where to push. The endpoint is unique, so subscribing twice updates one row.
+  `CREATE TABLE push_subscriptions (
+     id TEXT PRIMARY KEY, endpoint TEXT NOT NULL UNIQUE, p256dh TEXT NOT NULL, auth TEXT NOT NULL, identity TEXT NOT NULL,
+     created_at TEXT NOT NULL, last_ok_at TEXT, last_error TEXT
+   );`,
 ];
 
 const RUN_COLUMNS = {
@@ -110,6 +114,11 @@ export function openStore(file, { now = () => new Date() } = {}) {
     getApproval: db.prepare("SELECT * FROM approvals WHERE id = ?"),
     decideApproval: db.prepare("UPDATE approvals SET status = ?, decided_by = ?, decided_at = ? WHERE id = ? AND status = 'pending'"),
     pendingFor: db.prepare("SELECT * FROM approvals WHERE run_id = ? AND status = 'pending' ORDER BY created_at, rowid"),
+    getSubscription: db.prepare("SELECT * FROM push_subscriptions WHERE id = ?"),
+    subscriptionByEndpoint: db.prepare("SELECT * FROM push_subscriptions WHERE endpoint = ?"),
+    insertSubscription: db.prepare("INSERT INTO push_subscriptions (id, endpoint, p256dh, auth, identity, created_at) VALUES (?, ?, ?, ?, ?, ?)"),
+    updateSubscription: db.prepare("UPDATE push_subscriptions SET p256dh = ?, auth = ?, identity = ?, last_error = NULL WHERE id = ?"),
+    deleteSubscription: db.prepare("DELETE FROM push_subscriptions WHERE id = ?"),
     interrupted: db.prepare(`SELECT id FROM runs WHERE status IN (${ACTIVE.map(() => "?").join(",")})`),
   };
 
@@ -173,6 +182,24 @@ export function openStore(file, { now = () => new Date() } = {}) {
     pendingApprovalsFor: (runId) => statements.pendingFor.all(runId).map(approvalFromRow),
     listApprovals({ status = "pending", limit = 100 } = {}) {
       return db.prepare("SELECT * FROM approvals WHERE status = ? ORDER BY created_at, rowid LIMIT ?").all(status, limit).map(approvalFromRow);
+    },
+
+    /** Subscribing the same endpoint again keeps its id and refreshes its keys. */
+    saveSubscription({ id, endpoint, p256dh, auth, identity }) {
+      const existing = statements.subscriptionByEndpoint.get(endpoint);
+      if (existing) {
+        statements.updateSubscription.run(p256dh, auth, identity, existing.id);
+        return existing.id;
+      }
+      statements.insertSubscription.run(id, endpoint, p256dh, auth, identity, stamp());
+      return id;
+    },
+    getSubscription: (id) => statements.getSubscription.get(id) ?? null,
+    listSubscriptions: () => db.prepare("SELECT * FROM push_subscriptions ORDER BY created_at, rowid").all(),
+    deleteSubscription: (id) => statements.deleteSubscription.run(id).changes === 1,
+    markSubscription(id, error = null) {
+      if (error) db.prepare("UPDATE push_subscriptions SET last_error = ? WHERE id = ?").run(cleanText(error, 300), id);
+      else db.prepare("UPDATE push_subscriptions SET last_ok_at = ?, last_error = NULL WHERE id = ?").run(stamp(), id);
     },
 
     addAudit({ actor, origin, action, target = "", outcome, detail = "" }) {
