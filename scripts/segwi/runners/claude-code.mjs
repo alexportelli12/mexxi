@@ -204,7 +204,9 @@ export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir 
     // The approval tool holds its call open until a person answers, so Claude
     // Code must not give up on an MCP call before segwi's own approval expiry.
     env.MCP_TOOL_TIMEOUT = String((spec.limits.approvalTimeoutMinutes + 1) * 60_000);
-    const child = spawn(bin, args, { cwd: spec.repoPath, env, stdio: ["pipe", "pipe", "pipe"] });
+    // Its own process group, so a stop reaches what the host started (MCP servers, browsers, background
+    // shells) and not only the host itself.
+    const child = spawn(bin, args, { cwd: spec.repoPath, env, stdio: ["pipe", "pipe", "pipe"], detached: true });
     const entry = { child, closed: false, timers: [] };
     processes.set(spec.runId, entry);
 
@@ -245,8 +247,13 @@ export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir 
     });
     child.once("close", (code, signal) => {
       if (buffer.trim()) handleLine(buffer);
-      entry.timers.forEach(clearTimeout);
       processes.delete(spec.runId);
+      // The host is gone; anything it left in its group is ended too, with the same grace a stop gives.
+      if (groupAlive(child.pid)) {
+        if (!entry.timers.length) escalate(entry, ["SIGTERM", "SIGKILL"], [0, killGraceMs[1]]);
+      } else {
+        entry.timers.forEach(clearTimeout);
+      }
       if (code !== 0 && stderrTail.trim()) emit({ kind: "error", message: `Host said: ${stderrTail.trim().slice(-300)}` });
       emit({ kind: "exit", code, signal });
     });
@@ -254,6 +261,31 @@ export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir 
     writeUserLine(child, actionMessage(spec));
     emit({ kind: "session", hostSessionId: sessionId });
     return { hostSessionId: sessionId };
+  }
+
+  /** Signals the host's whole process group; false once the group is gone. */
+  function signalGroup(pid, signal) {
+    if (!pid) return false;
+    try {
+      process.kill(-pid, signal);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  const groupAlive = (pid) => signalGroup(pid, 0);
+
+  /** Sends each signal to the group after its delay, stopping early once the group is gone. */
+  function escalate(entry, signals, delays) {
+    let at = 0;
+    signals.forEach((signal, index) => {
+      at += delays[index];
+      const timer = setTimeout(() => {
+        if (!signalGroup(entry.child.pid, signal)) entry.timers.forEach(clearTimeout);
+      }, at);
+      timer.unref();
+      entry.timers.push(timer);
+    });
   }
 
   function writeUserLine(child, text) {
@@ -289,12 +321,10 @@ export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir 
       const entry = processes.get(runId);
       if (!entry) return;
       entry.closed = true;
-      entry.child.kill("SIGINT");
-      entry.timers.push(
-        setTimeout(() => entry.child.kill("SIGTERM"), killGraceMs[0]),
-        setTimeout(() => entry.child.kill("SIGKILL"), killGraceMs[0] + killGraceMs[1]),
-      );
-      entry.timers.forEach((timer) => timer.unref());
+      entry.timers.forEach(clearTimeout);
+      entry.timers = [];
+      signalGroup(entry.child.pid, "SIGINT");
+      escalate(entry, ["SIGTERM", "SIGKILL"], killGraceMs);
     },
   };
 }

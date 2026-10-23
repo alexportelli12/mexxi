@@ -9,6 +9,11 @@
 // the `segwi` MCP server from the --mcp-config file as a stdio client, calls the `approve`
 // tool, and writes the outcome to stdout as a tool_result (an error result for a denial).
 // The approver's replies are kept in the report.
+//
+// {"segwi_fixture":"spawn_grandchild"} starts a child that ignores SIGINT and SIGTERM and would
+// outlive a kill of the host alone, the way an MCP server or a background shell can. Its pid is in
+// the report, so a test can check that a stop ended it.
+import { spawn } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import readline from "node:readline";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -26,9 +31,10 @@ const waiting = [];
 let available = 0;
 const segwiEnv = Object.keys(process.env).filter((key) => key.startsWith("SEGWI_"));
 const approverReplies = [];
+let grandchild = null;
 // Real Claude Code waits for MCP_TOOL_TIMEOUT (segwi sets it per run), not for the MCP SDK's 60 s default.
 const toolTimeout = Number(process.env.MCP_TOOL_TIMEOUT) > 0 ? Number(process.env.MCP_TOOL_TIMEOUT) : 2 * 60 * 60_000;
-const report = () => writeFileSync(reportFile, JSON.stringify({ args, stdin, segwiEnv, approverReplies }));
+const report = () => writeFileSync(reportFile, JSON.stringify({ args, stdin, segwiEnv, approverReplies, grandchild }));
 report();
 
 function nextInput() {
@@ -58,6 +64,16 @@ async function askApprover({ tool_name, input, tool_use_id }) {
   process.stdout.write(`${JSON.stringify({ type: "user", message: { role: "user", content } })}\n`);
 }
 
+function spawnGrandchild() {
+  const script = "process.on('SIGINT', () => {}); process.on('SIGTERM', () => {}); setInterval(() => {}, 1000); process.stdout.write('ready\\n');";
+  const child = spawn(process.execPath, ["-e", script], { stdio: ["ignore", "pipe", "ignore"] });
+  return new Promise((resolve) => child.stdout.once("data", () => {
+    grandchild = child.pid;
+    report();
+    resolve();
+  }));
+}
+
 await nextInput();
 for (const line of lines) {
   let marker = null;
@@ -65,5 +81,6 @@ for (const line of lines) {
   try { parsed = JSON.parse(line); marker = parsed?.segwi_fixture ?? null; } catch { /* a garbage line is replayed as is */ }
   if (marker === "await_input") await nextInput();
   else if (marker === "approve") await askApprover(parsed);
+  else if (marker === "spawn_grandchild") await spawnGrandchild();
   else process.stdout.write(`${line}\n`);
 }

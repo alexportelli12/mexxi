@@ -1,11 +1,11 @@
 // The shared runner contract: every adapter is driven against recorded host
 // output replayed by the fake host. Add a runner to RUNNERS to hold it to the same rules.
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { assertRunEvent, statusAfterResult } from "../runners/contract.mjs";
-import { fakeAdapter, makeRepo, makeSettings, waitFor } from "./helpers.mjs";
+import { fakeAdapter, makeRepo, makeSettings, tempDir, waitFor } from "./helpers.mjs";
 
 const RUNNERS = [{ id: "claude-code", adapter: (t, scenario, options) => fakeAdapter(t, scenario, options) }];
 const TASK = "What files are in this repository? Answer in one line.";
@@ -241,4 +241,43 @@ for (const runner of RUNNERS) {
 test("the recorded real fixture notes the CLI version it came from", () => {
   const sidecar = JSON.parse(readFileSync(new URL("./fixtures/claude-code/ask-completed.json", import.meta.url), "utf8"));
   assert.equal(sidecar.cliVersion, "2.1.309");
+});
+
+/** A host that starts a child ignoring SIGINT and SIGTERM, then waits; returns the adapter and the child's pid. */
+async function hostWithGrandchild(t) {
+  const fixture = path.join(tempDir(t, "segwi-fixture-"), "grandchild.jsonl");
+  writeFileSync(fixture, `${JSON.stringify({ segwi_fixture: "spawn_grandchild" })}\n${JSON.stringify({ segwi_fixture: "await_input" })}\n`);
+  const { adapter, report } = fakeAdapter(t, fixture);
+  const spec = specFor(makeRepo(t), { action: "build", task: "x" });
+  const events = [];
+  await adapter.start(spec, (event) => events.push(event));
+  const pid = await waitFor(() => { try { return report().grandchild; } catch { return null; } }, { what: "the grandchild" });
+  t.after(() => { try { process.kill(pid, "SIGKILL"); } catch { /* already gone */ } });
+  return { adapter, spec, events, pid };
+}
+
+const alive = (pid) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+test("claude-code: stop ends the host's whole process group, including a child that ignores SIGINT and SIGTERM", async (t) => {
+  const { adapter, spec, events, pid } = await hostWithGrandchild(t);
+  assert.ok(alive(pid));
+  adapter.stop(spec.runId);
+  await waitFor(() => exited(events), { what: "the host to exit" });
+  assert.equal(events.find((event) => event.kind === "exit").signal, "SIGINT");
+  await waitFor(() => !alive(pid), { what: "the grandchild to be gone" });
+});
+
+test("claude-code: when the host ends on its own, what it left in its group is ended too", async (t) => {
+  const { adapter, spec, events, pid } = await hostWithGrandchild(t);
+  adapter.close(spec.runId);
+  await waitFor(() => exited(events), { what: "the host to exit" });
+  assert.equal(events.find((event) => event.kind === "exit").code, 0);
+  await waitFor(() => !alive(pid), { what: "the grandchild to be gone" });
 });
