@@ -1,29 +1,4 @@
-:root {
-  --bg: #0a0b0d;
-  --surface: #0e1013;
-  --surface-raised: #13161a;
-  --border: #1d2127;
-  --border-strong: #2a3038;
-  --text: #e6e8eb;
-  --muted: #9aa2ad;
-  --accent: #f4b860; /* mexxi's amber */
-  --string: #ecd0a4;
-  --paper: #f1e9da; /* the dictionary's page */
-  --ink: #1d1a16;
-  --ink-muted: #5d554a;
-
-  --font-sans:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto, "Helvetica Neue", Arial,
-    sans-serif;
-  --font-mono:
-    ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, monospace;
-  /* Dictionary entries set the word in a book face, as a printed dictionary would. */
-  --font-book: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
-
-  --radius: 10px;
-  --gutter: 24px;
-  --max: 1040px;
-}
+@import "./tokens.css";
 
 *,
 *::before,
@@ -488,7 +463,7 @@ h3 {
 .entry {
   break-inside: avoid;
   padding-block: 12px;
-  border-bottom: 1px solid rgb(29 26 22 / 0.12);
+  border-bottom: 1px solid var(--ink-rule);
   font-family: var(--font-book);
   line-height: 1.45;
 }

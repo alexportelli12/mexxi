@@ -11,6 +11,7 @@ import { desiredSettings, planSettingsMerge, writeSettingsMerge } from "./lib/cl
 import { ConfigError, abbreviateHome, configPath, loadConfig, minimalConfig, resolveConfig } from "./lib/config.mjs";
 import { codexHooks, planCodexHooks, writeCodexHooks } from "./lib/host-hooks.mjs";
 import { codexCommandSkill, renderDrift, renderHostFiles, writeRendered } from "./lib/render.mjs";
+import { applyUnits, commandLine, noSystemctl, planUnits, retiredSegwiLink, segwiLink, serviceSearchPath, userSystemctl } from "./lib/segwi-install.mjs";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 const postMergeHook = `#!/bin/sh
@@ -61,6 +62,7 @@ export async function links({
   checkout = root,
   generated = generatedDirectory(home),
   hosts = { opencode: true, claude: true, codex: true },
+  segwi = false,
 } = {}) {
   const entries = [
     [path.join(opencode, "opencode.json"), path.join(generated, "opencode/opencode.json"), "opencode"],
@@ -99,6 +101,8 @@ export async function links({
     const source = path.join(checkout, "scripts", process.platform === "win32" ? `${executable}.cmd` : executable);
     entries.push([path.join(bin, path.basename(source)), source, "shared"]);
   }
+  // segwi is opt-in: the link exists only while config.json turns it on.
+  if (segwi) entries.push(segwiLink({ bin, checkout }));
   for (const name of Object.keys(JSON.parse(await readFile(path.join(checkout, "codex/agents.json"), "utf8")))) {
     entries.push([path.join(codex, "agents", `${name}.toml`), path.join(generated, "codex/agents", `${name}.toml`), "codex"]);
   }
@@ -254,7 +258,7 @@ export async function install(options = {}) {
   if (migrateFrom && within(checkout, migrateFrom)) throw new Error("--migrate-from must name the old checkout, not this one");
   const { config, exists, write: configToWrite } = await installationConfig({ home, checkout, configFile, configSource: options.configSource });
   const rendered = await renderHostFiles({ checkout, config });
-  const linkOptions = { ...options, home, checkout, generated, hosts: config.hosts };
+  const linkOptions = { ...options, home, checkout, generated, hosts: config.hosts, segwi: config.segwi.enabled };
   const entries = await links(linkOptions);
   const stale = await staleLinks({ ...linkOptions, migrateFrom, rendered, expected: new Set(entries.map(([destination]) => destination)) });
   // A host switched off in config.json keeps none of its links: each one it
@@ -267,6 +271,13 @@ export async function install(options = {}) {
     } catch (error) {
       if (!["ENOENT", "EINVAL", "UNKNOWN"].includes(error.code)) throw error;
     }
+  }
+  // With segwi off, a `segwi` link that still points into this checkout is ours to retire.
+  if (!config.segwi.enabled) {
+    const retired = await retiredSegwiLink({
+      bin: options.bin ?? path.join(home, ".local/bin"), checkouts: [checkout, migrateFrom].filter(Boolean), wrapper: windowsWrapper,
+    });
+    if (retired && !stale.includes(retired)) stale.push(retired);
   }
   const pending = [];
   const relinks = [];
@@ -340,6 +351,20 @@ export async function install(options = {}) {
     : await fileExists(codexHooksFiles.stateFile) ? {} : null;
   const codexHooksPlan = codexHooksDesired ? await planCodexHooks({ ...codexHooksFiles, desired: codexHooksDesired }) : null;
   conflicts.push(...(codexHooksPlan?.conflicts ?? []));
+  // segwi's systemd user units are recorded in their own state file, so they
+  // go the way they came: only on Linux, only while both keys are on.
+  const nodePath = options.nodePath ?? process.execPath;
+  const segwiUnits = await planUnits({
+    unitsDir: options.systemdUser ?? path.join(home, ".config/systemd/user"),
+    stateFile: path.join(home, ".local/share/mexxi/state/segwi-units.json"),
+    wanted: config.segwi.enabled && config.segwi.service.systemdUserUnit && (options.platform ?? process.platform) === "linux",
+    checkout, nodePath,
+    searchPath: serviceSearchPath({
+      searchPath: options.searchPath ?? process.env.PATH, nodePath,
+      transient: [process.env.XDG_RUNTIME_DIR, process.env.GIT_EXEC_PATH],
+    }),
+  });
+  conflicts.push(...segwiUnits.conflicts);
   // The claude CLI runs with this home, so a test's throwaway home is the
   // only one it can touch.
   const claudeCli = { cli: options.claudeCli ?? "claude", env: { ...(options.env ?? process.env), HOME: home } };
@@ -360,7 +385,12 @@ export async function install(options = {}) {
     }
     throw new Error(`existing configuration differs; no changes made:\n${blocking.join("\n")}${advice}`);
   }
-  if (options.dryRun) return { dryRun: true, conflicts: 0, checked: entries.length };
+  const unitSummary = {
+    units: { write: segwiUnits.write.map((unit) => unit.path), remove: segwiUnits.remove.map((unit) => unit.path) },
+    commands: segwiUnits.commands.map(commandLine),
+  };
+  const hasUnitWork = segwiUnits.write.length > 0 || segwiUnits.remove.length > 0;
+  if (options.dryRun) return { dryRun: true, conflicts: 0, checked: entries.length, ...(hasUnitWork && { segwi: { ...unitSummary, systemctl: "dry-run" } }) };
   const drift = await renderDrift(generated, rendered);
   if (options.check) {
     const incomplete = [
@@ -372,6 +402,7 @@ export async function install(options = {}) {
       ...(settingsPlan?.drift ?? []),
       ...(codexHooksPlan?.drift ?? []),
       ...(modsPlan?.drift ?? []),
+      ...segwiUnits.drift,
       ...await registrationDrift({
         browser: config.browser, hosts: config.hosts,
         claudeJson: options.claudeJson ?? path.join(home, ".claude.json"),
@@ -389,6 +420,9 @@ export async function install(options = {}) {
   if (settingsPlan) await writeSettingsMerge(settingsFiles, settingsPlan);
   if (codexHooksPlan) await writeCodexHooks(codexHooksFiles, codexHooksPlan);
   for (const link of stale) await unlink(link);
+  // The shared home guard: only the real home talks to the real systemd.
+  const systemctl = options.systemctl ?? (home === os.homedir() ? userSystemctl : noSystemctl);
+  const unitOutcome = await applyUnits(segwiUnits, { systemctl });
   // Relinks go first, in links() order, so in the pre-move layout
   // ~/.claude/CLAUDE.md is the first link moved:
   // docs/migrating-from-coding-agent-config.md tells
@@ -422,7 +456,7 @@ export async function install(options = {}) {
   const registration = Object.fromEntries(Object.entries(registrationCommands(config.browser)).filter(([host]) => config.hosts[host]));
   return {
     created: pending.length, relinked: relinks.length, removed: stale.length, rendered: drift.length, checked: entries.length,
-    settings: settingsPlan?.drift.length ?? 0, ...modsSummary(modsPlan), ...(modsFailed && { mods: "failed", modsFailed }), registration,
+    settings: settingsPlan?.drift.length ?? 0, ...(hasUnitWork && { segwi: { ...unitSummary, systemctl: unitOutcome.systemctl, failed: unitOutcome.failed } }), ...modsSummary(modsPlan), ...(modsFailed && { mods: "failed", modsFailed }), registration,
     // Codex skips a new or changed hook until it is trusted in /hooks.
     codexHooksChanged: Boolean(codexHooksPlan?.file),
   };
@@ -441,6 +475,19 @@ async function fileExists(file) {
 function modsSummary(plan) {
   if (!plan) return {};
   return { mods: plan.available ? plan.install.length + plan.uninstall.length + (plan.marketplace ? 1 : 0) : plan.skipped };
+}
+
+// What happened to segwi's systemd units, in words. systemd being absent or
+// failing is a notice, never an error: the files are already as config.json asks.
+function reportSegwiUnits({ units, commands, systemctl, failed = [] }) {
+  const lines = [
+    ...units.write.map((file) => `${systemctl === "dry-run" ? "Would write" : "Wrote"} ${file}`),
+    ...units.remove.map((file) => `${systemctl === "dry-run" ? "Would remove" : "Removed"} ${file}`),
+  ];
+  if (systemctl === "dry-run") lines.push(...commands.map((command) => `Would run: ${command}`));
+  if (systemctl === "missing") lines.push("systemctl was not found, so the units are in place but not started. Run these on a machine with systemd:", ...commands.map((command) => `  ${command}`));
+  if (systemctl === "failed") lines.push("systemctl did not accept every command; the units are in place. Run them yourself:", ...commands.map((command) => `  ${command}`), ...failed.map((line) => `  (${line})`));
+  process.stdout.write(`${lines.join("\n")}\n`);
 }
 
 function windowsWrapper(module) {
@@ -464,9 +511,10 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       codex: process.env.CODEX_HOME ? path.resolve(process.env.CODEX_HOME) : undefined,
       configFile: configPath(),
     });
-    const { registration = {}, codexHooksChanged, modsFailed, ...summary } = result;
+    const { registration = {}, codexHooksChanged, modsFailed, segwi: segwiUnits, ...summary } = result;
     process.stdout.write(`${JSON.stringify(summary)}\n`);
     if (result.dryRun) process.stdout.write("Nothing would stop an install, and nothing was changed.\n");
+    if (segwiUnits) reportSegwiUnits(segwiUnits);
     if (codexHooksChanged) {
       process.stdout.write("Codex hooks changed: start codex and trust the mexxi guard and loop breaker once in /hooks (Codex skips untrusted hooks).\n");
     }

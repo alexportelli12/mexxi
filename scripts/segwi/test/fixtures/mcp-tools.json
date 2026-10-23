@@ -1,0 +1,204 @@
+[
+  {
+    "name": "get_output",
+    "description": "Reads a run's output after event number `since`: agent text, replies, approvals and step results in full. maxChars caps the text per call; a longer text comes in parts. Pass the returned nextSince and nextOffset back to carry on.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "since": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "offset": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "maxChars": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 20000
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "get_run",
+    "description": "Shows one run: its status, the latest steps and the branch, pull request and verify result.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "list_approvals",
+    "description": "Lists approvals the agent is waiting on (pending unless another status is given). Read-only: a person decides them in the web app.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "allowed",
+            "denied",
+            "expired"
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "list_repos",
+    "description": "Lists the repositories segwi may work in, with the default branch, whether the checkout is clean and the latest run.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {},
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "list_runs",
+    "description": "Lists recent runs, newest first, optionally only one status or repository.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "queued",
+            "running",
+            "needs_input",
+            "needs_approval",
+            "completed",
+            "failed",
+            "stopped",
+            "timed_out"
+          ]
+        },
+        "repo": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "send_input",
+    "description": "Sends a reply to a run that is waiting for one.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000
+        }
+      },
+      "required": [
+        "id",
+        "text"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "start_run",
+    "description": "Starts a run of a configured action (build, ready or ask) in a configured repository. Returns the run id and status; follow it with get_output.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "repo": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string",
+          "enum": [
+            "build",
+            "ready",
+            "ask"
+          ]
+        },
+        "task": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 8000
+        },
+        "clientId": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        }
+      },
+      "required": [
+        "repo",
+        "action",
+        "task"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "stop_run",
+    "description": "Stops a run in two steps. The first call returns a confirmToken; call again with it within 2 minutes to stop. The branch and any open PR stay.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid",
+          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "confirmToken": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 100
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    }
+  }
+]

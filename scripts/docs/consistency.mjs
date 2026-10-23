@@ -4,6 +4,10 @@
 const decodeAttribute = (text) => text.replace(/&#10;/g, "\n").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
 const visibleText = (html) => html.replace(/<(script|style)[\s\S]*?<\/\1>/g, "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&#?\w+;/g, "").replace(/\s+/g, " ");
 
+// The landing page keeps mexxi's pitch focused, so the opt-in segwi stays off it
+// for now (decision 0011); its entry lives on the generated names page.
+const NOT_ON_LANDING_PAGE = new Set(["segwi"]);
+
 export function checkConsistency(files) {
   const problems = [];
   const prompts = JSON.parse(files.get("prompts.json"));
@@ -38,7 +42,7 @@ export function checkConsistency(files) {
   if (!/href="docs\/names\.html"/.test(landing)) problems.push("site/index.html: link to the names page (docs/names.html), which holds the dictionary");
   // The landing page's dictionary section is static HTML, so each entry, marked
   // data-name="<name>", must say what names.json says, word for word.
-  for (const entry of names) {
+  for (const entry of names.filter((item) => !NOT_ON_LANDING_PAGE.has(item.name))) {
     const block = landing.match(new RegExp(`<li[^>]*data-name="${entry.name}"[^>]*>([\\s\\S]*?)</li>`))?.[1];
     if (!block) {
       problems.push(`site/index.html: the names section needs an entry with data-name="${entry.name}"`);

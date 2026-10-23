@@ -1,0 +1,77 @@
+@import "tailwindcss";
+/* The same tokens the landing page and docs read, so the three never drift. */
+@import "../../../../site/tokens.css";
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-on-accent: var(--on-accent);
+  --color-needs-you: var(--status-needs-you);
+  --color-done: var(--status-done);
+  --color-failed: var(--status-failed);
+  --color-stopped: var(--status-stopped);
+  --font-ui: var(--font-sans);
+  --font-code: var(--font-mono);
+  --radius-card: var(--radius);
+}
+
+/* A routed page fills the shell's column with one rhythm: the host element has no layout of its own. */
+router-outlet + * {
+  @apply flex flex-col gap-5;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* The bar that keeps a screen's main action in reach: above the bottom nav on phones. */
+.sticky-bar {
+  position: sticky;
+  bottom: calc(4.1rem + env(safe-area-inset-bottom));
+  z-index: 10;
+  margin-inline: -1rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+}
+/* Same offset, no height: the "Jump to latest" button rests on it when there is no bar. */
+.sticky-anchor {
+  position: sticky;
+  bottom: calc(4.1rem + env(safe-area-inset-bottom));
+  z-index: 10;
+  height: 0;
+}
+/* Sits on the top edge of whichever bar it is in, so it never covers a control, whatever the bar's height. */
+.jump-to-latest {
+  position: absolute;
+  right: 1rem;
+  bottom: calc(100% + 0.75rem);
+}
+.sticky-anchor .jump-to-latest {
+  bottom: 0.75rem;
+}
+@media (min-width: 1024px) {
+  .sticky-anchor,
+  .sticky-bar {
+    bottom: 0;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}

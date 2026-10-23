@@ -19,7 +19,8 @@ const UNDER_THE_HOOD = ["Principles", "Decisions", "History"];
 // Hand-written pages are Start here pages unless listed here.
 // The session statistics behind the problems are evidence, not a first read,
 // and only people moving an old install need the migration guide.
-const HANDWRITTEN_SECTIONS = { "host-details": "Configuration", "migrating-from-coding-agent-config": "History", "where-the-problems-come-from": "Principles" };
+// segwi is opt-in and has its own settings, so its guide sits with the configuration pages.
+const HANDWRITTEN_SECTIONS = { "host-details": "Configuration", "migrating-from-coding-agent-config": "History", segwi: "Configuration", "where-the-problems-come-from": "Principles" };
 // Hand-written opening of the generated configuration page, not a page itself.
 const CONFIGURATION_GUIDE = "docs/configuration-guide.md";
 
@@ -284,6 +285,8 @@ export async function generatePages({ root, files }) {
   // The names page is a small dictionary: one entry per name, each with the
   // page where you meet it.
   const nameLink = (entry) => {
+    // segwi is a CLI too, but it has a guide of its own instead of a generated reference.
+    if (entry.name === "segwi") return `[the segwi guide](${pageLink("names", "segwi")})`;
     const target = { command: `commands/${entry.name}`, skill: `skills/${entry.name}`, cli: "cli/index", repo: "index" }[entry.kind];
     const label = { command: `the /${entry.name} command`, skill: `the ${entry.name} skill`, cli: "the ibni CLI", repo: "the overview" }[entry.kind];
     return `[${label}](${pageLink("names", target)})`;

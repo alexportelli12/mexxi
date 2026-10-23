@@ -13,10 +13,14 @@ export const TIMEOUT_KEY = "BASH_MAX_TIMEOUT_MS";
 export const RETENTION_KEY = "cleanupPeriodDays";
 
 // Prefix rules, as the plan's starter list spells them: "firebase deploy"
-// denies Bash(firebase deploy:*).
+// denies Bash(firebase deploy:*). segwi renders its per-run settings with the same rules.
+export function denyRules(patterns) {
+  return patterns.map((pattern) => `Bash(${pattern}:*)`);
+}
+
 export function desiredSettings(config) {
   return {
-    deny: config.guard.deny.map((pattern) => `Bash(${pattern}:*)`),
+    deny: denyRules(config.guard.deny),
     env: { [TIMEOUT_KEY]: String(config.claude.bashMaxTimeoutMs) },
     keys: { [RETENTION_KEY]: config.retro.transcriptRetentionDays },
     hooks: claudeHooks(config),

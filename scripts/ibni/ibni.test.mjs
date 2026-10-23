@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -152,6 +153,27 @@ test("uses readable slug names and numeric suffixes for repeated requests", asyn
   assert.equal(path.basename(second.json.worktreePath), "same-change-2");
   assert.equal(second.json.branch, "agent/same-change-2");
   assert.notEqual(first.json.sessionId, second.json.sessionId);
+});
+
+test("IBNI_LOCK_ROOT moves the repository lock, except prepare's, and IBNI_SKIP_SWEEP skips prepare's sweep", async (t) => {
+  const fixture = await createFixture(t);
+  const lockRoot = path.join(fixture.root, "locks");
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "locked elsewhere" }, [0], { IBNI_LOCK_ROOT: lockRoot, IBNI_SKIP_SWEEP: "1" });
+  assert.equal(prepared.json.cleanup.skipped, "IBNI_SKIP_SWEEP is set");
+  const recorded = await lifecycle(fixture, prepared.json.worktreePath, "record-evidence", { session: prepared.json.sessionId }, [0], { IBNI_LOCK_ROOT: lockRoot });
+  assert.equal(recorded.json.operation, "record-evidence");
+  assert.ok(existsSync(lockRoot), "other commands lock under IBNI_LOCK_ROOT");
+  const { repositoryLockPath } = await import("./lib/lock.mjs");
+  const common = path.join(fixture.control, ".git");
+  assert.equal(path.dirname(repositoryLockPath(common, { IBNI_LOCK_ROOT: lockRoot })), lockRoot);
+  assert.equal(repositoryLockPath(common, {}), path.join(common, "opencode-implementation.lock"));
+});
+
+test("prepares from the checkout IBNI_LAUNCH_CHECKOUT names when run from elsewhere", async (t) => {
+  const fixture = await createFixture(t);
+  const prepared = await lifecycle(fixture, fixture.root, "prepare", { slug: "from elsewhere" }, [0], { IBNI_LAUNCH_CHECKOUT: fixture.control });
+  assert.equal((await git(prepared.json.worktreePath, "branch", "--show-current")).stdout.trim(), prepared.json.branch);
+  assert.equal((await git(fixture.control, "worktree", "list")).stdout.includes(prepared.json.worktreePath), true);
 });
 
 test("keeps workspaces retained under a legacy root available while new ones use the configured root", async (t) => {

@@ -19,7 +19,7 @@ reviewed: 2026-10-22
 
 Coding agents can now take a whole task and hand back a pull request. Writing the code is no longer the slow part; trusting it is. mexxi rests on six ideas that move the checking from you to the run, and leave you the decisions.
 
-Each idea starts with the problem, then says what mexxi does about it and what you will notice. The decision record linked from each one gives the full reasoning.
+Each idea starts with the problem, then says what mexxi does about it and what you will notice. The decision record linked from each one gives the full reasoning. [Decisions](decisions/index.md) lists every record.
 
 ## Each task gets its own copy of the repository
 

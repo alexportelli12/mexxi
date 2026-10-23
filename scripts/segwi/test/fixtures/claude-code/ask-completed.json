@@ -1,0 +1,1 @@
+{"cliVersion":"2.1.309","recordedWith":"--model haiku","scenario":"ask in a throwaway repository: What files are in this repository? Answer in one line.","redacted":"home and repository paths replaced with ~ placeholders; session id replaced with a fixed uuid; plugin, skill, agent and memory listings and thinking blocks removed from the init and assistant messages"}

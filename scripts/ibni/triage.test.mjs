@@ -75,6 +75,7 @@ test("every shared secret pattern compiles and redacts a planted token", async (
     "basic auth header": "Authorization: Basic dXNlcjpwYXNzd29yZA==",
     "Stripe key": "sk_live_0123456789abcdefABCD",
     "GitLab token": "glpat-abcdefghij0123456789",
+    "segwi MCP token": "segwi_abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG",
     "quoted secret-named field": "\"apiKey\": \"q1w2e3r4\"",
     "secret-named assignment": "db_password=hunter2",
     "long opaque token": "a1b2c3d4e5f6a7b8c9d0a1b2c3d4e5f6a7b8c9d0e1",

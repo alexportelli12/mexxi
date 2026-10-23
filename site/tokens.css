@@ -1,0 +1,41 @@
+/* The design tokens every surface shares: the landing page, the docs site and
+   segwi's web app. Change a colour here and all three follow. Hex values live
+   only in this file; the design check enforces it. */
+:root {
+  --bg: #0a0b0d;
+  --surface: #0e1013;
+  --surface-raised: #13161a;
+  --border: #1d2127;
+  --border-strong: #2a3038;
+  --text: #e6e8eb;
+  --muted: #9aa2ad;
+  --accent: #f4b860; /* mexxi's amber */
+  --accent-hover: #e8a94a;
+  --accent-pressed: #d99a35;
+  --accent-soft: rgb(244 184 96 / 0.14);
+  --on-accent: var(--bg);
+  --string: #ecd0a4;
+  --paper: #f1e9da; /* the dictionary's page */
+  --ink: #1d1a16;
+  --ink-muted: #5d554a;
+  --ink-rule: rgb(29 26 22 / 0.12); /* a hairline on the page, --ink at 12% */
+
+  /* A run's state, never shown by colour alone. Each reaches WCAG AA (4.5:1)
+     on --bg, --surface and --surface-raised; a test checks it. */
+  --status-needs-you: var(--accent);
+  --status-done: #5fd08a;
+  --status-failed: #ff7b72;
+  --status-stopped: var(--muted);
+
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+  --font-mono:
+    ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  /* Dictionary entries set the word in a book face, as a printed dictionary would. */
+  --font-book: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+
+  --radius: 10px;
+  --gutter: 24px;
+  --max: 1040px;
+}
