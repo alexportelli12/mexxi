@@ -167,27 +167,38 @@ export async function prepareWorkspace({ cwd = process.cwd(), slug, prefix, envi
 // segwi sets IBNI_DEFER_SETUP because its prepare runs outside its sandbox,
 // and install scripts must not; its run calls ibni setup inside instead.
 async function setUpPrepared(repository, { result, allocation, plan, lockfiles, gitDirectory }, environment) {
-  const rollback = () => withRepositoryLock(repository.commonDirectory, async () => {
-    const metadata = await readMetadata(gitDirectory).catch(() => null);
-    if (metadata?.sessionId === result.sessionId) {
-      await rollbackAllocatedWorkspace(repository.root, allocation, result.baseSha, { force: true });
+  // A rollback that fails (the lock timing out, say) never hides why setup
+  // failed; its own error is added to the details. The workspace it leaves
+  // behind says "setup did not finish", so nothing later mistakes it for ready.
+  const rollback = async (error) => {
+    try {
+      await withRepositoryLock(repository.commonDirectory, async () => {
+        const metadata = await readMetadata(gitDirectory).catch(() => null);
+        if (metadata?.sessionId === result.sessionId) {
+          await rollbackAllocatedWorkspace(repository.root, allocation, result.baseSha, { force: true });
+        }
+      }, { env: {} });
+    } catch (rollbackError) {
+      return new WorkspaceError(
+        error.message.replace("; the workspace was rolled back", "; rolling the workspace back failed too"),
+        `Rollback: ${rollbackError.message}\nInspect ${result.worktreePath} before removing it.`,
+      );
     }
-  }, { env: {} });
+    return error;
+  };
   let setup;
   try {
     setup = environment.IBNI_DEFER_SETUP === "1"
       ? deferredSetup(plan, result.sessionId, lockfiles)
       : await runSetup({ plan, worktreePath: result.worktreePath, evidenceDir: result.evidenceDir, lockfiles });
   } catch (error) {
-    await rollback();
-    throw error;
+    throw await rollback(error);
   }
   if (setup.ran && !setup.passed) {
-    await rollback();
-    throw new WorkspaceError(
+    throw await rollback(new WorkspaceError(
       `setup failed in the new worktree (${setup.command}, exit ${setup.exitCode ?? setup.signal ?? "unknown"}); the workspace was rolled back`,
       `${setup.logTail}\n\nFix the setup on the default branch (or "setup" in .mexxi.json), then prepare again.`,
-    );
+    ));
   }
   await withRepositoryLock(repository.commonDirectory, async () => {
     const metadata = await readMetadata(gitDirectory);

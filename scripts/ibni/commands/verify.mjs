@@ -31,22 +31,29 @@ async function packageVerifyScriptAt(root, sha) {
 // Only when the default branch has none at all (no verify in .mexxi.json and
 // no verify script for the default) is the one the branch adds the gate, as
 // when /lesti makes a repository mexxi-ready; commandSource then says so.
-async function gatingCommand(root, metadata) {
+async function gatingCommand(root, metadata, headSha) {
   const command = sessionVerifyCommand(metadata);
   if (command !== DEFAULT_VERIFY_COMMAND || await packageVerifyScriptAt(root, metadata.baseSha)) return { command, commandSource: "default-branch" };
-  const branchCommand = verifyCommandFrom(await repositorySettings(root, "HEAD"));
+  const branchCommand = verifyCommandFrom(await repositorySettings(root, headSha));
   return { command: branchCommand, commandSource: branchCommand === command ? "default-branch" : "branch" };
 }
 
 // Records the result in one metadata write, under the lock and only while the
 // session still owns the worktree, with the tree exactly as it was when the run
 // started: a commit or an edit during the run leaves the result unrecorded.
+// Only the start and the end are compared, so an edit undone before the run
+// ends goes unnoticed (decision 0013 accepts that).
 async function recordVerification(cwd, sessionId, started, verification) {
   return withRepositoryLock(started.repository.commonDirectory, async () => {
     const session = await ownedSession(cwd, sessionId);
     const now = await committedState(session.repository.root);
-    if (now.headSha !== started.headSha || now.dirty) {
-      return { recorded: false, reason: "the worktree changed while verify ran, so the result belongs to no committed tree; run ibni verify again" };
+    if (now.headSha !== started.headSha) {
+      return { recorded: false, reason: "HEAD moved while verify ran, so the result belongs to no committed tree; run ibni verify again" };
+    }
+    if (now.dirty) {
+      // Often the verify command's own output, such as a report it leaves behind.
+      const changed = cleanOutput(await git(session.repository.root, ["status", "--short", "--untracked-files=all"])).split("\n").slice(0, 5).join("; ");
+      return { recorded: false, reason: `the worktree was not clean when verify ended (${changed}); commit or remove those changes, or gitignore what the verify command writes, then run ibni verify again` };
     }
     const record = { kind: "verify", at: verification.ranAt, sessionId, outcome: verification.passed ? "pass" : "fail", treeSha: verification.treeSha, source: "ibni" };
     await updateMetadata(session, { verification, records: [...(session.metadata.records ?? []), record] });
@@ -68,7 +75,7 @@ export async function verifyWorkspace({ cwd = process.cwd(), sessionId }) {
     return { ...session, ...await committedState(session.repository.root) };
   });
   const { repository, metadata, headSha, treeSha } = started;
-  const { command, commandSource } = await gatingCommand(repository.root, metadata);
+  const { command, commandSource } = await gatingCommand(repository.root, metadata, headSha);
   const ranAt = new Date().toISOString();
   const baselineTree = await treeOf(repository.root, metadata.baseSha);
   const result = (verification, extra = {}) => ({ operation: "verify", sessionId, baseline: treeSha === baselineTree, ...verification, ...extra });

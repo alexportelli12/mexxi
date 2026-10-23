@@ -1104,7 +1104,7 @@ test("publish explains how to proceed when evidence is missing or stale", async 
   const stale = await lifecycle(fixture, prepared.json.worktreePath, "publish", { session: prepared.json.sessionId });
   assert.equal(stale.json.requiresRevalidation, true);
   assert.equal(stale.json.requiresVerify, true);
-  assert.match(stale.json.nextAction, new RegExp(`^Run ibni verify --session ${prepared.json.sessionId} in the background \\(it runs npm run verify on the integrated tree\\).*record-evidence, then publish again\\.$`));
+  assert.match(stale.json.nextAction, new RegExp(`^Run ibni verify --session ${prepared.json.sessionId} in the background \\(it runs the verify command, npm run verify unless the default branch has none, on the integrated tree\\).*record-evidence, then publish again\\.$`));
 });
 
 // The configured URL names a forge repository while insteadOf routes the
@@ -2380,8 +2380,18 @@ test("ibni verify holds no lock while it runs and records nothing for a tree tha
   const result = await running;
   assert.equal(result.json.passed, true);
   assert.equal(result.json.recorded, false);
-  assert.match(result.json.reason, /worktree changed while verify ran/);
+  assert.match(result.json.reason, /HEAD moved while verify ran/);
   assert.equal(JSON.parse(await metadataFile(worktreePath)).verification, null);
+});
+
+test("a verify command that leaves untracked files behind is not recorded, and ibni verify names them", async (t) => {
+  const fixture = await createFixture(t);
+  await commitRepositorySettings(fixture, `${JSON.stringify({ verify: "node -e \"require('fs').writeFileSync('report.txt', 'x')\"" })}\n`);
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "messy verify" });
+  const result = await verify(fixture, prepared, [1]);
+  assert.equal(result.json.passed, true);
+  assert.equal(result.json.recorded, false);
+  assert.match(result.json.reason, /not clean when verify ended \(\?\? report\.txt\).*gitignore what the verify command writes/);
 });
 
 test("ibni verify records a green CI baseline of the exact base tree without running anything", async (t) => {

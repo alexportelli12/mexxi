@@ -173,7 +173,9 @@ const ASK_RULES = ["git push", "gh api", "gh repo", "gh release", "gh pr merge"]
 
 /**
  * ibni verify and ibni setup run the commands the repository names, which `ibni:*` would otherwise allow whatever
- * they are. One that isn't plain asks, as it would if the agent ran it directly (VERIFY_NOT_ALLOWED).
+ * they are. One that isn't plain asks, as it would if the agent ran it directly (VERIFY_NOT_ALLOWED). Read from the
+ * checkout, so in a /lesti run where the default branch names no verify, the command a branch adds is not checked
+ * here; like any npm run script the agent edits, it is bounded by the sandbox, not by this list.
  */
 export function askRules({ verifyCommand, setupCommand }) {
   return [

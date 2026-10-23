@@ -18,7 +18,7 @@ export async function publishWorkspace({ cwd = process.cwd(), sessionId }) {
         requiresEvidence: true,
         reason: "the remote default branch was integrated and changed the tree; prior evidence is stale",
         requiresVerify: true,
-        nextAction: `Run ibni verify --session ${sessionId} in the background (it runs ${sessionVerifyCommand(initial.metadata)} on the integrated tree) and rerun any gate the integration could affect. Commit remediation if needed and verify again; once it passes, run record-evidence, then publish again.`,
+        nextAction: `Run ibni verify --session ${sessionId} in the background (it runs the verify command, ${sessionVerifyCommand(initial.metadata)} unless the default branch has none, on the integrated tree) and rerun any gate the integration could affect. Commit remediation if needed and verify again; once it passes, run record-evidence, then publish again.`,
       };
     }
 
