@@ -104,7 +104,11 @@ for (const runner of RUNNERS) {
     const events = await drive(adapter, spec, (all) => results(all).length === 1);
     adapter.close(spec.runId);
     await waitFor(() => exited(events));
-    const { allow } = JSON.parse(readFileSync(path.join(dir, "data", "runs", spec.runId, "settings.json"), "utf8")).permissions;
+    const rendered = JSON.parse(readFileSync(path.join(dir, "data", "runs", spec.runId, "settings.json"), "utf8"));
+    const { allow } = rendered.permissions;
+    // An ask run starts in the checkout and may write nothing there.
+    assert.deepEqual(rendered.sandbox.filesystem, { allowWrite: [`/tmp/claude-${process.getuid()}`], denyWrite: [repo] });
+    assert.ok(!("excludedCommands" in rendered.sandbox));
     assert.ok(allow.includes("Bash(git status:*)") && allow.includes("Bash(gh pr view:*)") && allow.includes("Bash(ibni info:*)"));
     assert.ok(allow.includes(`Read(/${repo}/**)`));
     for (const writer of ["Edit(", "Write(", "NotebookEdit(", "Bash(gh pr create", "Bash(gh pr edit", "Bash(npm", "Bash(npx", "Bash(git add", "Bash(git commit",
@@ -114,7 +118,7 @@ for (const runner of RUNNERS) {
   });
 
   test(`${runner.id}: rendered settings and MCP config follow the brief`, async (t) => {
-    const { adapter, dir } = runner.adapter(t, "ask-completed");
+    const { adapter, dir, report } = runner.adapter(t, "ask-completed");
     const spec = specFor(makeRepo(t), { action: "build" });
     const events = await drive(adapter, spec, (all) => results(all).length === 1);
     adapter.close(spec.runId);
@@ -132,12 +136,20 @@ for (const runner of RUNNERS) {
     for (const forbidden of ["python3", "node -e", "curl", "wget", "rm", "cp", "kill", "git push", "gh api", "git grep", "git fetch:"]) {
       assert.ok(!allow.some((rule) => rule.startsWith(`Bash(${forbidden}`)), `${forbidden} is not allowed`);
     }
-    assert.deepEqual(deny, ["Bash(npm publish:*)", "Bash(git push --force:*)", "Bash(git *--output*)", "Bash(gh *--output*)"]);
+    assert.deepEqual(deny, ["Bash(npm publish:*)", "Bash(git push --force:*)", "Bash(git *--output*)", "Bash(gh *--output*)",
+      `Edit(/${spec.repoPath}/*)`]);
     assert.equal(settings.permissions.disableBypassPermissionsMode, "disable");
     assert.equal(settings.sandbox.enabled, true);
     assert.equal(settings.sandbox.allowUnsandboxedCommands, false);
     assert.equal(settings.sandbox.autoAllowBashIfSandboxed, false);
-    assert.deepEqual(settings.sandbox.filesystem.allowWrite, [spec.worktreeRoot]);
+    const git = path.join(spec.repoPath, ".git");
+    assert.deepEqual(settings.sandbox.filesystem.allowWrite, [spec.worktreeRoot, `/tmp/claude-${process.getuid()}`, git]);
+    assert.deepEqual(settings.sandbox.filesystem.denyWrite, [path.join(git, "config"), path.join(git, "hooks"), path.join(git, "modules"), path.join(spec.repoPath, "README.md")]);
+    assert.deepEqual(settings.sandbox.excludedCommands, ["ibni prepare *"]);
+    // A build run starts outside the control checkout, which Claude Code would otherwise make writable, and tells ibni where it is.
+    assert.equal(report().cwd, spec.worktreeRoot);
+    assert.equal(report().launchCheckout, spec.repoPath);
+    assert.equal(report().npmCache, `/tmp/claude-${process.getuid()}/npm-cache`);
     assert.ok(!("disableAllHooks" in settings));
     const mcp = JSON.parse(readFileSync(path.join(runDir, "mcp.json"), "utf8"));
     assert.deepEqual(Object.keys(mcp.mcpServers), ["segwi", "playwright"]);

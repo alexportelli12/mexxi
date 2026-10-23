@@ -4,7 +4,7 @@
 // reaches the command line: the task goes to stdin, the rest comes from config.
 import { execFile, spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { accessSync, constants, readFileSync } from "node:fs";
+import { accessSync, constants, readFileSync, readdirSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -50,6 +50,16 @@ export function probeSandbox() {
   const trial = spawnSync("bwrap", ["--ro-bind", "/", "/", "--dev", "/dev", "--unshare-net", "true"], { stdio: "ignore", timeout: 5000 });
   if (trial.status !== 0) return ["Claude Code's sandbox can't start: bubblewrap is installed but can't create a sandbox, usually because unprivileged user namespaces are turned off."];
   return [];
+}
+
+/** The control checkout's shared git directory, where a linked worktree's commits land. */
+async function gitCommonDir(repoPath) {
+  try {
+    const { stdout } = await execFileAsync("git", ["-C", repoPath, "rev-parse", "--path-format=absolute", "--git-common-dir"], { timeout: 5000 });
+    return stdout.trim() || path.join(repoPath, ".git");
+  } catch {
+    return path.join(repoPath, ".git");
+  }
 }
 
 /** The first stdin line for each action. `ready` appends a task only if one is given. */
@@ -190,9 +200,10 @@ export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir 
     await mkdir(runDir, { recursive: true, mode: 0o700 });
     const settingsFile = path.join(runDir, "settings.json");
     const mcpFile = path.join(runDir, "mcp.json");
+    const tempDir = `/tmp/claude-${process.getuid?.() ?? 0}`;
     const settings = renderSettings({
       action: spec.action, worktreeRoot: spec.worktreeRoot, verifyCommand: spec.verifyCommand, denyPatterns: spec.denyPatterns, repoPath: spec.repoPath,
-      tempDir: `/tmp/claude-${process.getuid?.() ?? 0}`,
+      tempDir, gitCommonDir: await gitCommonDir(spec.repoPath), controlEntries: readdirSync(spec.repoPath),
     });
     await writeFile(settingsFile, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
     await writeFile(mcpFile, `${JSON.stringify(renderMcpConfig({ spec }), null, 2)}\n`, { mode: 0o600 });
@@ -204,9 +215,17 @@ export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir 
     // The approval tool holds its call open until a person answers, so Claude
     // Code must not give up on an MCP call before segwi's own approval expiry.
     env.MCP_TOOL_TIMEOUT = String((spec.limits.approvalTimeoutMinutes + 1) * 60_000);
+    // The sandbox can't write the home npm cache, so npm keeps one in the run's temporary directory.
+    env.npm_config_cache = path.join(tempDir, "npm-cache");
+    // A build or ready run starts outside the control checkout (see allow-list.mjs), so ibni prepare is told where it is.
+    const startDir = spec.action === "ask" ? spec.repoPath : spec.worktreeRoot;
+    if (spec.action !== "ask") {
+      env.IBNI_LAUNCH_CHECKOUT = spec.repoPath;
+      await mkdir(startDir, { recursive: true });
+    }
     // Its own process group, so a stop reaches what the host started (MCP servers, browsers, background
     // shells) and not only the host itself.
-    const child = spawn(bin, args, { cwd: spec.repoPath, env, stdio: ["pipe", "pipe", "pipe"], detached: true });
+    const child = spawn(bin, args, { cwd: startDir, env, stdio: ["pipe", "pipe", "pipe"], detached: true });
     const entry = { child, closed: false, timers: [] };
     processes.set(spec.runId, entry);
 

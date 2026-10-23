@@ -5,6 +5,7 @@
 // and gh api stay off it. It is not a boundary for code, though: npm run, the npx
 // test tools and node --test run the repository's own code, which the agent can
 // edit. The sandbox is what bounds that code.
+import path from "node:path";
 import { denyRules } from "../../lib/claude-settings.mjs";
 
 // Not grep or fetch with arguments: git grep -O and git fetch --upload-pack run a program of the caller's choosing.
@@ -73,11 +74,41 @@ export function allowRules({ action, worktreeRoot, verifyCommand, tempDir, repoP
   ];
 }
 
-export function renderSettings({ action, worktreeRoot, verifyCommand, tempDir, repoPath, denyPatterns }) {
+/**
+ * Where a run may write. The control checkout (the clone you work in, `repoPath`) is never one of those
+ * places: a file planted there runs later as you, outside any sandbox. A build or ready run starts in the
+ * worktree root instead, because Claude Code always lets a run write where it starts. Its commits in a linked
+ * worktree still need the checkout's git directory (objects, refs, worktree metadata, ibni's lock), so that is
+ * writable, except the config, hooks and submodules, through which git would run code. `controlEntries` are the
+ * checkout's top-level names, denied one by one, because denying the checkout itself would also deny its git
+ * directory. `ibni prepare` alone runs outside the sandbox: it must fast-forward the checkout, and it runs
+ * before the agent has written anything. Claude Code frees only a single plain command this way, never a
+ * compound one. An ask run starts in the checkout and writes nothing there.
+ */
+function filesystemRules({ action, worktreeRoot, tempDir, repoPath, gitCommonDir, controlEntries = [] }) {
+  if (action === "ask") return { allowWrite: [tempDir], denyWrite: [repoPath] };
+  return {
+    allowWrite: [worktreeRoot, tempDir, gitCommonDir],
+    denyWrite: [
+      ...["config", "hooks", "modules"].map((name) => path.join(gitCommonDir, name)),
+      ...controlEntries.filter((name) => path.join(repoPath, name) !== gitCommonDir).map((name) => path.join(repoPath, name)),
+    ],
+  };
+}
+
+/**
+ * The file tools may never write into the control checkout. Claude Code reads one Edit rule for all of them
+ * (Write and NotebookEdit rules change nothing), and it turns a `/**` rule into a sandbox mount over the whole
+ * checkout, which would also block the git directory a worktree's commits need. A `/*` glob is not mounted,
+ * and still refuses every file tool anywhere in the checkout (the sandbox test checks both).
+ */
+const controlDenyRules = (repoPath) => [`Edit(/${repoPath}/*)`];
+
+export function renderSettings({ action, worktreeRoot, verifyCommand, tempDir, repoPath, gitCommonDir = path.join(repoPath, ".git"), controlEntries = [], denyPatterns }) {
   return {
     permissions: {
       allow: allowRules({ action, worktreeRoot, verifyCommand, tempDir, repoPath }),
-      deny: [...denyRules(denyPatterns), ...OUTPUT_DENY],
+      deny: [...denyRules(denyPatterns), ...OUTPUT_DENY, ...controlDenyRules(repoPath)],
       disableBypassPermissionsMode: "disable",
     },
     sandbox: {
@@ -85,7 +116,8 @@ export function renderSettings({ action, worktreeRoot, verifyCommand, tempDir, r
       // Claude Code otherwise runs every sandboxed Bash command unasked, so the allow list would never be read.
       autoAllowBashIfSandboxed: false,
       allowUnsandboxedCommands: false,
-      filesystem: { allowWrite: [worktreeRoot] },
+      ...(action === "ask" ? {} : { excludedCommands: ["ibni prepare *"] }),
+      filesystem: filesystemRules({ action, worktreeRoot, tempDir, repoPath, gitCommonDir, controlEntries }),
       network: { allowedDomains: SANDBOX_DOMAINS },
     },
   };

@@ -51,7 +51,8 @@ export const COMMANDS = {
     summary: "Create an isolated worktree and branch for a new task.",
     why: "An agent working in your checkout trips over your own work and over other tasks, so each task starts in its own worktree.",
     details: [
-      "Run from the repository's clean primary checkout on its default branch. Fast-forwards it,",
+      "Run from the repository's clean primary checkout on its default branch, or name that checkout",
+      "in IBNI_LAUNCH_CHECKOUT (segwi does, because its runs start outside the checkout). Fast-forwards it,",
       "sweeps retained workspaces whose pull requests are proven merged, then creates a locked",
       "worktree, its evidenceDir and a free PORT (from workflow.ports in config.json).",
       "verifyCommand is the repository's verify command: verify in its committed .mexxi.json,",
@@ -68,7 +69,7 @@ export const COMMANDS = {
       prefix: "Branch prefix; defaults to workflow.branchPrefix in config.json.",
     },
     timed: true,
-    run: (options) => prepareWorkspace({ slug: options.slug, prefix: options.prefix }),
+    run: (options) => prepareWorkspace({ cwd: process.env.IBNI_LAUNCH_CHECKOUT || process.cwd(), slug: options.slug, prefix: options.prefix }),
   },
   sync: {
     usage: "ibni sync --session <id>",

@@ -34,7 +34,10 @@ const approverReplies = [];
 let grandchild = null;
 // Real Claude Code waits for MCP_TOOL_TIMEOUT (segwi sets it per run), not for the MCP SDK's 60 s default.
 const toolTimeout = Number(process.env.MCP_TOOL_TIMEOUT) > 0 ? Number(process.env.MCP_TOOL_TIMEOUT) : 2 * 60 * 60_000;
-const report = () => writeFileSync(reportFile, JSON.stringify({ args, stdin, segwiEnv, approverReplies, grandchild }));
+const report = () => writeFileSync(reportFile, JSON.stringify({
+  args, stdin, segwiEnv, approverReplies, grandchild,
+  cwd: process.cwd(), launchCheckout: process.env.IBNI_LAUNCH_CHECKOUT ?? null, npmCache: process.env.npm_config_cache ?? null,
+}));
 report();
 
 function nextInput() {

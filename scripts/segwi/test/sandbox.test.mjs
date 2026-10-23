@@ -5,6 +5,9 @@
 // turned off shows the same command does reach segwi, so the proof can't pass
 // because the harness never ran anything.
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
 import test from "node:test";
 import { runScripted, sandboxPrerequisiteProblem } from "./sandbox-harness.mjs";
 
@@ -67,4 +70,101 @@ test("control: with only the sandbox turned off, the same command reaches segwi 
   assert.equal(results[0]?.isError, false, results[0]?.text);
   assert.match(results[0].text, /"runner":\{"id":"claude-code"/, "segwi's health answer came back");
   assert.equal(healthRequests(audit).length, 1);
+});
+
+// --- the control checkout (the clone a person works in) stays untouched ---
+// A file planted there runs later as the person, outside any sandbox. Writes go through `sh -c` so Claude Code's
+// own path checks can't see them: they reach a person, the test allows them, and only the sandbox is left to refuse.
+
+const bash = (command) => ({ tool: "Bash", input: { command, description: "check" } });
+const PLANTED = "segwi-planted";
+// The sandbox's refusal, as the shell reports it.
+const REFUSED = /[Rr]ead-only file system|Permission denied|Operation not permitted/;
+
+/** What a run must never change in the control checkout: its status, its top-level names, its hooks and its git config. */
+function controlState(repo) {
+  return {
+    status: execFileSync("git", ["-C", repo, "status", "--porcelain", "--untracked-files=all"], { encoding: "utf8" }),
+    // Claude Code itself (outside the sandbox) makes an empty .claude/.cc-writes where an ask run starts. It holds
+    // nothing and git doesn't show it, so it is left out here, but anything else under .claude would show.
+    entries: readdirSync(repo).filter((name) => name !== ".claude").sort(),
+    claude: existsSync(path.join(repo, ".claude")) ? readdirSync(path.join(repo, ".claude"), { recursive: true }).filter((name) => name !== ".cc-writes") : [],
+    readme: readFileSync(path.join(repo, "README.md"), "utf8"),
+    hooks: readdirSync(path.join(repo, ".git", "hooks")).filter((name) => !name.endsWith(".sample")),
+    configPlanted: readFileSync(path.join(repo, ".git", "config"), "utf8").includes(PLANTED),
+  };
+}
+const UNTOUCHED = { status: "", entries: [".git", "README.md"], claude: [], readme: "# demo\n", hooks: [], configPlanted: false };
+
+const plantingWrites = (repo) => [
+  `touch ${repo}/${PLANTED}`,
+  `echo ${PLANTED} >> ${repo}/README.md`,
+  `echo ${PLANTED} > ${repo}/.git/hooks/pre-commit`,
+  `echo '# ${PLANTED}' >> ${repo}/.git/config`,
+].map((command) => bash(`sh -c "${command}"`));
+
+const show = (results, approvals) => JSON.stringify({ results, approvals: approvals.map((approval) => approval.exact) }, null, 1);
+
+test("a build run prepares its worktree with ibni and commits there, unasked", { skip, timeout: 180_000 }, async (t) => {
+  const worktree = ({ result }) => JSON.parse(result(0).text).worktreePath;
+  const script = [
+    bash("ibni prepare --slug sbx"),
+    (context) => ({ tool: "Write", input: { file_path: path.join(worktree(context), "note.txt"), content: "first\n" } }),
+    (context) => ({ tool: "Edit", input: { file_path: path.join(worktree(context), "note.txt"), old_string: "first", new_string: "second" } }),
+    (context) => bash(`cd ${worktree(context)}`),
+    bash("git add note.txt"),
+    bash('git commit -q -m "sandboxed commit"'),
+    { text: "Done." },
+  ];
+  const { results, approvals, repo, worktreeRoot } = await runScripted(t, { action: "build", script, decide: () => "deny" });
+  const report = show(results, approvals);
+
+  // ibni prepare runs outside the sandbox (it fast-forwards the control checkout and adds the worktree) without asking.
+  assert.equal(results[0]?.isError, false, report);
+  const prepared = JSON.parse(results[0].text);
+  assert.ok(prepared.worktreePath.startsWith(worktreeRoot), report);
+  assert.ok(existsSync(prepared.worktreePath), "the worktree exists");
+  // Everything here is on the allow list; the cd may ask, the rest must not.
+  assert.deepEqual(approvals.filter((approval) => !approval.exact.startsWith("cd ")), [], report);
+
+  // The file tools and git work in the worktree; the commit's objects land in the control checkout's git directory.
+  for (const index of [1, 2, 4, 5]) assert.equal(results[index]?.isError, false, `turn ${index}: ${report}`);
+  assert.equal(readFileSync(path.join(prepared.worktreePath, "note.txt"), "utf8"), "second\n");
+  assert.equal(execFileSync("git", ["-C", repo, "log", "-1", "--format=%s", prepared.branch], { encoding: "utf8" }).trim(), "sandboxed commit");
+  assert.deepEqual(controlState(repo), UNTOUCHED);
+});
+
+test("a build run can't write the control checkout, even when a person allows it", { skip, timeout: 180_000 }, async (t) => {
+  const script = [
+    ...[0, 1, 2, 3].map((index) => ({ repo }) => plantingWrites(repo)[index]),
+    ({ repo }) => ({ tool: "Write", input: { file_path: path.join(repo, `${PLANTED}-write`), content: "x\n" } }),
+    // ibni runs outside the sandbox only as a single plain command; a compound one stays inside as a whole.
+    ({ repo }) => bash(`ibni --help && sh -c "touch ${repo}/${PLANTED}-escaped"`),
+    { text: "Done." },
+  ];
+  // Every approval is allowed, so whatever stops a write is the sandbox or a deny rule, not a person.
+  const { results, approvals, repo } = await runScripted(t, { action: "build", script });
+  const report = show(results, approvals);
+
+  for (const index of [0, 1, 2, 3]) {
+    assert.ok(approvals.some((approval) => approval.exact === script[index]({ repo }).input.command), `turn ${index} reached a person: ${report}`);
+    assert.equal(results[index]?.isError, true, `turn ${index}: ${report}`);
+    assert.match(results[index].text, REFUSED, `turn ${index}: ${report}`);
+  }
+  assert.match(results[4]?.text ?? "", /denied/, `the Write tool is denied: ${report}`);
+  assert.ok(!approvals.some((approval) => approval.exact.includes(`${PLANTED}-write`)), "the Write tool never asked");
+  assert.match(results[5]?.text ?? "", new RegExp(`${PLANTED}-escaped.*(${REFUSED.source})`), `the compound's touch ran and was refused: ${report}`);
+  assert.deepEqual(controlState(repo), UNTOUCHED);
+});
+
+test("an ask run can't write the control checkout, even when a person allows it", { skip, timeout: 180_000 }, async (t) => {
+  const script = [...[0, 1].map((index) => ({ repo }) => plantingWrites(repo)[index]), { text: "Done." }];
+  const { results, approvals, repo } = await runScripted(t, { script });
+  const report = show(results, approvals);
+  assert.equal(approvals.length, 2, report);
+  for (const index of [0, 1]) {
+    assert.equal(results[index]?.isError, true, `turn ${index}: ${report}`);
+    assert.match(results[index].text, REFUSED, `turn ${index}: ${report}`);
+  }
+  assert.deepEqual(controlState(repo), UNTOUCHED);
 });

@@ -154,6 +154,13 @@ test("uses readable slug names and numeric suffixes for repeated requests", asyn
   assert.notEqual(first.json.sessionId, second.json.sessionId);
 });
 
+test("prepares from the checkout IBNI_LAUNCH_CHECKOUT names when run from elsewhere", async (t) => {
+  const fixture = await createFixture(t);
+  const prepared = await lifecycle(fixture, fixture.root, "prepare", { slug: "from elsewhere" }, [0], { IBNI_LAUNCH_CHECKOUT: fixture.control });
+  assert.equal((await git(prepared.json.worktreePath, "branch", "--show-current")).stdout.trim(), prepared.json.branch);
+  assert.equal((await git(fixture.control, "worktree", "list")).stdout.includes(prepared.json.worktreePath), true);
+});
+
 test("keeps workspaces retained under a legacy root available while new ones use the configured root", async (t) => {
   const fixture = await createFixture(t);
   const identity = createHash("sha256").update(path.join(fixture.control, ".git")).digest("hex").slice(0, 10);

@@ -5,8 +5,9 @@
 // Code runs with a throwaway home and config directory, so the developer's own
 // settings and hooks never apply.
 import { execFileSync } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { createClaudeCodeAdapter } from "../runners/claude-code.mjs";
 import { startServer } from "../lib/serve.mjs";
 import { startFakeAnthropic, toolUseId } from "./fake-anthropic.mjs";
@@ -14,6 +15,8 @@ import { makeRepo, makeSettings, request, tempDir, waitFor } from "./helpers.mjs
 
 const noIbni = { findNewWorkspace: async () => null, summary: async () => null, list: async () => [] };
 const RUN_LIMIT_MS = 120_000;
+// This checkout's ibni, so a run uses the ibni under test rather than whatever is installed.
+const IBNI_DIR = fileURLToPath(new URL("../../ibni/", import.meta.url));
 
 // For control runs and experiments only: merges a patch into segwi's rendered settings (objects merge, everything else
 // replaces), then runs the real `claude` with the same arguments. The patch is the first argument; its "$cwd", if
@@ -57,8 +60,12 @@ export function sandboxPrerequisiteProblem() {
 }
 
 /**
- * Runs one `ask` run of the real `claude` against a fake model that plays `script`. A turn may be a
- * function of `{ segwiPort, repo, worktreeRoot, home }`, called when the model reaches it.
+ * Runs one `ask` or `build` run of the real `claude` against a fake model that plays `script`. A turn may be a
+ * function of `{ segwiPort, repo, worktreeRoot, home, result }`, called when the model reaches it; `result(i)` is
+ * the tool result of an earlier turn i.
+ * A build run gets what it needs to reach the model and run `ibni prepare`: a stub /wettaq command that passes
+ * the task on, a bare local origin for the repository, this checkout's ibni first on PATH and an ibni config whose
+ * worktree root is the run's.
  * `decide(approval)` answers each approval segwi raises ("allow" or "deny"; allow by default).
  * `prepare({ repo, worktreeRoot, home })` runs before the run starts, to lay out files.
  * `settingsPatch` is for control runs and experiments: it is merged into segwi's rendered settings before Claude Code
@@ -69,21 +76,35 @@ export function sandboxPrerequisiteProblem() {
  *   run: object, server: object, repo: string, worktreeRoot: string, home: string }>}
  *   `results[i]` is the tool result for script turn i. The segwi server is closed when the test ends.
  */
-export async function runScripted(t, { script, decide = () => "allow", prepare = async () => {}, settingsPatch = null }) {
+export async function runScripted(t, { script, action = "ask", decide = () => "allow", prepare = async () => {}, settingsPatch = null }) {
   const context = {};
   const model = await startFakeAnthropic(script.map((turn) => (typeof turn === "function" ? () => turn(context) : turn)));
   t.after(() => model.close());
   const home = tempDir(t, "segwi-sbx-home-");
   const worktreeRoot = tempDir(t, "segwi-sbx-worktrees-");
   const repo = makeRepo(t);
+  const configDir = path.join(home, ".claude");
+  const build = action !== "ask";
+  if (build) {
+    // A bare clone, not a push: the repository's origin, so ibni prepare has something to fast-forward from.
+    const origin = path.join(home, "origin.git");
+    execFileSync("git", ["clone", "-q", "--bare", repo, origin]);
+    for (const args of [["remote", "add", "origin", origin], ["fetch", "-q", "origin"], ["branch", "-q", "--set-upstream-to=origin/main"]]) {
+      execFileSync("git", ["-C", repo, ...args]);
+    }
+    mkdirSync(path.join(configDir, "commands"), { recursive: true });
+    writeFileSync(path.join(configDir, "commands", "wettaq.md"), "$ARGUMENTS\n");
+    writeFileSync(path.join(home, "mexxi-config.json"), JSON.stringify({ paths: { worktreeRoot } }));
+  }
   await prepare({ repo, worktreeRoot, home });
 
   // The adapter hands Claude Code this process's environment, so the run's environment is set here for the run's length.
   const env = {
-    HOME: home, CLAUDE_CONFIG_DIR: path.join(home, ".claude"), ANTHROPIC_BASE_URL: model.url, ANTHROPIC_API_KEY: "sk-ant-fake",
+    HOME: home, CLAUDE_CONFIG_DIR: configDir, ANTHROPIC_BASE_URL: model.url, ANTHROPIC_API_KEY: "sk-ant-fake",
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1", DISABLE_AUTOUPDATER: "1", DISABLE_TELEMETRY: "1", DISABLE_ERROR_REPORTING: "1",
     // The rendered MCP config starts the Playwright server through npx; offline, it fails at once instead of downloading.
     npm_config_offline: "true",
+    ...(build ? { MEXXI_CONFIG: path.join(home, "mexxi-config.json"), PATH: `${IBNI_DIR}${path.delimiter}${process.env.PATH}` } : {}),
   };
   mkdirSync(env.CLAUDE_CONFIG_DIR, { recursive: true });
   // A Claude Code session running this test must not leak its own session variables into the nested run.
@@ -110,12 +131,14 @@ export async function runScripted(t, { script, decide = () => "allow", prepare =
     if (event.kind === "exit") exited();
     emit(event);
   });
-  const settings = makeSettings({ repos: [{ name: "my-app", path: repo, actions: ["ask"] }], worktreeRoot });
+  const settings = makeSettings({ repos: [{ name: "my-app", path: repo, actions: [action] }], worktreeRoot });
   const server = await startServer({ settings, dataDir, runner: adapter, ibni: noIbni, staticRoot: null });
   t.after(() => server.close());
-  Object.assign(context, { segwiPort: server.port, repo, worktreeRoot, home });
+  // Once in a while Claude Code's last session writes race the first removal of its home; this one runs after the server is closed.
+  t.after(() => rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
+  Object.assign(context, { segwiPort: server.port, repo, worktreeRoot, home, result: (index) => model.toolResults()[toolUseId(index)] });
 
-  const started = await request(server, "POST", "/api/runs", { body: { repo: "my-app", action: "ask", task: "Follow the script." } });
+  const started = await request(server, "POST", "/api/runs", { body: { repo: "my-app", action, task: "Follow the script." } });
   if (started.status !== 201 && started.status !== 200) throw new Error(`segwi refused the run: ${started.status} ${started.text}`);
   const runId = started.json.run.id;
   t.after(() => request(server, "POST", `/api/runs/${runId}/stop`, { body: { confirm: true } }).catch(() => {}));
@@ -128,10 +151,13 @@ export async function runScripted(t, { script, decide = () => "allow", prepare =
       await request(server, "POST", `/api/approvals/${approval.id}`, { body: { decision: decide(approval) } });
     }
     const run = server.store.getRun(runId);
-    return ["completed", "failed", "stopped", "timed_out"].includes(run.status) ? run : null;
+    // A build run that finished its turn waits for more input; that is the end of a scripted run too.
+    return ["completed", "failed", "stopped", "timed_out", "needs_input"].includes(run.status) ? run : null;
   }, { timeoutMs: deadline - Date.now(), intervalMs: 100, what: "the Claude Code run to finish" });
+  if (finished.status === "needs_input") await request(server, "POST", `/api/runs/${runId}/stop`, { body: { confirm: true } });
 
-  await Promise.race([hostExit, new Promise((resolve) => setTimeout(resolve, 10_000).unref())]);
+  const exitedInTime = await Promise.race([hostExit.then(() => true), new Promise((resolve) => setTimeout(() => resolve(false), 10_000).unref())]);
+  if (!exitedInTime) t.diagnostic("Claude Code had not exited 10 s after the run finished");
   const toolResults = model.toolResults();
   return {
     results: script.map((_, index) => toolResults[toolUseId(index)]),
