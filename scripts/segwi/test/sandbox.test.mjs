@@ -273,7 +273,7 @@ test("the Read tool, which runs outside the sandbox, can't read the home's keys 
   }
 });
 
-test("the file tools can't write the control checkout below its top level or through a symlink, and ibni runs outside", { skip, timeout: 180_000 }, async (t) => {
+test("the file tools can't write the control checkout below its top level or through a symlink, and ibni works inside the sandbox", { skip, timeout: 180_000 }, async (t) => {
   const prepare = ({ repo, worktreeRoot }) => symlinkSync(repo, path.join(worktreeRoot, "link"));
   const write = (target) => (context) => ({ tool: "Write", input: { file_path: target(context), content: `${PLANTED}\n` } });
   const script = [
@@ -285,6 +285,9 @@ test("the file tools can't write the control checkout below its top level or thr
     (context) => bash(`cd ${JSON.parse(context.result(3).text).worktreePath}`),
     bash("ibni list"),
     ({ repo }) => bash(`ibni list && sh -c "touch ${repo}/${PLANTED}-escaped"`),
+    // A command that takes ibni's repository lock: inside the sandbox it locks under IBNI_LOCK_ROOT, not the git directory.
+    (context) => bash(`ibni record --session ${JSON.parse(context.result(3).text).sessionId} --verify pass`),
+    (context) => bash(`ibni record-evidence --session ${JSON.parse(context.result(3).text).sessionId}`),
     { text: "Done." },
   ];
   // Approvals are allowed, so a write that asks and then lands would show on disk.
@@ -299,5 +302,8 @@ test("the file tools can't write the control checkout below its top level or thr
   assert.match(results[5].text, /"sbx"|agent\/sbx/, `ibni list saw the worktree: ${report}`);
   assert.ok(!approvals.some((approval) => approval.exact === "ibni list"), "ibni list needed no approval");
   assert.match(results[6]?.text ?? "", new RegExp(`${PLANTED}-escaped.*(${REFUSED.source})`), `the compound stayed sandboxed: ${report}`);
+  assert.equal(results[8]?.isError, false, `ibni record-evidence: ${report}`);
+  assert.match(results[8].text, /"operation":"record-evidence"/, report);
+  assert.ok(!existsSync(path.join(repo, ".git", "opencode-implementation.lock")), "no lock was left in the git directory");
   assert.deepEqual(controlState(repo), UNTOUCHED);
 });

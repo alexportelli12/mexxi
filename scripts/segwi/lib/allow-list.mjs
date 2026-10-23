@@ -18,12 +18,12 @@ const NPM = ["ci", "run", "test", "audit", "view"];
 const NPX = ["prettier", "vitest", "playwright", "tsc", "eslint", "ng", "oxlint"];
 
 // The run's browser (Playwright MCP) runs outside the sandbox, so only tools that look at or drive a page are
-// allowed. Running code (browser_evaluate), uploading local files, writing files (pdf, traces, video), changing
+// allowed. Running code (browser_evaluate), uploading or dropping local files, writing files (pdf, traces, video), changing
 // routes, cookies or storage, and calling page tools ask a person; browser_run_code_unsafe runs code in the
 // Playwright server itself and is refused outright.
 const BROWSER_TOOLS = [
   "navigate", "navigate_back", "navigate_forward", "reload", "snapshot", "take_screenshot", "click", "type", "press_key",
-  "press_sequentially", "fill_form", "select_option", "check", "uncheck", "hover", "drag", "drop", "handle_dialog", "wait_for",
+  "press_sequentially", "fill_form", "select_option", "check", "uncheck", "hover", "drag", "handle_dialog", "wait_for",
   "resize", "tabs", "close", "console_messages", "network_requests", "emulate_media", "find", "keydown", "keyup",
   "mouse_click_xy", "mouse_down", "mouse_up", "mouse_move_xy", "mouse_drag_xy", "mouse_wheel",
   "verify_element_visible", "verify_list_visible", "verify_text_visible", "verify_value",
@@ -109,12 +109,14 @@ export function gitWritePaths(gitCommonDir, branchPrefix) {
  * deny the git directory. ibni runs outside the sandbox (see renderSettings). An ask run starts in the
  * checkout and writes nothing there.
  */
-function filesystemRules({ action, worktreeRoot, tempDir, repoPath, gitCommonDir, branchPrefix, controlEntries = [], denyRead = [] }) {
+function filesystemRules({ action, worktreeRoot, tempDir, repoPath, gitCommonDir, branchPrefix, controlEntries = [], existingGit = [], denyRead = [] }) {
   if (action === "ask") return { allowWrite: [tempDir], denyWrite: [repoPath], denyRead };
   return {
     allowWrite: [worktreeRoot, tempDir, ...gitWritePaths(gitCommonDir, branchPrefix)],
     denyWrite: [
       ...["config", "hooks", "modules"].map((name) => path.join(gitCommonDir, name)),
+      // Other sessions' worktree metadata and branches, as they stand when the run starts, are not this run's to change.
+      ...existingGit,
       ...controlEntries.filter((name) => path.join(repoPath, name) !== gitCommonDir).map((name) => path.join(repoPath, name)),
     ],
     denyRead,
@@ -137,7 +139,7 @@ const secretReadRules = (paths) => paths.flatMap((file) => [`Read(/${file})`, `R
  * segwi's own state and data (its tokens, push key, run secrets and pending approvals). Only existing paths.
  */
 export function renderSettings({ action, worktreeRoot, verifyCommand, tempDir, repoPath, gitCommonDir = path.join(repoPath, ".git"), branchPrefix = "agent/",
-  controlEntries = [], denyRead = [], denyPatterns }) {
+  controlEntries = [], existingGit = [], denyRead = [], denyPatterns }) {
   return {
     permissions: {
       allow: allowRules({ action, worktreeRoot, verifyCommand, tempDir, repoPath }),
@@ -149,10 +151,11 @@ export function renderSettings({ action, worktreeRoot, verifyCommand, tempDir, r
       // Claude Code otherwise runs every sandboxed Bash command unasked, so the allow list would never be read.
       autoAllowBashIfSandboxed: false,
       allowUnsandboxedCommands: false,
-      // ibni is mexxi's own lifecycle tool, and it writes where a run may not: it fast-forwards the checkout and
-      // locks its git directory. Claude Code runs only a single plain ibni command outside, never a compound one.
-      ...(action === "ask" ? {} : { excludedCommands: ["ibni *"] }),
-      filesystem: filesystemRules({ action, worktreeRoot, tempDir, repoPath, gitCommonDir, branchPrefix, controlEntries, denyRead }),
+      // ibni prepare must fast-forward the checkout, so it alone runs outside, and only as a single plain command,
+      // never a compound one. It runs in the checkout, whose git config the run can't change. Every other ibni
+      // command stays inside: the run can point its own worktree at a git config of its choosing.
+      ...(action === "ask" ? {} : { excludedCommands: ["ibni prepare *"] }),
+      filesystem: filesystemRules({ action, worktreeRoot, tempDir, repoPath, gitCommonDir, branchPrefix, controlEntries, existingGit, denyRead }),
       network: { allowedDomains: SANDBOX_DOMAINS },
     },
   };

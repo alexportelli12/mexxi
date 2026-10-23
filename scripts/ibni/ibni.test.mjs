@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -152,6 +153,18 @@ test("uses readable slug names and numeric suffixes for repeated requests", asyn
   assert.equal(path.basename(second.json.worktreePath), "same-change-2");
   assert.equal(second.json.branch, "agent/same-change-2");
   assert.notEqual(first.json.sessionId, second.json.sessionId);
+});
+
+test("takes its repository lock under IBNI_LOCK_ROOT when that is set, and leaves the git directory alone", async (t) => {
+  const fixture = await createFixture(t);
+  const lockRoot = path.join(fixture.root, "locks");
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "locked elsewhere" }, [0], { IBNI_LOCK_ROOT: lockRoot });
+  assert.ok(prepared.json.worktreePath);
+  const { repositoryLockPath } = await import("./lib/lock.mjs");
+  const common = path.join(fixture.control, ".git");
+  assert.equal(path.dirname(repositoryLockPath(common, { IBNI_LOCK_ROOT: lockRoot })), lockRoot);
+  assert.equal(repositoryLockPath(common, {}), path.join(common, "opencode-implementation.lock"));
+  assert.ok(existsSync(lockRoot), "the lock folder was used");
 });
 
 test("prepares from the checkout IBNI_LAUNCH_CHECKOUT names when run from elsewhere", async (t) => {

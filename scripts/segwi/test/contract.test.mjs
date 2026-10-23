@@ -1,6 +1,7 @@
 // The shared runner contract: every adapter is driven against recorded host
 // output replayed by the fake host. Add a runner to RUNNERS to hold it to the same rules.
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
@@ -117,6 +118,28 @@ for (const runner of RUNNERS) {
     }
   });
 
+  test(`${runner.id}: a build run can't change other sessions' worktrees or branches, and your git config entries stay`, async (t) => {
+    const { adapter, dir, report } = runner.adapter(t, "ask-completed");
+    const repo = makeRepo(t);
+    const other = path.join(tempDir(t, "segwi-other-"), "wt");
+    execFileSync("git", ["-C", repo, "worktree", "add", "-q", "-b", "agent/other", other]);
+    process.env.GIT_CONFIG_COUNT = "1";
+    process.env.GIT_CONFIG_KEY_0 = "user.name";
+    process.env.GIT_CONFIG_VALUE_0 = "You";
+    t.after(() => { for (const key of ["GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0"]) delete process.env[key]; });
+    const spec = specFor(repo, { action: "build" });
+    const events = await drive(adapter, spec, (all) => results(all).length === 1);
+    adapter.close(spec.runId);
+    await waitFor(() => exited(events));
+    const { denyWrite } = JSON.parse(readFileSync(path.join(dir, "data", "runs", spec.runId, "settings.json"), "utf8")).sandbox.filesystem;
+    const git = path.join(repo, ".git");
+    assert.ok(denyWrite.includes(path.join(git, "worktrees", "wt")), "the other worktree's metadata");
+    assert.ok(denyWrite.includes(path.join(git, "refs", "heads", "agent", "other")), "the other session's branch");
+    assert.equal(report().lockRoot, `/tmp/claude-${process.getuid()}/ibni-locks`);
+    const env = report().gitConfig;
+    assert.deepEqual(env, { count: "2", first: ["user.name", "You"], second: ["core.hooksPath", path.join(git, "hooks")] });
+  });
+
   test(`${runner.id}: rendered settings and MCP config follow the brief`, async (t) => {
     const { adapter, dir, report } = runner.adapter(t, "ask-completed");
     const spec = specFor(makeRepo(t), { action: "build" });
@@ -158,7 +181,7 @@ for (const runner of RUNNERS) {
     assert.ok(deny.includes(`Read(/${path.join(dir, "data")}/**)`), "and denied to the Read tool, which runs outside the sandbox");
     assert.equal(report().gitHooksPath, path.join(git, "hooks"));
     assert.deepEqual(settings.sandbox.filesystem.denyWrite, [path.join(git, "config"), path.join(git, "hooks"), path.join(git, "modules"), path.join(spec.repoPath, "README.md")]);
-    assert.deepEqual(settings.sandbox.excludedCommands, ["ibni *"]);
+    assert.deepEqual(settings.sandbox.excludedCommands, ["ibni prepare *"]);
     // A build run starts outside the control checkout, which Claude Code would otherwise make writable, and tells ibni where it is.
     assert.equal(report().cwd, spec.worktreeRoot);
     assert.equal(report().launchCheckout, spec.repoPath);

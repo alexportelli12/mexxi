@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -18,8 +18,19 @@ export function processIsAlive(pid) {
   }
 }
 
+/**
+ * The lock lives in the repository's git directory, unless IBNI_LOCK_ROOT names another folder. segwi sets it:
+ * its runs are sandboxed and may not write the git directory itself, so their ibni commands lock there instead.
+ */
+export function repositoryLockPath(commonDirectory, env = process.env) {
+  if (!env.IBNI_LOCK_ROOT) return path.join(commonDirectory, LOCK_DIRECTORY);
+  const key = createHash("sha256").update(path.resolve(commonDirectory)).digest("hex").slice(0, 16);
+  return path.join(path.resolve(env.IBNI_LOCK_ROOT), `${key}.lock`);
+}
+
 export async function acquireRepositoryLock(commonDirectory) {
-  const lockPath = path.join(commonDirectory, LOCK_DIRECTORY);
+  const lockPath = repositoryLockPath(commonDirectory);
+  await mkdir(path.dirname(lockPath), { recursive: true });
   const owner = {
     hostname: os.hostname(),
     pid: process.pid,

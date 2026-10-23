@@ -29,7 +29,7 @@ const RESULT_DETAIL_MAX = 8000;
 // What Claude Code's sandbox needs on Linux. Without them it runs commands unsandboxed and says nothing.
 const SANDBOX_TOOLS = ["bwrap", "socat"];
 // Credentials nothing inside the sandbox needs; gh's own config stays readable, because gh pr view needs it.
-const SECRET_PATHS = [".ssh", ".gnupg", ".aws", ".netrc", ".git-credentials", ".claude/.credentials.json", ".claude.json"];
+const SECRET_PATHS = [".ssh", ".gnupg", ".aws", ".netrc", ".git-credentials", ".npmrc", ".docker", ".codex", ".claude/.credentials.json", ".claude.json"];
 const INPUT_KEYS = ["command", "description", "file_path", "path", "pattern", "url", "query", "skill", "subagent_type", "prompt"];
 
 function onPath(name) {
@@ -216,9 +216,11 @@ export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir 
     if (spec.action !== "ask") await Promise.all(gitWritePaths(commonDir, branchPrefix).map((dir) => mkdir(dir, { recursive: true })));
     const home = os.homedir();
     const secrets = [...SECRET_PATHS.map((name) => path.join(home, name)), dataDir, ...(stateDir ? [stateDir] : [])].filter((file) => existsSync(file));
+    const existingGit = spec.action === "ask" ? [] : ["worktrees", path.join("refs", "heads", branchPrefix.replace(/\/+$/, ""))]
+      .flatMap((part) => readdirSync(path.join(commonDir, part)).map((name) => path.join(commonDir, part, name)));
     const settings = renderSettings({
       action: spec.action, worktreeRoot: spec.worktreeRoot, verifyCommand: spec.verifyCommand, denyPatterns: spec.denyPatterns, repoPath: spec.repoPath,
-      tempDir, gitCommonDir: commonDir, branchPrefix, controlEntries: readdirSync(spec.repoPath), denyRead: secrets,
+      tempDir, gitCommonDir: commonDir, branchPrefix, controlEntries: readdirSync(spec.repoPath), existingGit, denyRead: secrets,
     });
     await writeFile(settingsFile, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
     await writeFile(mcpFile, `${JSON.stringify(renderMcpConfig({ spec }), null, 2)}\n`, { mode: 0o600 });
@@ -232,9 +234,13 @@ export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir 
     env.MCP_TOOL_TIMEOUT = String((spec.limits.approvalTimeoutMinutes + 1) * 60_000);
     // The sandbox can't write the home npm cache, so npm keeps one in the run's temporary directory.
     env.npm_config_cache = path.join(tempDir, "npm-cache");
-    // Every git command in the run, ibni's outside the sandbox too, uses only your own hooks: a hooks path set to
-    // a folder in the repository (as husky does) would run hooks the agent can edit, outside the sandbox under ibni.
-    Object.assign(env, { GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.hooksPath", GIT_CONFIG_VALUE_0: path.join(commonDir, "hooks") });
+    // Every git command in the run, ibni prepare's outside the sandbox too, uses only your own hooks: a hooks path
+    // set to a folder in the repository (as husky does) would run hooks the agent can edit. Added after any
+    // GIT_CONFIG_* entries you set yourself, never in their place.
+    const configCount = Number.parseInt(env.GIT_CONFIG_COUNT ?? "0", 10) || 0;
+    Object.assign(env, { GIT_CONFIG_COUNT: String(configCount + 1), [`GIT_CONFIG_KEY_${configCount}`]: "core.hooksPath", [`GIT_CONFIG_VALUE_${configCount}`]: path.join(commonDir, "hooks") });
+    // The run's ibni commands are sandboxed and can't lock the checkout's git directory, so they lock here.
+    env.IBNI_LOCK_ROOT = path.join(tempDir, "ibni-locks");
     // A build or ready run starts outside the control checkout (see allow-list.mjs), so ibni prepare is told where it is.
     const startDir = spec.action === "ask" ? spec.repoPath : spec.worktreeRoot;
     if (spec.action !== "ask") {
