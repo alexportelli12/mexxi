@@ -49,8 +49,13 @@ export function createRunService({ store, settings, runner, ibni, broker, server
   /** @type {Array<(status: string, run: object) => void>} */
   const statusListeners = [];
 
+  const isFinal = (runId) => FINAL.has(store.getRun(runId)?.status);
+
+  // A final status is the last word: a stop or timeout that lands while another path awaits
+  // (an ibni lookup, the host starting) must not be overwritten when that path resumes.
   function setStatus(runId, status, reason = null, fields = {}) {
     const before = store.getRun(runId)?.status;
+    if (FINAL.has(before)) return store.getRun(runId);
     const run = store.updateRun(runId, { status, reason, ...fields, ...(FINAL.has(status) ? { endedAt: new Date().toISOString() } : {}) });
     const row = store.addEvent(runId, "status", { status, reason, branch: run.branch, prUrl: run.prUrl, verify: run.verify });
     broker.publish(row);
@@ -114,6 +119,8 @@ export function createRunService({ store, settings, runner, ibni, broker, server
     if (kind === "result") {
       store.updateRun(runId, { costUsd: data.costUsd });
       const updated = data.ok ? await refreshSummary(runId) : store.getRun(runId);
+      // ibni lookups can take seconds; a stop or timeout in the meantime wins.
+      if (FINAL.has(updated.status)) return;
       const status = statusAfterResult({ result: data, action: run.action, hasPullRequest: Boolean(updated.prUrl) });
       const reason = status === "failed" ? (data.subtype === "error_max_turns" ? "Reached the turn limit" : `The agent ended with ${data.subtype}`) : null;
       setStatus(runId, status, reason);
@@ -164,6 +171,8 @@ export function createRunService({ store, settings, runner, ibni, broker, server
       const runSecret = randomBytes(32).toString("hex");
       store.setRunSecretHash(id, hashSecret(runSecret));
       const verifyCommand = await verifyCommandFor(repository.path);
+      // Stopped while queued: never start the host.
+      if (isFinal(id)) return { run: publicRun(store.getRun(id)), created: true };
       live.set(id, { folder: new StepFolder({ root: repository.path, verifyCommand }), chain: Promise.resolve(), prepareCalls: new Set(), ibniSession: null, runSecret, repoPath: repository.path });
       setStatus(id, "running");
       watchdog.watch(id);
@@ -177,6 +186,8 @@ export function createRunService({ store, settings, runner, ibni, broker, server
       } catch (error) {
         setStatus(id, "failed", `The agent could not start: ${error.message}`);
       }
+      // A stop or timeout during the start found no process to signal; signal the one that now exists.
+      if (isFinal(id)) runner.stop(id);
       return { run: publicRun(store.getRun(id)), created: true };
     },
 

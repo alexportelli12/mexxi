@@ -18,12 +18,12 @@ const TOKEN = `ghp_${"a1B2c3D4e5".repeat(4).slice(0, 36)}`;
 const noIbni = { findNewWorkspace: async () => null, summary: async () => { throw new Error("no ibni in this test"); }, list: async () => [] };
 
 /** Starts a server over a fresh repo. `fixture` names a recording or a file path. */
-async function boot(t, { fixture = "ask-completed", auth, limits, actions = ["build", "ready", "ask"], repoPath, dataDir, adapterOptions, staticRoot = null, settingsPatch = {} } = {}) {
+async function boot(t, { fixture = "ask-completed", auth, limits, actions = ["build", "ready", "ask"], repoPath, dataDir, adapterOptions, staticRoot = null, settingsPatch = {}, ibni = noIbni, wrapRunner = (runner) => runner } = {}) {
   const repo = repoPath ?? makeRepo(t);
   const dir = dataDir ?? tempDir(t, "segwi-data-");
   const { adapter } = fakeAdapter(t, fixture, adapterOptions);
   const settings = { ...makeSettings({ repos: [{ name: "my-app", path: repo, actions }], auth, limits }), ...settingsPatch };
-  const server = await startServer({ settings, dataDir: dir, runner: adapter, ibni: noIbni, staticRoot });
+  const server = await startServer({ settings, dataDir: dir, runner: wrapRunner(adapter), ibni, staticRoot });
   t.after(() => server.close());
   return { server, repo, dir, settings };
 }
@@ -375,4 +375,96 @@ test("a malformed percent escape in a static path is 400, not 500", async (t) =>
   const { server } = await boot(t, { staticRoot: root });
   assert.equal((await request(server, "GET", "/%E0%A4%A")).status, 400);
   assert.equal((await request(server, "GET", "/anything")).status, 200);
+});
+
+/** A promise the test resolves by hand, and whether anything is waiting on it yet. */
+function gate() {
+  let open;
+  const promise = new Promise((resolve) => { open = resolve; });
+  const state = { entered: false, open: (value) => open(value) };
+  state.wait = () => { state.entered = true; return promise; };
+  return state;
+}
+
+/** An ibni whose workspace lookup hangs until the test opens the gate. */
+function slowIbni(lookup) {
+  const calls = { summary: 0 };
+  return {
+    calls,
+    findNewWorkspace: () => lookup.wait(),
+    summary: async () => { calls.summary += 1; return { branch: "agent/x", prUrl: null, verify: null, worktreePath: "/tmp/segwi-test-worktrees/x" }; },
+    list: async () => [],
+  };
+}
+
+const statusEvents = (server, id) => server.store.listEvents(id).filter((row) => row.kind === "status");
+
+/** Opens the gate, then waits until the result handler has finished with what it got. */
+async function release(lookup, ibni) {
+  lookup.open({ sessionId: "s1", worktreePath: "/tmp/segwi-test-worktrees/x" });
+  await waitFor(() => ibni.calls.summary === 1, { what: "the summary lookup" });
+  await new Promise((resolve) => setTimeout(resolve, 100));
+}
+
+test("a stop that lands during a slow ibni lookup wins: no later status, event or push", async (t) => {
+  const lookup = gate();
+  const ibni = slowIbni(lookup);
+  const { server } = await boot(t, { fixture: "build-needs-input", ibni });
+  const pushed = [];
+  server.runs.onStatus((status) => pushed.push(status));
+  const id = (await startRun(server, { action: "build" })).json.run.id;
+  await waitFor(() => lookup.entered, { what: "the result handler to reach ibni" });
+  pushed.length = 0;
+  assert.equal((await request(server, "POST", `/api/runs/${id}/stop`, { body: { confirm: true } })).json.run.status, "stopped");
+  const events = statusEvents(server, id).length;
+  await release(lookup, ibni);
+  const run = server.store.getRun(id);
+  assert.equal(run.status, "stopped");
+  assert.equal(run.reason, "Stopped by you");
+  assert.equal(statusEvents(server, id).length, events, "no status event after the stop");
+  assert.deepEqual(pushed, ["stopped"], "no status change after the stop");
+});
+
+test("a timeout that lands during a slow ibni lookup wins", async (t) => {
+  const lookup = gate();
+  const ibni = slowIbni(lookup);
+  const { server } = await boot(t, { fixture: "build-needs-input", ibni, limits: { idleTimeoutMinutes: 0.01 } });
+  const pushed = [];
+  server.runs.onStatus((status) => pushed.push(status));
+  const id = (await startRun(server, { action: "build" })).json.run.id;
+  await waitFor(() => lookup.entered, { what: "the result handler to reach ibni" });
+  pushed.length = 0;
+  await waitFor(() => server.store.getRun(id).status === "timed_out", { what: "the idle timeout" });
+  const events = statusEvents(server, id).length;
+  await release(lookup, ibni);
+  assert.equal(server.store.getRun(id).status, "timed_out");
+  assert.match(server.store.getRun(id).reason, /No activity/);
+  assert.equal(statusEvents(server, id).length, events);
+  assert.deepEqual(pushed, ["timed_out"]);
+});
+
+test("a stop that lands while the host is starting stays stopped, and the host it started is stopped", async (t) => {
+  const starting = gate();
+  const calls = [];
+  const wrapRunner = (runner) => ({
+    ...runner,
+    async start(spec, emit) {
+      await starting.wait();
+      const started = await runner.start(spec, emit);
+      calls.push("started");
+      return started;
+    },
+    stop(runId) { calls.push("stop"); runner.stop(runId); },
+  });
+  const { server } = await boot(t, { fixture: "build-needs-input", wrapRunner });
+  const created = startRun(server, { action: "build" });
+  await waitFor(() => starting.entered, { what: "the start" });
+  const [{ id }] = server.store.listRuns();
+  assert.equal((await request(server, "POST", `/api/runs/${id}/stop`, { body: { confirm: true } })).json.run.status, "stopped");
+  starting.open();
+  assert.equal((await created).json.run.status, "stopped");
+  assert.deepEqual(calls, ["stop", "started", "stop"], "the host started after the stop is stopped too");
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  assert.equal(server.store.getRun(id).status, "stopped");
+  assert.equal(statusEvents(server, id).at(-1).data.status, "stopped");
 });
