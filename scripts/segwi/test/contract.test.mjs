@@ -73,7 +73,9 @@ for (const runner of RUNNERS) {
       "--mcp-config", path.join(runDir, "mcp.json"), "--strict-mcp-config",
       "--append-system-prompt", args.at(-1),
     ]);
-    assert.equal(args.at(-1).split(/(?<=\.)\s+/).length, 3, "two sentences on approvals, and one saying an ask run changes nothing");
+    // A real build run asked twice for heredoc and sed edits, so the prompt names the file tools and the shell forms to avoid.
+    assert.match(args.at(-1), /Edit and Write tools/);
+    assert.match(args.at(-1), /redirection, heredocs, tee or sed -i/);
     assert.match(args.at(-1), /change nothing\.$/);
   });
 
@@ -107,6 +109,8 @@ for (const runner of RUNNERS) {
     const { allow, deny } = settings.permissions;
     assert.ok(allow.includes("Bash(ibni:*)") && allow.includes("Bash(npm run verify:*)") && allow.includes("mcp__playwright__*"));
     assert.ok(allow.includes(`Edit(/${spec.worktreeRoot}/**)`) && allow.includes(`Read(/${spec.worktreeRoot}/**)`));
+    // mexxi's command-fixer mod prefixes a piped verify with exactly this; it is allowed as an exact command, never as a prefix.
+    assert.ok(allow.includes("Bash(set -o pipefail)") && !allow.some((rule) => rule.startsWith("Bash(set -o pipefail:")));
     for (const forbidden of ["python3", "node -e", "curl", "wget", "rm", "cp", "kill", "git push", "gh api"]) {
       assert.ok(!allow.some((rule) => rule.startsWith(`Bash(${forbidden}`)), `${forbidden} is not allowed`);
     }
