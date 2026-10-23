@@ -45,11 +45,19 @@ repository's verify command (`npm run verify` unless its committed `.mexxi.json`
 names another) is green, you may create a feature branch, commit the intended
 changes, push that branch, and open or update a pull request with the forge's
 CLI (`gh` on GitHub, `glab` on GitLab).
-If you are on the default branch, create a feature branch first, preferably in
-a linked worktree
-(`git worktree add`) so my checkout stays on its branch; never commit to the
-default branch directly. Delivery belongs to the top-level session: delegated
-agents never commit, push, or open pull requests.
+If you are on the default branch, work in a worktree of your own so my checkout
+stays on its branch: run `ibni prepare --slug <name>` from the checkout before
+your first edit, and work in the `worktreePath` it prints. If the checkout
+already has changes, mine or yours, ask me how to proceed; never stash, move or
+delete files to satisfy `prepare`. It creates the feature branch and puts
+the worktree under `paths.worktreeRoot`, where `ibni list` and its cleanup find
+it; never create a worktree anywhere else, such as a sibling folder or a
+temporary directory. If `prepare` refuses, report its diagnostic instead of
+working around it. Deliver from that worktree with `ibni verify`,
+`ibni record-evidence`, `ibni publish` and, once the pull request is open,
+`ibni mark-pr` (`--help` documents each), so cleanup removes the worktree after
+the merge. Never commit to the default branch directly. Delivery belongs to the
+top-level session: delegated agents never commit, push, or open pull requests.
 
 If the working tree held my uncommitted changes before you started, ask before
 committing rather than guessing what belongs to the task.
@@ -78,6 +86,7 @@ its architecture, and follow them:
 - [0009 Docs are generated from the files they describe](docs/decisions/0009-docs-generated-from-sources.md)
 - [0010 Each repository names its verify command](docs/decisions/0010-repository-names-its-verify-command.md) (superseded by 0014)
 - [0014 ibni installs dependencies and runs the verify command](docs/decisions/0014-ibni-runs-setup-and-verify.md)
+- [0015 Every test names the break it catches](docs/decisions/0015-tests-name-the-break-they-catch.md)
 
 To change a decision, add a new record that supersedes it and change only the
 old record's status; never rewrite its reasoning.

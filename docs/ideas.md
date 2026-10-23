@@ -4,6 +4,7 @@ sources:
   - skills/implement-review/SKILL.md
   - skills/rendered-qa/SKILL.md
   - skills/commit-pr-writing/SKILL.md
+  - skills/test-design/SKILL.md
   - scripts/ibni/commands/prepare.mjs
   - scripts/ibni/commands/publish.mjs
   - scripts/hooks/guard-rules.mjs
@@ -17,7 +18,7 @@ reviewed: 2026-10-23
 
 # The ideas behind mexxi
 
-Coding agents can now take a whole task and hand back a pull request. Writing the code is no longer the slow part; trusting it is. mexxi rests on six ideas that move the checking from you to the run, and leave you the decisions.
+Coding agents can now take a whole task and hand back a pull request. Writing the code is no longer the slow part; trusting it is. mexxi rests on seven ideas that move the checking from you to the run, and leave you the decisions.
 
 Each idea starts with the problem, then says what mexxi does about it and what you will notice. The decision record linked from each one gives the full reasoning. [Decisions](decisions/index.md) lists every record.
 
@@ -36,6 +37,14 @@ An agent will say "done, all tests pass" whether or not it ran them. A claim can
 Each repository has one [verify command](glossary.md#verify), `npm run verify` by default: your tests, linters and build in one pass/fail run. It must pass before work starts, so an old failure is never blamed on the change, and again at the end. `ibni` runs it itself and records the exact code it passed on. `ibni` refuses to push any other code, so a change made afterwards has to be checked and recorded again. That holds in a [segwi](segwi.md) run too. Its sandbox gives the verify command a headless browser and the hosts you list, so browser tests pass there as they do for you.
 
 The pull request's evidence line starts with `verify ✓`. If the repository's checks were already failing, the run stops and tells you instead of building on top of them. [Decision 0010](decisions/0010-repository-names-its-verify-command.md) and [decision 0014](decisions/0014-ibni-runs-setup-and-verify.md)
+
+## Every test names the break it catches
+
+A passing check is only as good as its tests. Agents write tests that pass whatever the code does: they check their own fake objects, restate a constant, or work out the expected answer the same way the code does. A repository can collect hundreds of them, and nobody can tell which ones protect anything.
+
+Before writing a test, the agent names the bug it should catch, and tests only behaviour with a right answer it can check. It watches each new test fail for that reason before making it pass. Breaking the behaviour must turn the test red; tidying the code underneath must not. This is the [two-edit check](glossary.md#two-edit-check). The [reviewer](#a-second-reviewer-judges-the-work) checks the same two things. See [test-design](../skills/test-design/SKILL.md).
+
+You get fewer tests, and the pull request lists what each one catches and what was deliberately left untested, never a coverage percentage. [Decision 0015](decisions/0015-tests-name-the-break-they-catch.md)
 
 ## Somebody looks at the page in a real browser
 

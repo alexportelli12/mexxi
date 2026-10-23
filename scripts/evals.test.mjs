@@ -8,7 +8,7 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const directory = path.join(root, "evals/triggers");
 // The skills whose triggering is evaluated. verifika ships from npm, so its
 // SKILL.md is read from the installed package; the others live in skills/.
-const coreSkills = ["rendered-qa", "repo-context", "commit-pr-writing", "verifika"];
+const coreSkills = ["rendered-qa", "repo-context", "commit-pr-writing", "test-design", "verifika"];
 const skillFile = (name) => name === "verifika"
   ? path.join(root, "node_modules/verifika/skills/verifika/SKILL.md")
   : path.join(root, "skills", name, "SKILL.md");

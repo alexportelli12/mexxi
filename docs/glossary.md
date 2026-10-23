@@ -5,6 +5,7 @@ sources:
   - scripts/ibni/ibni.mjs
   - docs/decisions/0008-jev-shadow-metadata-only.md
   - docs/decisions/0011-segwi.md
+  - docs/decisions/0015-tests-name-the-break-they-catch.md
 reviewed: 2026-10-23
 ---
 
@@ -115,6 +116,10 @@ One agent conversation. `ibni` finds a session's workspace from its ID, so a lat
 ## skill
 
 Specialist know-how an agent loads only when a task needs it, by matching the skill's name and description. Skills keep the agent's standing instructions short.
+
+## two-edit check
+
+How mexxi tells a test that protects something from one that passes whatever the code does. Break the behaviour the test claims to protect, and it must fail. Change only how the code works inside, and it must still pass. The agent applies it to every new test, and the reviewer to every test it judges. See [decision 0015](decisions/0015-tests-name-the-break-they-catch.md).
 
 ## verify
 

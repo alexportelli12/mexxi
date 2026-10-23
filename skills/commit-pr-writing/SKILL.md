@@ -130,7 +130,10 @@ tests, manual observations and unrun checks distinct. Do not unpack `verify`,
 paste logs, count routine findings resolved, invent fail-then-pass proof, infer
 a passing test from a changed spec, treat an unavailable capture or an
 infrastructure failure as proof, or broaden a local or sampled result into a
-guarantee.
+guarantee. The test report `test-design` produces (each new test's break and
+how it was seen failing, and what was deliberately left untested) goes in
+Details, one line per test; a break no available test level could reach goes
+in Gaps. A coverage percentage is never proof.
 
 **Decisions and assumptions.** When the run was unattended, or a question went
 unanswered, list each assumption: the open question, the reading taken, and how

@@ -53,7 +53,8 @@ carries a verdict that only the review comments explain.
 
 Investigate every finding with repository evidence; resolve it with a bounded
 fix or by establishing that it does not apply. Do not blindly accept subjective
-or out-of-scope findings.
+or out-of-scope findings. Fix a finding about tests with `test-design`, and see
+each new or rewritten test fail as it says.
 
 `critical`, `high`, and `medium` findings block and must be resolved. A `low`
 finding inside the task's scope with a bounded fix is fixed in the same

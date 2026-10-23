@@ -132,7 +132,7 @@
             <tr><th colspan="2" scope="colgroup">Does it work?</th></tr>
             <tr>
               <td><code>npm run verify</code> passes; no new tests.</td>
-              <td>Verify passes with 4 new tests, checked in a browser at 3 sizes, reviewed twice.</td>
+              <td>Verify passes with 4 new tests, each seen failing first, checked in a browser at 3 sizes, reviewed twice.</td>
             </tr>
           </tbody>
           <tbody>
@@ -235,8 +235,8 @@
             <p>
               The proof is mechanical: your own checks pass or fail, and screenshots show the page.
               The reviewer agent is an extra opinion on top, never the proof. New tests and the
-              merge call are still the agent’s work, so the pull request lists the tests and marks
-              a call no reviewer checked as self-assessed.
+              merge call are still the agent’s work. So the pull request lists the bug each test
+              catches, and marks a call no reviewer checked as self-assessed.
             </p>
           </li>
         </ul>

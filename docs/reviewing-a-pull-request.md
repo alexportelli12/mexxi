@@ -2,6 +2,7 @@
 sources:
   - skills/commit-pr-writing/SKILL.md
   - skills/implement-review/SKILL.md
+  - skills/test-design/SKILL.md
   - commands/wettaq.md
 reviewed: 2026-10-23
 ---
@@ -53,13 +54,13 @@ The review mark notes when the reviewer came from the same model family as the a
 - **What changed**, grouped by behaviour rather than by file.
 - **Decisions and assumptions**: what the agent decided without asking you. Each is worded so you can reverse it cheaply, usually with one follow-up request.
 - **Gaps**: what the agent could not do or prove, such as a flow it could not reach or a test it could not write.
-- **Details**, collapsed: everything else, such as test lists, review findings and where the evidence files are.
+- **Details**, collapsed: everything else, such as review findings and where the evidence files are. It lists each new test with the bug it catches and how the agent saw it fail, and what was deliberately left untested.
 
 ## A one-minute review
 
 1. Read the merge call and Your part. Make the decisions they ask for.
 2. Compare the before and after screenshots with what you asked for.
-3. Check that the evidence names tests that protect the behaviour you care about, and read what did not run.
+3. Check that the tests catch the bugs you care about, and read what did not run and what was left untested.
 4. Scan the decisions and assumptions for any you disagree with.
 5. Do the one check under Your part, if there is one.
 

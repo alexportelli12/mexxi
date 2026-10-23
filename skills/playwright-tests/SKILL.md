@@ -14,6 +14,8 @@ metadata:
 Create reliable, readable, and maintainable Playwright UI tests with stable
 selectors, reusable flows, and flake-resistant assertions. Follow the active
 repository's configured test-id attribute and selector conventions.
+`test-design` decides whether a flow needs a browser test at all and which
+break it catches; this skill covers writing it well.
 
 ## Core Principles
 

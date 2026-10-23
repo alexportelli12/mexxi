@@ -136,14 +136,11 @@ The contract defines intent and scope. Resolve ordinary choices from
 repository evidence and keep changes bounded. The orchestrator owns
 investigation, delegation, remediation, final verification, and delivery.
 
-When an acceptance criterion is important, reasonably testable, and supported
-by existing test infrastructure, add or update proof at the cheapest level that
-meaningfully proves it: unit, component, integration, or E2E. This is
-behaviour-first, not test-first; do not add low-value tests to raise coverage.
-E2E is risk-triggered: use it only when a criterion crosses boundaries that
-cheaper checks cannot prove. If a criterion genuinely requires E2E and the
-repository has no suitable infrastructure, stop and report the gap rather than
-introducing a framework as incidental work.
+When the change adds, changes or fixes behaviour, load `test-design`. It
+decides which tests the change needs and at what level, and how to see each
+one fail. Use the repository's existing test infrastructure. If a criterion
+genuinely requires E2E and the repository has no suitable infrastructure, stop
+and report the gap rather than introducing a framework as incidental work.
 
 While working, you and delegated agents run targeted checks (a focused test,
 typecheck, rendered check, or the repository's selective verification)
