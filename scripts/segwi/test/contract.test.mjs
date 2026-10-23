@@ -77,6 +77,11 @@ for (const runner of RUNNERS) {
     // A real build run asked twice for heredoc and sed edits, so the prompt names the file tools and the shell forms to avoid.
     assert.match(args.at(-1), /Edit and Write tools/);
     assert.match(args.at(-1), /redirection, heredocs, tee or sed -i/);
+    // A later run asked for a cat and ls chain, and for gh pr create with an inline multi-line body.
+    assert.match(args.at(-1), /Read, Glob and Grep tools, never with cat, head, ls, find or grep/);
+    assert.match(args.at(-1), /--body-file, after writing it with the Write tool, never inline with --body/);
+    // Every commit in a run prints this, because the sandbox keeps packed-refs read-only on purpose.
+    assert.match(args.at(-1), /packed-refs\.lock.*still succeeds: that is expected/);
     assert.match(args.at(-1), /change nothing\.$/);
   });
 
