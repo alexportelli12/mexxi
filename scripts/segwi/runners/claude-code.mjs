@@ -68,7 +68,9 @@ async function existingWorkspaces(worktreeRoot, repoPath) {
   } catch {
     // No worktree list: every folder counts as another repository's.
   }
-  const ownFolders = new Set(listing.split("\n").filter((line) => line.startsWith("worktree ")).map((line) => path.dirname(path.resolve(line.slice(9)))));
+  // The first entry is the control checkout itself, which isn't one of the worktree root's folders.
+  const linked = listing.split("\n").filter((line) => line.startsWith("worktree ")).slice(1);
+  const ownFolders = new Set(linked.map((line) => path.dirname(path.resolve(line.slice(9)))));
   // Real entries only: the sandbox resolves a symlink, so denying one would deny wherever it points.
   const list = (dir) => { try { return readdirSync(dir, { withFileTypes: true }).filter((entry) => !entry.isSymbolicLink()).map((entry) => entry.name); } catch { return []; } };
   return list(worktreeRoot).flatMap((name) => {
