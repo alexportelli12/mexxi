@@ -22,9 +22,10 @@ import {
   repositoryAt,
 } from "../lib/git.mjs";
 import { withRepositoryLock } from "../lib/lock.mjs";
-import { evidenceDirectoryFor, inspectImplementationWorktrees, writeMetadata } from "../lib/metadata.mjs";
+import { evidenceDirectoryFor, inspectImplementationWorktrees, readMetadata, summarizeSetup, writeMetadata } from "../lib/metadata.mjs";
 import { allocatePort } from "../lib/ports.mjs";
 import { workspaceCandidates } from "../lib/session.mjs";
+import { deferredSetup, lockfilesAt, runSetup, setupPlan } from "../lib/setup.mjs";
 import { sweepConsumedWorkspaces } from "./cleanup.mjs";
 
 const ENV_FILE_PREFIX = ".env";
@@ -88,12 +89,14 @@ async function allocateWorkspace(repository, root, pushUrl, slug, prefix, config
   throw new WorkspaceError("could not allocate a collision-free branch and worktree path");
 }
 
-async function rollbackAllocatedWorkspace(root, allocation, baseSha) {
+// force is only for a failed setup: the worktree is still at baseSha and holds
+// nothing but what the setup command wrote, which a plain remove may refuse.
+async function rollbackAllocatedWorkspace(root, allocation, baseSha, { force = false } = {}) {
   // Allocation proved the evidence directory did not exist, so it is ours.
   await rm(evidenceDirectoryFor(allocation.worktreePath), { recursive: true, force: true }).catch(() => {});
   try {
     await git(root, ["worktree", "unlock", allocation.worktreePath], { allowedExitCodes: [0, 128] });
-    await git(root, ["worktree", "remove", allocation.worktreePath], { allowedExitCodes: [0, 128] });
+    await git(root, ["worktree", "remove", ...(force ? ["--force"] : []), allocation.worktreePath], { allowedExitCodes: [0, 128] });
   } catch {
     // Continue to the branch check; all cleanup is limited to this allocation.
   }
@@ -144,8 +147,9 @@ export async function prepareWorkspace({ cwd = process.cwd(), slug, prefix, envi
     throw new WorkspaceError("/wettaq must be launched from the repository's primary control worktree");
   }
 
+  let prepared;
   try {
-    return await prepareLocked({ repository, config, slug, branchPrefix });
+    prepared = await prepareLocked({ repository, config, slug, branchPrefix });
   } catch (error) {
     if (!cannotWriteGitDirectory(error, repository, environment)) throw error;
     throw new WorkspaceError(
@@ -154,6 +158,43 @@ export async function prepareWorkspace({ cwd = process.cwd(), slug, prefix, envi
         + "with nothing before or after it (no echo, cd, ;, && or |).",
     );
   }
+  return setUpPrepared(repository, prepared, environment);
+}
+
+// Setup runs after the repository lock is released: an install can take
+// minutes, and other sessions' ibni commands give up on the lock after 30
+// seconds. A failed setup takes the lock again to roll the allocation back.
+// segwi sets IBNI_DEFER_SETUP because its prepare runs outside its sandbox,
+// and install scripts must not; its run calls ibni setup inside instead.
+async function setUpPrepared(repository, { result, allocation, plan, lockfiles, gitDirectory }, environment) {
+  const rollback = () => withRepositoryLock(repository.commonDirectory, async () => {
+    const metadata = await readMetadata(gitDirectory).catch(() => null);
+    if (metadata?.sessionId === result.sessionId) {
+      await rollbackAllocatedWorkspace(repository.root, allocation, result.baseSha, { force: true });
+    }
+  }, { env: {} });
+  let setup;
+  try {
+    setup = environment.IBNI_DEFER_SETUP === "1"
+      ? deferredSetup(plan, result.sessionId, lockfiles)
+      : await runSetup({ plan, worktreePath: result.worktreePath, evidenceDir: result.evidenceDir, lockfiles });
+  } catch (error) {
+    await rollback();
+    throw error;
+  }
+  if (setup.ran && !setup.passed) {
+    await rollback();
+    throw new WorkspaceError(
+      `setup failed in the new worktree (${setup.command}, exit ${setup.exitCode ?? setup.signal ?? "unknown"}); the workspace was rolled back`,
+      `${setup.logTail}\n\nFix the setup on the default branch (or "setup" in .mexxi.json), then prepare again.`,
+    );
+  }
+  await withRepositoryLock(repository.commonDirectory, async () => {
+    const metadata = await readMetadata(gitDirectory);
+    if (metadata?.sessionId !== result.sessionId) throw new WorkspaceError("the new workspace changed owner while its setup ran");
+    await writeMetadata(gitDirectory, { ...metadata, setup, updatedAt: new Date().toISOString() });
+  }, { env: {} });
+  return { ...result, setup: summarizeSetup(setup) };
 }
 
 function prepareLocked({ repository, config, slug, branchPrefix }) {
@@ -222,6 +263,8 @@ function prepareLocked({ repository, config, slug, branchPrefix }) {
     const baseSha = cleanOutput(await git(repository.root, ["rev-parse", "HEAD"]));
     const settings = await repositorySettings(repository.root, baseSha);
     const verifyCommand = verifyCommandFrom(settings);
+    const lockfiles = await lockfilesAt(repository.root, baseSha);
+    const plan = setupPlan(settings, lockfiles);
     const forge = await detectForge({ root: repository.root, remote, baseSha, config });
     const baseline = await provenBaseline(repository.root, baseSha, settings, forge);
     const allocation = await allocateWorkspace(
@@ -275,6 +318,11 @@ function prepareLocked({ repository, config, slug, branchPrefix }) {
         port,
         verifyCommand,
         baseline,
+        // Replaced once setup ends; left as is, it says setup never finished.
+        setup: plan.command
+          ? { ran: false, command: plan.command, source: plan.source, reason: "setup did not finish", lockfiles }
+          : { ran: false, command: null, reason: plan.reason, lockfiles },
+        verification: null,
         evidenceTreeSha: null,
         evidenceRecordedAt: null,
         pendingOperation: null,
@@ -282,7 +330,7 @@ function prepareLocked({ repository, config, slug, branchPrefix }) {
         updatedAt: now,
       };
       await writeMetadata(implementationRepository.gitDirectory, metadata);
-      return {
+      const result = {
         operation: "prepare",
         sessionId: metadata.sessionId,
         worktreePath: metadata.worktreePath,
@@ -299,6 +347,7 @@ function prepareLocked({ repository, config, slug, branchPrefix }) {
         provisionedEnv,
         cleanup,
       };
+      return { result, allocation, plan, lockfiles, gitDirectory: implementationRepository.gitDirectory };
     } catch (error) {
       await rollbackAllocatedWorkspace(repository.root, allocation, baseSha);
       throw error;

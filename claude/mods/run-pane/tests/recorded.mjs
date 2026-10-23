@@ -2,7 +2,8 @@
 // triage, a refused publish, a failed sync, evidence, publish, mark-pr),
 // recorded from the real CLI by scripts/ibni/ibni.test.mjs's stats scenario.
 // That test also checks these keys still match what ibni prints, so the pane
-// is tested against its real input.
+// is tested against its real input. setup and verification were added by hand,
+// in that scenario's shape, when ibni began running setup and verify itself.
 export const info = {
   "operation": "info",
   "sessionId": "2c026ea35efd82bef78e30b9",
@@ -16,6 +17,22 @@ export const info = {
   "defaultBranch": "trunk",
   "baseSha": "0f0d0cb4d62a1627b2939e8705f0d8958b7959b9",
   "publishedSha": "dbbaed3077fe4576974b32f8e7f29db3f7cb3761",
+  "setup": {
+    "ran": false,
+    "command": null,
+    "reason": "no lockfile and no setup in .mexxi.json; nothing was installed"
+  },
+  "verification": {
+    "treeSha": "cc76f2831b4e0a213491dee367f201f30f6a7678",
+    "headSha": "dbbaed3077fe4576974b32f8e7f29db3f7cb3761",
+    "passed": true,
+    "exitCode": 0,
+    "durationMs": 204,
+    "logPath": "/tmp/implementation-workspace-test-CEZwIv/worktrees/control-d7a4ed7796/timed.evidence/verify-cc76f2831b4e.log",
+    "ranAt": "2026-10-21T02:30:34.880Z",
+    "command": "npm run verify",
+    "commandSource": "default-branch"
+  },
   "evidenceTreeSha": "cc76f2831b4e0a213491dee367f201f30f6a7678",
   "evidenceRecordedAt": "2026-10-21T02:30:35.087Z",
   "createdAt": "2026-10-21T02:30:32.257Z",
@@ -124,6 +141,22 @@ export const stats = {
         "accepted": 1
       }
     }
+  },
+  "setup": {
+    "ran": false,
+    "command": null,
+    "reason": "no lockfile and no setup in .mexxi.json; nothing was installed"
+  },
+  "verification": {
+    "treeSha": "cc76f2831b4e0a213491dee367f201f30f6a7678",
+    "headSha": "dbbaed3077fe4576974b32f8e7f29db3f7cb3761",
+    "passed": true,
+    "exitCode": 0,
+    "durationMs": 204,
+    "logPath": "/tmp/implementation-workspace-test-CEZwIv/worktrees/control-d7a4ed7796/timed.evidence/verify-cc76f2831b4e.log",
+    "ranAt": "2026-10-21T02:30:34.880Z",
+    "command": "npm run verify",
+    "commandSource": "default-branch"
   },
   "qa": {
     "rounds": 1,

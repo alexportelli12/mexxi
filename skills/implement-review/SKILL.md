@@ -100,8 +100,12 @@ the previous session's id stops working. If adopt refuses, report its
 diagnostic and stop; never infer ownership of a retained worktree any other
 way. Then run `ibni sync --session "<sessionId>"` before changing anything,
 refresh the contract for the new request, and establish a green baseline by
-running the verify command (`verifyCommand` from `adopt`'s output; `prepare`'s
-baseline citation applies only to a fresh workspace). Then follow the normal gates of `/wettaq` through delivery;
+running the verify command (`ibni verify`; `prepare`'s baseline citation
+applies only to a fresh workspace). `adopt` reports `dependencies` and
+`verified` without acting on them: when `dependencies.current` is not true,
+follow its `nextAction` (usually `ibni setup`) before the baseline. A workspace
+from before ibni recorded setup reports `current: null`; run `ibni setup` when
+its lockfile may have changed. Then follow the normal gates of `/wettaq` through delivery;
 publication updates the existing branch and `mark-pr` records the same URL
 again. Rewrite the description for the whole pull request as it now stands,
 with a current merge call, rather than appending a follow-up section.

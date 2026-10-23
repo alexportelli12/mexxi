@@ -32,9 +32,11 @@ system temporary directory. Never write into a worktree or checkout. Name files
 
 Use the repository's documented commands (agent docs, README, package scripts)
 to install, seed and start the app; do not invent commands or configuration.
-Install with the lockfile-respecting command (for example `npm ci`) and
-confirm `git status` is unchanged afterwards; a rewritten lockfile dirties the
-tree and blocks the lifecycle. In a workspace, serve on its recorded `port`
+In a workspace, `ibni prepare` (or `ibni setup`) has already installed the
+dependencies; do not install them again. Elsewhere, install with the
+lockfile-respecting command (for example `npm ci`). Either way, confirm
+`git status` is unchanged afterwards; a rewritten lockfile dirties the tree and
+blocks the lifecycle. In a workspace, serve on its recorded `port`
 (from `ibni prepare` or `info`) through the repository's own port setting, so
 parallel worktrees never collide. Note the URL and port, wait until it serves, and
 stop any server you started when finished. If the app cannot start, report that as the result instead of

@@ -6,7 +6,7 @@ import { cleanText } from "./clean.mjs";
 
 const EDIT_TOOLS = new Set(["Edit", "Write", "NotebookEdit"]);
 const READ_TOOLS = new Set(["Read", "Grep", "Glob"]);
-const TEST_COMMANDS = ["vfk", "npx vfk", "npx verifika", "node --test", "npm test", "npx vitest", "npx playwright test"];
+const TEST_COMMANDS = ["ibni verify", "vfk", "npx vfk", "npx verifika", "node --test", "npm test", "npx vitest", "npx playwright test"];
 const TITLE_MAX = 120;
 const DETAIL_MAX = 2000;
 

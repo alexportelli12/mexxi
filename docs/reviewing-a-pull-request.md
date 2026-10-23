@@ -3,7 +3,7 @@ sources:
   - skills/commit-pr-writing/SKILL.md
   - skills/implement-review/SKILL.md
   - commands/wettaq.md
-reviewed: 2026-10-22
+reviewed: 2026-10-23
 ---
 
 # Reviewing a mexxi pull request

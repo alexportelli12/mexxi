@@ -10,6 +10,11 @@
       "type": "string",
       "default": "npm run verify"
     },
+    "setup": {
+      "description": "The command that installs the repository's dependencies in a new worktree. Leave it out to use the root lockfile's own install: npm ci for package-lock.json, pnpm install --frozen-lockfile for pnpm-lock.yaml. Name it for Yarn, several lockfiles or a bootstrap script; with neither, nothing is installed.",
+      "type": ["string", "null"],
+      "default": null
+    },
     "ciCheck": {
       "description": "The CI job that runs the full verify command, such as verify on GitHub Actions. When it succeeded on exactly the commit a task starts from, the task cites it instead of running verify again.",
       "type": ["string", "null"],

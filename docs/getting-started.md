@@ -92,7 +92,7 @@ A repository that already has one reliable command, such as `make check` or `tox
 { "verify": "make check" }
 ```
 
-Every run starts by running verify once, to prove the starting point is green. That first result is the [baseline](glossary.md#baseline). When your CI already runs the full verify command on every commit, that first run repeats work CI has done. Name the CI job that runs it in `.mexxi.json`, such as `verify` on GitHub Actions, and a run cites the CI result instead:
+Every run starts by running verify once, to prove the starting point is green. Before that, `ibni` installs the repository's dependencies with the command its lockfile names, such as `npm ci` for `package-lock.json`. Name another as `setup` in `.mexxi.json`. That first result is the [baseline](glossary.md#baseline). When your CI already runs the full verify command on every commit, that first run repeats work CI has done. Name the CI job that runs it in `.mexxi.json`, such as `verify` on GitHub Actions, and a run cites the CI result instead:
 
 ```json
 { "ciCheck": "verify" }

@@ -6,6 +6,8 @@ import { assertClean, assertNoGitOperation, cleanOutput, git, remoteBranchSha } 
 import { withRepositoryLock } from "../lib/lock.mjs";
 import { updateMetadata, workspaceSummary } from "../lib/metadata.mjs";
 import { locateWorkspaces, ownedSession, validateRemote } from "../lib/session.mjs";
+import { dependencyState, lockfilesAt } from "../lib/setup.mjs";
+import { verifyRefusal } from "../lib/verification.mjs";
 
 async function pullRequest(root, metadata, prUrl) {
   const config = await workspaceConfig();
@@ -85,10 +87,17 @@ export async function adoptWorkspace({ cwd = process.cwd(), prUrl }) {
       sessionId,
       adoptions: [...(metadata.adoptions ?? []), { previousSessionId, sessionId, headSha: head, adoptedAt }],
     });
+    // Reported, never acted on: a reinstall or a verify run is the new
+    // session's choice, and a workspace from before ibni recorded either
+    // still adopts.
+    const treeSha = cleanOutput(await git(repository.root, ["rev-parse", "HEAD^{tree}"]));
+    const verifyGap = verifyRefusal(session.metadata, treeSha, "carry on");
     return {
       operation: "adopt",
       ...workspaceSummary({ metadata: session.metadata }),
       headSha: head,
+      dependencies: dependencyState(session.metadata.setup, await lockfilesAt(repository.root, "HEAD"), sessionId),
+      verified: verifyGap ? { current: false, ...verifyGap } : { current: true },
     };
   });
 }

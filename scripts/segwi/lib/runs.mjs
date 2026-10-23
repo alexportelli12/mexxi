@@ -27,14 +27,19 @@ export function publicRun(run) {
   return rest;
 }
 
-async function verifyCommandFor(repoPath) {
+// The verify and setup commands the checkout's .mexxi.json names. The run's
+// ibni verify and ibni setup run them, so a command that isn't plain makes
+// those ask (see allow-list.mjs).
+async function repositoryCommandsFor(repoPath) {
+  const commands = { verifyCommand: "npm run verify", setupCommand: null };
   try {
     const value = JSON.parse(await readFile(path.join(repoPath, ".mexxi.json"), "utf8"));
-    if (typeof value.verify === "string" && value.verify.trim()) return value.verify.trim();
+    if (typeof value.verify === "string" && value.verify.trim()) commands.verifyCommand = value.verify.trim();
+    if (typeof value.setup === "string" && value.setup.trim()) commands.setupCommand = value.setup.trim();
   } catch {
-    // No committed .mexxi.json: the default applies.
+    // No committed .mexxi.json: the defaults apply.
   }
-  return "npm run verify";
+  return commands;
 }
 
 export function createRunService({ store, settings, runner, ibni, broker, serverUrl = () => "" }) {
@@ -177,7 +182,7 @@ export function createRunService({ store, settings, runner, ibni, broker, server
       broker.publish(store.addEvent(id, "status", { status: "queued", reason: null, branch: null, prUrl: null, verify: null }));
       const runSecret = randomBytes(32).toString("hex");
       store.setRunSecretHash(id, hashSecret(runSecret));
-      const verifyCommand = await verifyCommandFor(repository.path);
+      const { verifyCommand, setupCommand } = await repositoryCommandsFor(repository.path);
       // Stopped while queued: never start the host.
       if (isFinal(id)) return { run: publicRun(store.getRun(id)), created: true };
       live.set(id, { folder: new StepFolder({ root: repository.path, verifyCommand }), chain: Promise.resolve(), prepareCalls: new Set(), ibniSession: null, runSecret, repoPath: repository.path });
@@ -186,7 +191,7 @@ export function createRunService({ store, settings, runner, ibni, broker, server
       try {
         await runner.start({
           runId: id, repoPath: repository.path, action: input.action, task: input.task, limits: { maxTurns: limits.maxTurns, approvalTimeoutMinutes: limits.approvalTimeoutMinutes }, model: settings.segwi.model || undefined,
-          worktreeRoot: settings.worktreeRoot, verifyCommand,
+          worktreeRoot: settings.worktreeRoot, verifyCommand, setupCommand,
           denyPatterns: settings.deny, browser: settings.browser, serverUrl: serverUrl(), bindPort: Number(new URL(serverUrl() || "http://127.0.0.1").port) || undefined, runSecret,
           tailnetName: settings.segwi.auth.web.mode === "tailscale-header" ? settings.segwi.auth.web.hostname : undefined,
           branchPrefix: settings.branchPrefix, branchPrefixes: settings.segwi.branchPrefixes ?? [], controlCheckouts: repositories.map((candidate) => candidate.path),

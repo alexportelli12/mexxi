@@ -141,8 +141,10 @@ command keeps it and names it in `.mexxi.json`. Verifika owns check execution, s
 handling, and logs; its published `verifika` skill, installed from the pinned
 npm package, owns how agents run it and read its results. Do not restate either
 here. Selective runs are implementation feedback; the verify command remains
-the only delivery gate, and implementation lifecycle commands separately enforce
-workspace and Git safety.
+the only delivery gate. `ibni` installs each worktree's dependencies and runs
+that gate itself (`ibni verify`), and `record-evidence` and `publish` accept
+only a passing run it recorded on the exact tree being delivered (decision
+0013). The lifecycle commands separately enforce workspace and Git safety.
 
 Metrics such as CRAP score and duplication are bounded signals, not global
 ideology. Prefer scoped or differential enforcement where practical, calibrate

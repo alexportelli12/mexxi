@@ -5,7 +5,7 @@ import { z } from "zod";
 /**
  * @typedef {{
  *   runId: string, repoPath: string, action: "build"|"ready"|"ask", task: string, model?: string,
- *   limits: { maxTurns: number }, worktreeRoot: string, verifyCommand: string,
+ *   limits: { maxTurns: number }, worktreeRoot: string, verifyCommand: string, setupCommand?: string|null,
  *   denyPatterns: string[], browser: object, serverUrl?: string, bindPort?: number, tailnetName?: string, branchPrefix?: string, runSecret?: string,
  *   permissions?: "auto"|"sandboxed"|"strict", branchPrefixes?: string[], controlCheckouts?: string[],
  * }} RunSpec

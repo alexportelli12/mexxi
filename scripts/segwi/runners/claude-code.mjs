@@ -314,7 +314,7 @@ export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir 
       ...await existingWorkspaces(spec.worktreeRoot, spec.repoPath),
     ];
     const settings = renderSettings({
-      action: spec.action, worktreeRoot: spec.worktreeRoot, verifyCommand: spec.verifyCommand, denyPatterns: spec.denyPatterns, repoPath: spec.repoPath,
+      action: spec.action, worktreeRoot: spec.worktreeRoot, verifyCommand: spec.verifyCommand, setupCommand: spec.setupCommand ?? null, denyPatterns: spec.denyPatterns, repoPath: spec.repoPath,
       tempDir, gitCommonDir: commonDir, branchPrefix: prefixes[0], branchPrefixes: prefixes, permissions: spec.permissions, controlEntries: readdirSync(spec.repoPath), existingGit, denyRead: secrets,
       protectedFiles: PROTECTED_HOME_FILES.map((name) => path.join(home, name)),
       protectedFolders: [...PROTECTED_HOME_FOLDERS.map((name) => path.join(home, name)), MEXXI_ROOT],
@@ -342,6 +342,9 @@ export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir 
     env.IBNI_LOCK_ROOT = path.join(tempDir, "ibni-locks");
     // ibni prepare runs outside the sandbox, and its sweep would run git in worktrees this run could rewrite.
     env.IBNI_SKIP_SWEEP = "1";
+    // For the same reason, prepare installs nothing: an install runs the repository's code (npm install scripts), so
+    // the run calls ibni setup itself, inside the sandbox, which reaches the npm registry.
+    env.IBNI_DEFER_SETUP = "1";
     // A build or ready run starts outside the control checkout (see allow-list.mjs), so ibni prepare is told where it is.
     const startDir = spec.action === "ask" ? spec.repoPath : spec.worktreeRoot;
     if (spec.action !== "ask") {

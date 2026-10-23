@@ -24,7 +24,7 @@ So you either read every line, which costs the time the agent saved, or merge on
 mexxi moves the checking into the run, so the pull request arrives with its proof. [The ideas behind mexxi](https://alexportelli12.github.io/mexxi/docs/ideas.html) explains each one.
 
 - **Each task gets its own copy of the repository**, so your checkout stays untouched and tasks can run side by side.
-- **A pass/fail command defines done.** Your repository's checks, `npm run verify` by default, must pass before work starts and again at the end. The agent records the exact code its checks passed on with `ibni`, the command-line tool it runs, and `ibni` refuses to push any other code. A later change has to be checked and recorded again.
+- **A pass/fail command defines done.** Your repository's checks, `npm run verify` by default, must pass before work starts and again at the end. `ibni`, the command-line tool the agent runs, runs those checks itself and records the exact code they passed on, and it refuses to push any other code. A later change has to be checked and recorded again.
 - **Somebody looks at the page.** For UI changes the agent drives the running app in a real browser at phone, tablet and desktop sizes, and the pull request shows before and after.
 - **A second reviewer judges it.** A reviewer agent that cannot edit code judges substantial changes. It is an extra opinion; the checks and the browser are the proof.
 - **Guardrails in code as well as in the rules.** A hook backs up the rules against force pushes, merges and pushes to the default branch, and another stops an agent that keeps retrying a failing command.

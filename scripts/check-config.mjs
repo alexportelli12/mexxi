@@ -187,7 +187,8 @@ export async function check(base = root) {
   // mexxi.schema.json documents the keys ibni reads from a repository's
   // .mexxi.json; each one must be a key the code really reads.
   const repositoryKeys = Object.keys(JSON.parse(await readFile(path.join(base, "mexxi.schema.json"), "utf8")).properties);
-  const repositoryCode = (await readFile(path.join(base, "scripts/ibni/lib/baseline.mjs"), "utf8")) + (await readFile(path.join(base, "scripts/ibni/lib/forge.mjs"), "utf8"));
+  const repositoryCode = (await readFile(path.join(base, "scripts/ibni/lib/baseline.mjs"), "utf8")) + (await readFile(path.join(base, "scripts/ibni/lib/forge.mjs"), "utf8"))
+    + (await readFile(path.join(base, "scripts/ibni/lib/setup.mjs"), "utf8"));
   for (const key of repositoryKeys) assert.ok(new RegExp(`(?:\\.|\\{\\s*)${key}\\b`).test(repositoryCode), `mexxi.schema.json documents .mexxi.json's ${key}, which ibni does not read`);
   // The prompts the README, landing page and docs copy come from prompts.json.
   const prompts = JSON.parse(await readFile(path.join(base, "prompts.json"), "utf8"));

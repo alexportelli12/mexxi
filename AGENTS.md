@@ -70,13 +70,14 @@ its architecture, and follow them:
 - [0001 One shared workflow, thin host adapters](docs/decisions/0001-shared-workflow-host-adapters.md)
 - [0002 One user config file; host files rendered at install](docs/decisions/0002-one-config-rendered-host-files.md)
 - [0003 The installer owns only what it records](docs/decisions/0003-installer-owns-what-it-records.md)
-- [0004 One isolated worktree per task, run by ibni](docs/decisions/0004-isolated-worktree-per-task.md)
+- [0004 One isolated worktree per task, run by ibni](docs/decisions/0004-isolated-worktree-per-task.md) (superseded by 0013)
 - [0005 `npm run verify` is each repository's deterministic contract](docs/decisions/0005-verify-is-the-contract.md) (superseded by 0010)
 - [0006 Rules stay rules; deterministic layers back them up](docs/decisions/0006-rules-stay-rules-guard-backs-up.md)
 - [0007 Implementers implement, reviewers judge](docs/decisions/0007-implementers-implement-reviewers-judge.md)
 - [0008 Jev triage runs in shadow, from metadata only](docs/decisions/0008-jev-shadow-metadata-only.md)
 - [0009 Docs are generated from the files they describe](docs/decisions/0009-docs-generated-from-sources.md)
-- [0010 Each repository names its verify command](docs/decisions/0010-repository-names-its-verify-command.md)
+- [0010 Each repository names its verify command](docs/decisions/0010-repository-names-its-verify-command.md) (superseded by 0013)
+- [0013 ibni installs dependencies and runs the verify command](docs/decisions/0013-ibni-runs-setup-and-verify.md)
 
 To change a decision, add a new record that supersedes it and change only the
 old record's status; never rewrite its reasoning.

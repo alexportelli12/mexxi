@@ -2,6 +2,7 @@ import { assertClean, assertNoGitOperation, cleanOutput, git } from "../lib/git.
 import { withRepositoryLock } from "../lib/lock.mjs";
 import { updateMetadata } from "../lib/metadata.mjs";
 import { ownedSession } from "../lib/session.mjs";
+import { verifyRefusal } from "../lib/verification.mjs";
 
 export async function recordEvidence({ cwd = process.cwd(), sessionId }) {
   const initial = await ownedSession(cwd, sessionId);
@@ -11,6 +12,8 @@ export async function recordEvidence({ cwd = process.cwd(), sessionId }) {
     await assertNoGitOperation(session.repository);
     const headSha = cleanOutput(await git(session.repository.root, ["rev-parse", "HEAD"]));
     const treeSha = cleanOutput(await git(session.repository.root, ["rev-parse", "HEAD^{tree}"]));
+    const refusal = verifyRefusal(session.metadata, treeSha, "run record-evidence again");
+    if (refusal) return { operation: "record-evidence", recorded: false, requiresVerify: true, headSha, treeSha, ...refusal };
     const recordedAt = new Date().toISOString();
     await updateMetadata(session, {
       evidenceTreeSha: treeSha,
@@ -18,6 +21,7 @@ export async function recordEvidence({ cwd = process.cwd(), sessionId }) {
     });
     return {
       operation: "record-evidence",
+      recorded: true,
       headSha,
       treeSha,
       recordedAt,
