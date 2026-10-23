@@ -3,6 +3,7 @@
 // untrusted labels, the bearer token, strict inputs and redaction.
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
+import http from "node:http";
 import path from "node:path";
 import test from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -70,7 +71,7 @@ test("tools/list holds exactly the eight tools, none can decide an approval, and
   if (process.env.UPDATE_SNAPSHOT) writeFileSync(SNAPSHOT, `${JSON.stringify(pinned, null, 2)}\n`);
   assert.deepEqual(pinned, JSON.parse(readFileSync(SNAPSHOT, "utf8")), "a tool change must update test/fixtures/mcp-tools.json on purpose");
   assert.equal(client.getServerVersion().name, "segwi");
-  assert.equal(client.getServerVersion().version, "1.0.0");
+  assert.equal(client.getServerVersion().version, "1.1.0");
   await assert.rejects(call(client, "approve_call", { id: "x", decision: "allow" }));
 });
 
@@ -102,13 +103,15 @@ test("list, start, read output, send input and stop work end to end, each with a
   const output = await call(client, "get_output", { id: started.id });
   const body = untrusted(output, `segwi run ${started.id}`);
   const parsed = JSON.parse(body);
-  assert.ok(parsed.lines.length > 0 && parsed.lines.every((line) => typeof line === "string"));
+  assert.ok(parsed.entries.length > 0 && parsed.entries.every((entry) => typeof entry.text === "string" && typeof entry.kind === "string"));
+  assert.ok(parsed.entries.some((entry) => entry.kind === "agent" && entry.text === "Should the new option default to on or off?"));
   assert.ok(parsed.nextSince >= 1);
+  assert.equal(parsed.nextOffset, 0);
   const empty = JSON.parse(untrusted(await call(client, "get_output", { id: started.id, since: parsed.nextSince }), `segwi run ${started.id}`));
-  assert.deepEqual(empty.lines, []);
+  assert.deepEqual(empty.entries, []);
   assert.equal(empty.nextSince, parsed.nextSince);
   const cut = JSON.parse(untrusted(await call(client, "get_output", { id: started.id, maxChars: 40 }), `segwi run ${started.id}`));
-  assert.ok(cut.lines.join("\n").length <= 80);
+  assert.ok(cut.entries.map((entry) => entry.text).join("").length <= 40);
   assert.ok(cut.nextSince < parsed.nextSince, "a short window leaves the rest for the next call");
 
   const sent = plain(await call(client, "send_input", { id: started.id, text: "Go on" }));
@@ -238,7 +241,8 @@ test("extra fields, over-length text and unlisted repos or actions are rejected 
     assert.equal(result.isError, true, `${name} ${JSON.stringify(args).slice(0, 60)}`);
   }
   assert.equal(server.store.listRuns().length, 0);
-  assert.equal(mcpAudit(server).filter((row) => row.outcome === "rejected").length, bad.length);
+  // The SDK client also probes GET /mcp for a stream once; that 405 is audited under its own name.
+  assert.equal(mcpAudit(server).filter((row) => row.outcome === "rejected" && row.action !== "http-method").length, bad.length);
   const unknown = await call(client, "get_run", { id: "11111111-2222-4333-8444-555555555555" });
   assert.equal(unknown.isError, true);
 });
@@ -271,4 +275,92 @@ test("the bearer token never reaches the audit trail", async (t) => {
   const client = await connect(t, server, token);
   await call(client, "list_repos");
   assert.ok(!JSON.stringify(server.store.listAudit(200)).includes(token));
+});
+
+test("get_output returns texts in full and pages a long one across calls, reassembling it exactly", async (t) => {
+  const recording = readFileSync(path.join(fixturesDir, "claude-code", "ask-completed.jsonl"), "utf8");
+  const long = Array.from({ length: 400 }, (_, index) => `line ${index}: caf\u00e9 \ud83d\ude80 ${"x".repeat(index % 37)}`).join("\n");
+  const seeded = path.join(tempDir(t, "segwi-fixture-"), "long.jsonl");
+  writeFileSync(seeded, recording.replace(JSON.stringify("The repository has two tracked files: `README.md` and `notes.txt`."), JSON.stringify(long)));
+  const { server, token } = await boot(t, { fixture: seeded });
+  const client = await connect(t, server, token);
+  const { id } = plain(await call(client, "start_run", { repo: "my-app", action: "ask", task: "Look around" }));
+  await waitFor(() => server.store.getRun(id).status === "completed");
+  const stored = server.store.listEvents(id).find((row) => row.kind === "text").data.text;
+  assert.equal(stored, long);
+  assert.ok(stored.length > 10_000);
+
+  const whole = JSON.parse(untrusted(await call(client, "get_output", { id, maxChars: 20000 }), `segwi run ${id}`));
+  assert.equal(whole.entries.find((entry) => entry.kind === "agent").text, stored, "not cut to one line");
+
+  const texts = new Map();
+  let cursor = { since: 0, offset: 0 };
+  let calls = 0;
+  for (;;) {
+    const page = JSON.parse(untrusted(await call(client, "get_output", { id, ...cursor, maxChars: 997 }), `segwi run ${id}`));
+    calls += 1;
+    assert.ok(page.entries.map((entry) => entry.text).join("").length <= 997);
+    for (const entry of page.entries) texts.set(entry.seq, (texts.get(entry.seq) ?? "") + entry.text);
+    if (page.nextSince === cursor.since && page.nextOffset === cursor.offset) break;
+    cursor = { since: page.nextSince, offset: page.nextOffset };
+  }
+  assert.ok(calls > 10, "the long text took many calls");
+  const agentSeq = server.store.listEvents(id).find((row) => row.kind === "text").seq;
+  assert.equal(texts.get(agentSeq), stored, "following the cursor reassembles the stored text");
+  assert.equal(texts.get(server.store.listEvents(id).find((row) => row.kind === "step" && row.data.phase === "result").seq), "README.md\nnotes.txt");
+});
+
+test("every MCP request is audited: protocol methods, notifications, unknown methods, batches and transport refusals", async (t) => {
+  const { server, token } = await boot(t);
+  const headers = { Authorization: `Bearer ${token}`, Accept: "application/json, text/event-stream" };
+  const post = (body, extra = {}) => request(server, "POST", "/mcp", { origin: false, headers: { ...headers, ...extra }, body });
+  const raw = (payload, method = "POST") => new Promise((resolve, reject) => {
+    const req = http.request({ host: "127.0.0.1", port: server.port, method, path: "/mcp", headers: { ...headers, "Content-Type": "application/json" } }, (res) => {
+      res.resume();
+      res.on("end", () => resolve(res.statusCode));
+    });
+    req.on("error", reject);
+    req.end(payload);
+  });
+  const SECRET_ARG = "argument-text-that-must-not-be-audited";
+  const init = { jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: SECRET_ARG, version: "0" } } };
+  const rowsFor = async (send) => {
+    const before = mcpAudit(server).length;
+    await send();
+    // The audit row is written when the response closes; give it the tick it needs.
+    await waitFor(() => mcpAudit(server).length > before, { what: "an audit row" });
+    return mcpAudit(server).slice(0, mcpAudit(server).length - before).reverse();
+  };
+  const one = async (send) => {
+    const rows = await rowsFor(send);
+    assert.equal(rows.length, 1, JSON.stringify(rows));
+    return rows[0];
+  };
+
+  const cases = [
+    ["initialize", () => post(init), "ok"],
+    ["tools/list", () => post({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }), "ok"],
+    ["ping", () => post({ jsonrpc: "2.0", id: 3, method: "ping" }), "ok"],
+    ["notifications/initialized", () => post({ jsonrpc: "2.0", method: "notifications/initialized" }), "ok"],
+    ["no/such-method", () => post({ jsonrpc: "2.0", id: 4, method: "no/such-method", params: { text: SECRET_ARG } }), "rejected"],
+    ["tools/call", () => post({ jsonrpc: "2.0", id: 5, method: "tools/call", params: { arguments: { text: SECRET_ARG } } }), "rejected"],
+    ["jsonrpc-invalid", () => post({ hello: SECRET_ARG }), "rejected"],
+    ["jsonrpc-invalid", () => post([]), "rejected"],
+    ["json-parse", () => raw(`{"jsonrpc": "2.0", ${SECRET_ARG}`), "rejected"],
+    ["body-too-large", () => raw(JSON.stringify({ jsonrpc: "2.0", id: 6, method: "ping", params: { pad: "x".repeat(70 * 1024) } })), "rejected"],
+    ["http-method", () => raw(undefined, "GET"), "rejected"],
+    ["http-method", () => raw(undefined, "DELETE"), "rejected"],
+    ["initialize", () => post(init, { Accept: "application/json" }), "rejected"],
+  ];
+  for (const [action, send, outcome] of cases) {
+    const row = await one(send);
+    assert.deepEqual([row.action, row.outcome, row.actor, row.origin], [action, outcome, "mcp-token", "mcp"], `${action} ${outcome}`);
+  }
+
+  const batch = await rowsFor(() => post([{ jsonrpc: "2.0", id: 7, method: "ping" }, { jsonrpc: "2.0", id: 8, method: "nope" }, { jsonrpc: "2.0", method: "notifications/initialized" }]));
+  assert.deepEqual(batch.map((row) => [row.action, row.outcome]).sort(), [["nope", "rejected"], ["notifications/initialized", "ok"], ["ping", "ok"]]);
+
+  const called = await rowsFor(() => post({ jsonrpc: "2.0", id: 9, method: "tools/call", params: { name: "list_repos", arguments: {} } }));
+  assert.deepEqual(called.map((row) => [row.action, row.outcome]), [["list_repos", "ok"]], "a tool call is audited once, by its tool");
+  assert.ok(!JSON.stringify(server.store.listAudit(200)).includes(SECRET_ARG), "no argument text is audited");
 });

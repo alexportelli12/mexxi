@@ -1,7 +1,7 @@
 [
   {
     "name": "get_output",
-    "description": "Reads a run's output as compact lines after event number `since`. Returns nextSince to carry on from; maxChars caps the size.",
+    "description": "Reads a run's output after event number `since`: agent text, replies, approvals and step results in full. maxChars caps the text per call; a longer text comes in parts. Pass the returned nextSince and nextOffset back to carry on.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -11,6 +11,11 @@
           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
         },
         "since": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "offset": {
           "type": "integer",
           "minimum": 0,
           "maximum": 9007199254740991
