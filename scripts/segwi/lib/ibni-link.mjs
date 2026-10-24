@@ -6,13 +6,50 @@ import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
-// The fields segwi reads, per command. The contract test fails if ibni drops one.
+// The fields segwi reads, per command. The contract test fails if ibni drops one. info and stats give the
+// run's snapshot: the fields the run pane draws its journey from (claude/mods/run-pane/hooks/journey.ts).
 export const IBNI_FIELDS = {
   prepare: ["sessionId", "worktreePath", "branch"],
   list: ["sessionId", "worktreePath", "branch", "createdAt"],
-  info: ["sessionId", "worktreePath", "branch", "prUrl"],
-  stats: ["verify.history"],
+  info: ["sessionId", "worktreePath", "branch", "prUrl", "state", "createdAt"],
+  stats: [
+    "verify.history", "verify.history.0.at", "verify.attempts", "verify.passed", "verify.failed",
+    "steps.0.step", "steps.0.outcome", "steps.0.durationMs", "steps.0.endedAt",
+    "review.rounds", "review.findings", "review.byReviewer.cross.rounds", "qa.rounds", "qa.findings",
+  ],
 };
+
+const STEPS_KEPT = 60;
+const object = (value) => (value !== null && typeof value === "object" && !Array.isArray(value) ? value : null);
+const text = (value) => (typeof value === "string" ? value : undefined);
+const count = (value) => (typeof value === "number" && Number.isFinite(value) ? value : 0);
+
+/**
+ * The run's snapshot from `ibni info` and `ibni stats` (stats wins where both carry a field, as in the run pane):
+ * only the IBNI_FIELDS above, in ibni's own shape, so the app reads it with the run pane's own snapshotFrom. No
+ * filesystem path: the snapshot is shown in the app and over MCP.
+ */
+export function ibniSnapshot(info, stats) {
+  const merged = { ...object(info), ...object(stats) };
+  const verify = object(merged.verify);
+  const review = object(merged.review);
+  const qa = object(merged.qa);
+  return {
+    branch: text(merged.branch), state: text(merged.state), prUrl: text(merged.prUrl) ?? null, createdAt: text(merged.createdAt),
+    steps: (Array.isArray(merged.steps) ? merged.steps : []).slice(-STEPS_KEPT).map(object).filter(Boolean).map((step) => ({
+      step: String(step.step ?? "?"), outcome: String(step.outcome ?? "?"),
+      ...(typeof step.durationMs === "number" ? { durationMs: step.durationMs } : {}), ...(text(step.endedAt) ? { endedAt: step.endedAt } : {}),
+    })),
+    ...(verify ? {
+      verify: {
+        attempts: count(verify.attempts), passed: count(verify.passed), failed: count(verify.failed),
+        history: (Array.isArray(verify.history) ? verify.history : []).map(object).filter(Boolean).map((entry) => ({ outcome: String(entry.outcome ?? "?"), ...(text(entry.at) ? { at: entry.at } : {}) })),
+      },
+    } : {}),
+    ...(review ? { review: { rounds: count(review.rounds), findings: count(review.findings), byReviewer: { cross: { rounds: count(object(object(review.byReviewer)?.cross)?.rounds) } } } } : {}),
+    ...(qa ? { qa: { rounds: count(qa.rounds), findings: count(qa.findings) } } : {}),
+  };
+}
 
 /** The workspace `ibni prepare` printed, from the text of a tool result, or null. */
 export function parsePrepareOutput(text, worktreeRoot) {
@@ -48,17 +85,23 @@ export function createIbniLink({ command = ["ibni"], timeoutMs = 20_000 } = {}) 
       const workspaces = await this.list(repoPath);
       return workspaces.find((entry) => entry.createdAt >= sinceIso && !excludePaths.includes(entry.worktreePath)) ?? null;
     },
-    /** @returns {Promise<{ branch: string, prUrl: string|null, verify: "pass"|"fail"|null, worktreePath: string }>} */
+    /**
+     * @returns {Promise<{ branch: string, prUrl: string|null, verify: "pass"|"fail"|null, worktreePath: string,
+     *   snapshot: ReturnType<typeof ibniSnapshot> }>}
+     */
     async summary(repoPath, sessionId) {
       const info = await run(repoPath, ["info", "--session", sessionId]);
-      let verify = null;
+      let stats = null;
       try {
-        const stats = await run(repoPath, ["stats", "--session", sessionId]);
-        verify = stats.verify?.history?.at(-1)?.outcome ?? null;
+        stats = await run(repoPath, ["stats", "--session", sessionId]);
       } catch {
         // No stats yet is the same as no verify result.
       }
-      return { branch: info.branch, prUrl: info.prUrl ?? null, verify: verify === "pass" || verify === "fail" ? verify : null, worktreePath: info.worktreePath };
+      const verify = stats?.verify?.history?.at(-1)?.outcome ?? null;
+      return {
+        branch: info.branch, prUrl: info.prUrl ?? null, verify: verify === "pass" || verify === "fail" ? verify : null, worktreePath: info.worktreePath,
+        snapshot: ibniSnapshot(info, stats),
+      };
     },
   };
 }

@@ -76,9 +76,17 @@ test("the ibni fields segwi reads exist in prepare, list, info and stats output"
   process.env.MEXXI_CONFIG = env.MEXXI_CONFIG;
   t.after(() => { if (previousPath === undefined) delete process.env.MEXXI_CONFIG; else process.env.MEXXI_CONFIG = previousPath; });
   const link = createIbniLink({ command: [process.execPath, ibniEntry] });
-  assert.deepEqual(await link.summary(control, prepared.sessionId), {
-    branch: prepared.branch, prUrl: null, verify: "pass", worktreePath: prepared.worktreePath,
-  });
+  const { snapshot, ...summary } = await link.summary(control, prepared.sessionId);
+  assert.deepEqual(summary, { branch: prepared.branch, prUrl: null, verify: "pass", worktreePath: prepared.worktreePath });
+  // The snapshot the app draws the journey from: ibni's own record of the run, without any filesystem path.
+  assert.equal(snapshot.branch, prepared.branch);
+  assert.equal(snapshot.createdAt, info.createdAt);
+  assert.deepEqual(snapshot.steps.map((step) => [step.step, step.outcome]).slice(0, 2), [["prepare", "succeeded"], ["verify", "failed"]]);
+  assert.ok(snapshot.steps.every((step) => typeof step.endedAt === "string" && typeof step.durationMs === "number"));
+  assert.deepEqual({ ...snapshot.verify, history: snapshot.verify.history.map((entry) => entry.outcome) }, { attempts: 3, passed: 1, failed: 2, history: ["fail", "fail", "pass"] });
+  assert.deepEqual(snapshot.review, { rounds: 0, findings: 0, byReviewer: { cross: { rounds: 0 } } });
+  assert.deepEqual(snapshot.qa, { rounds: 0, findings: 0 });
+  assert.ok(!JSON.stringify(snapshot).includes(worktrees), "no path reaches the snapshot");
   assert.equal((await link.findNewWorkspace(control, "1970-01-01T00:00:00.000Z", [prepared.worktreePath])), null);
   assert.equal((await link.findNewWorkspace(control, "1970-01-01T00:00:00.000Z"))?.sessionId, prepared.sessionId);
   assert.equal((await link.findNewWorkspace(control, "2999-01-01T00:00:00.000Z")), null);

@@ -7,6 +7,7 @@ import { ConfigError, resolveConfig } from "../../lib/config.mjs";
 import { dataDir, ensurePrivateDir } from "../lib/paths.mjs";
 import { settingsFromConfig } from "../lib/settings.mjs";
 import { openStore } from "../lib/store.mjs";
+import { tempDir } from "./helpers.mjs";
 
 const home = path.join(path.sep, "home", "someone");
 const withRepos = (repositories) => resolveConfig({ segwi: { repositories } }, { home });
@@ -41,7 +42,7 @@ test("the data directory follows XDG and is private", (t) => {
 
 test("the store versions its schema and keeps run ids, event sequences and client ids unique", () => {
   const store = openStore(":memory:");
-  assert.equal(store.db.prepare("PRAGMA user_version").get().user_version, 4);
+  assert.equal(store.db.prepare("PRAGMA user_version").get().user_version, 5);
   store.createRun({ id: "r1", repo: "a", action: "ask", task: "t", clientId: "c1" });
   assert.throws(() => store.createRun({ id: "r2", repo: "a", action: "ask", task: "t", clientId: "c1" }));
   const first = store.addEvent("r1", "text", { text: "a" });
@@ -50,6 +51,20 @@ test("the store versions its schema and keeps run ids, event sequences and clien
   assert.ok(second.id > first.id);
   assert.deepEqual(store.listEvents("r1", 1).map((event) => event.data.text), ["b"]);
   store.close();
+});
+
+test("a version 4 database gains waitingOn and the ibni snapshot, and keeps its runs", (t) => {
+  const file = path.join(tempDir(t, "segwi-store-"), "segwi.db");
+  const old = openStore(file);
+  old.createRun({ id: "r1", repo: "a", action: "build", task: "t" });
+  old.db.exec("ALTER TABLE runs DROP COLUMN waiting_on; ALTER TABLE runs DROP COLUMN ibni; PRAGMA user_version = 4;");
+  old.close();
+  const store = openStore(file);
+  t.after(() => store.close());
+  assert.equal(store.db.prepare("PRAGMA user_version").get().user_version, 5);
+  assert.equal(store.getRun("r1").waitingOn, null);
+  const updated = store.updateRun("r1", { waitingOn: "Waiting on npm run verify", ibni: { steps: [{ step: "prepare", outcome: "succeeded" }] } });
+  assert.deepEqual([updated.waitingOn, updated.ibni], ["Waiting on npm run verify", { steps: [{ step: "prepare", outcome: "succeeded" }] }]);
 });
 
 test("the VAPID subject is empty by default, takes a real contact, and refuses placeholders push services reject", async () => {

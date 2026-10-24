@@ -14,6 +14,12 @@ import { FINAL } from "./store.mjs";
 
 const RESTART_REASON = "segwi restarted while this run was active";
 const DAY_CACHE_MS = 60_000;
+// How long a run whose background work just ended waits for the host's own next turn before the turn's end counts.
+const SETTLE_MS = 15_000;
+// Any ibni call (prepare, verify, record, publish, mark-pr...) changes the run's snapshot, as the run pane sees it.
+const IBNI_CALL = /(?:^|[\s;&|(/])ibni\s+[a-z]/;
+// What the agent does, as opposed to what segwi or the host says about it.
+const AGENT_ACTIVITY = new Set(["text", "step", "refusal"]);
 
 export const hashSecret = (secret) => createHash("sha256").update(secret).digest("hex");
 
@@ -35,9 +41,21 @@ async function verifyCommandFor(repoPath) {
   return "npm run verify";
 }
 
-export function createRunService({ store, settings, runner, ibni, broker, serverUrl = () => "" }) {
+/** The run's waitingOn line: the command (or monitor) the agent waits on, and how many more. */
+function waitingText(state) {
+  const names = state.background.map((task) => (task.toolUseId && state.folder.byTool.get(task.toolUseId)?.title) || task.description || "a background command");
+  return `Waiting on ${names[0]}${names.length > 1 ? ` and ${names.length - 1} more` : ""}`;
+}
+
+/** `settleMs` is injected by tests; the server uses SETTLE_MS. */
+export function createRunService({ store, settings, runner, ibni, broker, serverUrl = () => "", settleMs = SETTLE_MS }) {
   const { limits, repositories } = settings.segwi;
-  /** @type {Map<string, { folder: StepFolder, chain: Promise<void>, prepareCalls: Set<string>, ibniSession: string|null, runSecret: string, repoPath: string }>} */
+  /**
+   * `background` is what the host still runs in the background. `between` is the result of a turn that ended while
+   * the host still had work to come back to: set until the agent is active again or that result is decided.
+   * @type {Map<string, { folder: StepFolder, chain: Promise<void>, prepareCalls: Set<string>, ibniCalls: Set<string>, ibniSession: string|null,
+   *   runSecret: string, repoPath: string, background: object[], between: object|null, settle: NodeJS.Timeout|null, refreshing: Promise<void>|null, refreshAgain: boolean }>}
+   */
   const live = new Map();
   const watchdog = createWatchdog(limits, (runId, reason) => void timeOut(runId, reason));
   let detectCache = null;
@@ -55,16 +73,73 @@ export function createRunService({ store, settings, runner, ibni, broker, server
   function setStatus(runId, status, reason = null, fields = {}) {
     const before = store.getRun(runId)?.status;
     if (FINAL.has(before)) return store.getRun(runId);
-    const run = store.updateRun(runId, { status, reason, ...fields, ...(FINAL.has(status) ? { endedAt: new Date().toISOString() } : {}) });
-    const row = store.addEvent(runId, "status", { status, reason, branch: run.branch, prUrl: run.prUrl, verify: run.verify });
-    broker.publish(row);
+    const run = store.updateRun(runId, { status, reason, ...fields, ...(FINAL.has(status) ? { endedAt: new Date().toISOString(), waitingOn: null } : {}) });
+    publishRun(run);
     if (before !== status) statusListeners.forEach((listener) => listener(status, publicRun(run)));
     if (FINAL.has(status)) {
+      endBetween(runId);
       watchdog.clear(runId);
       runner.close?.(runId);
       finishListeners.forEach((listener) => listener(runId));
     }
     return run;
+  }
+
+  /** A status row with the run as it stands: the app and SSE clients redraw it; nobody is notified. */
+  function publishRun(run) {
+    broker.publish(store.addEvent(run.id, "status", { status: run.status, reason: run.reason, branch: run.branch, prUrl: run.prUrl, verify: run.verify, waitingOn: run.waitingOn, ibni: run.ibni }));
+  }
+
+  /** The turn's end no longer waits on anything: no settle timer, no waitingOn. */
+  function endBetween(runId) {
+    const state = live.get(runId);
+    if (!state) return;
+    clearTimeout(state.settle);
+    state.settle = null;
+    state.between = null;
+  }
+
+  /** Decides a turn's end as if nothing were left in the background. */
+  function decide(runId, result, action) {
+    const run = store.getRun(runId);
+    if (!run || FINAL.has(run.status)) return;
+    const status = statusAfterResult({ result, action, hasPullRequest: Boolean(run.prUrl) });
+    const reason = status === "failed" ? (result.subtype === "error_max_turns" ? "Reached the turn limit" : `The agent ended with ${result.subtype}`) : null;
+    setStatus(runId, status, reason, { waitingOn: null });
+    if (status === "needs_input") watchdog.touch(runId);
+  }
+
+  /**
+   * The host's background work ended after the turn did. It starts a turn of its own to read the result; if none
+   * begins within settleMs, the earlier turn's end is decided after all, so a run never stays Working on nothing.
+   */
+  function settleLater(runId) {
+    const state = live.get(runId);
+    clearTimeout(state.settle);
+    state.settle = setTimeout(() => {
+      state.settle = null;
+      const between = state.between;
+      if (!between || state.background.length) return;
+      state.between = null;
+      state.chain = state.chain.then(() => decide(runId, between.result, between.action)).catch(() => {});
+    }, settleMs);
+    state.settle.unref();
+  }
+
+  /** Refreshes the ibni snapshot without holding up the run's events; calls that land meanwhile get one more refresh. */
+  function refreshSoon(runId) {
+    const state = live.get(runId);
+    if (!state) return;
+    if (state.refreshing) {
+      state.refreshAgain = true;
+      return;
+    }
+    state.refreshing = (async () => {
+      do {
+        state.refreshAgain = false;
+        publishRun(await refreshSummary(runId));
+      } while (state.refreshAgain);
+    })().catch(() => {}).finally(() => { state.refreshing = null; });
   }
 
   async function refreshSummary(runId) {
@@ -81,9 +156,12 @@ export function createRunService({ store, settings, runner, ibni, broker, server
         store.updateRun(runId, { worktreePath: found.worktreePath });
       }
       const summary = await ibni.summary(state.repoPath, state.ibniSession);
-      return store.updateRun(runId, { branch: summary.branch, prUrl: summary.prUrl, verify: summary.verify, worktreePath: summary.worktreePath });
+      return store.updateRun(runId, { branch: summary.branch, prUrl: summary.prUrl, verify: summary.verify, worktreePath: summary.worktreePath, ibni: summary.snapshot });
     } catch {
-      return store.getRun(runId);
+      // Once a run has a workspace, an ibni that does not answer is worth showing (the run pane's IBNI OFFLINE).
+      const current = store.getRun(runId);
+      if (!state.ibniSession) return current;
+      return store.updateRun(runId, { ibni: { ...(current.ibni ?? { steps: [] }), error: "ibni didn't answer" } });
     }
   }
 
@@ -99,13 +177,34 @@ export function createRunService({ store, settings, runner, ibni, broker, server
       setStatus(runId, "failed", "The agent stopped without finishing.");
       return;
     }
+    if (event.kind === "background") {
+      state.background = event.tasks;
+      if (!state.between) return;
+      // The turn ended with this work outstanding: keep saying what is left, or, once nothing is, wait for the host's turn.
+      if (state.background.length) {
+        const waitingOn = waitingText(state);
+        if (waitingOn !== run.waitingOn) setStatus(runId, run.status, run.reason, { waitingOn });
+      } else {
+        setStatus(runId, run.status, run.reason, { waitingOn: null });
+        watchdog.touch(runId);
+        settleLater(runId);
+      }
+      return;
+    }
     const { kind, ...data } = event;
     if (kind === "step" && data.phase === "call" && data.tool === "Bash" && /\bibni\s+prepare\b/.test(data.input.command ?? "")) {
       state.prepareCalls.add(data.toolUseId);
     }
+    if (kind === "step" && data.phase === "call" && data.tool === "Bash" && IBNI_CALL.test(data.input.command ?? "")) state.ibniCalls.add(data.toolUseId);
     const row = store.addEvent(runId, kind, data);
     const step = state.folder.add(row);
     broker.publish(row, step);
+    // The agent is working again, by itself (a background task woke it) or after a reply: it no longer waits or asks.
+    if (AGENT_ACTIVITY.has(kind)) {
+      endBetween(runId);
+      if (run.status === "needs_input") setStatus(runId, "running", null, { waitingOn: null });
+      else if (run.waitingOn) setStatus(runId, run.status, run.reason, { waitingOn: null });
+    }
     // Counted in the audit log too, so refusals across runs can be counted by action.
     if (kind === "refusal") audit(store, { actor: "system", origin: "system", action: "run.refused", target: runId, outcome: "rejected", detail: step.detail });
     if (run.status !== "needs_approval") watchdog.touch(runId);
@@ -114,19 +213,26 @@ export function createRunService({ store, settings, runner, ibni, broker, server
       if (prepared) {
         state.ibniSession = prepared.sessionId;
         state.folder.root = prepared.worktreePath;
-        store.updateRun(runId, { worktreePath: prepared.worktreePath, branch: prepared.branch });
-        broker.publish(store.addEvent(runId, "status", { status: run.status, reason: null, branch: prepared.branch, prUrl: null, verify: null }));
+        publishRun(store.updateRun(runId, { worktreePath: prepared.worktreePath, branch: prepared.branch }));
       }
     }
+    if (kind === "step" && data.phase === "result" && state.ibniCalls.delete(data.toolUseId)) refreshSoon(runId);
     if (kind === "result") {
       store.updateRun(runId, { costUsd: data.costUsd });
       const updated = data.ok ? await refreshSummary(runId) : store.getRun(runId);
       // ibni lookups can take seconds; a stop or timeout in the meantime wins.
       if (FINAL.has(updated.status)) return;
-      const status = statusAfterResult({ result: data, action: run.action, hasPullRequest: Boolean(updated.prUrl) });
-      const reason = status === "failed" ? (data.subtype === "error_max_turns" ? "Reached the turn limit" : `The agent ended with ${data.subtype}`) : null;
-      setStatus(runId, status, reason);
-      if (status === "needs_input") watchdog.touch(runId);
+      const outstanding = state.background.length > 0;
+      if (statusAfterResult({ result: data, action: run.action, hasPullRequest: Boolean(updated.prUrl), waiting: outstanding || data.wakePending }) !== "running") {
+        decide(runId, data, run.action);
+        return;
+      }
+      // The agent ended its turn to wait for its own background work, and the host comes back to it by itself:
+      // still working, nobody is asked or notified, and the wait is not idleness (the hard limit still holds).
+      state.between = { result: data, action: run.action };
+      setStatus(runId, "running", null, { waitingOn: outstanding ? waitingText(state) : null });
+      if (outstanding) watchdog.pause(runId);
+      else settleLater(runId);
     }
   }
 
@@ -171,7 +277,10 @@ export function createRunService({ store, settings, runner, ibni, broker, server
       const verifyCommand = await verifyCommandFor(repository.path);
       // Stopped while queued: never start the host.
       if (isFinal(id)) return { run: publicRun(store.getRun(id)), created: true };
-      live.set(id, { folder: new StepFolder({ root: repository.path, verifyCommand }), chain: Promise.resolve(), prepareCalls: new Set(), ibniSession: null, runSecret, repoPath: repository.path });
+      live.set(id, {
+        folder: new StepFolder({ root: repository.path, verifyCommand }), chain: Promise.resolve(), prepareCalls: new Set(), ibniCalls: new Set(), ibniSession: null, runSecret,
+        repoPath: repository.path, background: [], between: null, settle: null, refreshing: null, refreshAgain: false,
+      });
       setStatus(id, "running");
       watchdog.watch(id);
       try {
@@ -197,7 +306,8 @@ export function createRunService({ store, settings, runner, ibni, broker, server
       if (!state) store.listEvents(id, 0, 5000).forEach((row) => folder.add(row));
       return { ...publicRun(run), steps: folder.steps };
     },
-    list: (query) => store.listRuns(query).map(publicRun),
+    // The list leaves out each run's ibni snapshot; one run's page shows it.
+    list: (query) => store.listRuns(query).map((run) => { const { ibni: _snapshot, ...rest } = publicRun(run); return rest; }),
     events(id, since = 0) {
       if (!store.getRun(id)) throw new HttpError(404, "No such run.");
       return store.listEvents(id, since, 1000);
@@ -213,6 +323,8 @@ export function createRunService({ store, settings, runner, ibni, broker, server
         throw new HttpError(409, error.message);
       }
       broker.publish(store.addEvent(id, "input", { text }), null);
+      // A reply starts a turn of its own, so the last one's end needs no deciding.
+      endBetween(id);
       if (run.status === "needs_input") setStatus(id, "running");
       watchdog.touch(id);
       return publicRun(store.getRun(id));
@@ -282,6 +394,7 @@ export function createRunService({ store, settings, runner, ibni, broker, server
       // The hosts' exits are segwi's doing, not the runs' outcome: the next start marks those runs as interrupted.
       shuttingDown = true;
       watchdog.stopAll();
+      for (const id of live.keys()) endBetween(id);
       if (runner.shutdown) await runner.shutdown();
       else for (const id of live.keys()) runner.stop(id);
     },

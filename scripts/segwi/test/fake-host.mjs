@@ -10,11 +10,15 @@
 // tool, and writes the outcome to stdout as a tool_result (an error result for a denial).
 // The approver's replies are kept in the report.
 //
+// {"segwi_fixture":"await_release"} stands for time passing while the host is idle, such as a background
+// command still running after the agent ended its turn: replay waits until the file <report.json>.release
+// exists (the release() of helpers.mjs's fakeAdapter writes it), then removes it and carries on.
+//
 // {"segwi_fixture":"spawn_grandchild"} starts a child that ignores SIGINT and SIGTERM and would
 // outlive a kill of the host alone, the way an MCP server or a background shell can. Its pid is in
 // the report, so a test can check that a stop ended it.
 import { spawn } from "node:child_process";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import readline from "node:readline";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
@@ -79,6 +83,12 @@ function spawnGrandchild() {
   }));
 }
 
+async function awaitRelease() {
+  const file = `${reportFile}.release`;
+  while (!existsSync(file)) await new Promise((resolve) => setTimeout(resolve, 20));
+  rmSync(file);
+}
+
 await nextInput();
 for (const line of lines) {
   let marker = null;
@@ -87,5 +97,6 @@ for (const line of lines) {
   if (marker === "await_input") await nextInput();
   else if (marker === "approve") await askApprover(parsed);
   else if (marker === "spawn_grandchild") await spawnGrandchild();
+  else if (marker === "await_release") await awaitRelease();
   else process.stdout.write(`${line}\n`);
 }

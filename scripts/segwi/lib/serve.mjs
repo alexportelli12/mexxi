@@ -24,10 +24,10 @@ const DEFAULT_STATIC = path.join(here, "..", "web", "dist", "web", "browser");
 const version = JSON.parse(readFileSync(path.join(here, "..", "..", "..", "package.json"), "utf8")).version ?? "0.0.0";
 
 /**
- * @param {{ settings: object, dataDir: string, runner?: object, ibni?: object, staticRoot?: string|null, approvalTimeoutMs?: number, stateDir?: string, mcpConfirmTtlMs?: number, pushOptions?: { allowEndpoint?: Function, agent?: object } }} options
- *   `runner`, `ibni`, `approvalTimeoutMs`, `stateDir`, `mcpConfirmTtlMs` and `pushOptions` are injected by tests; the CLI uses the configured runner and the real ibni.
+ * @param {{ settings: object, dataDir: string, runner?: object, ibni?: object, staticRoot?: string|null, approvalTimeoutMs?: number, settleMs?: number, stateDir?: string, mcpConfirmTtlMs?: number, pushOptions?: { allowEndpoint?: Function, agent?: object, send?: Function } }} options
+ *   `runner`, `ibni`, `approvalTimeoutMs`, `settleMs`, `stateDir`, `mcpConfirmTtlMs` and `pushOptions` are injected by tests; the CLI uses the configured runner and the real ibni.
  */
-export async function startServer({ settings, dataDir, runner, ibni = createIbniLink(), staticRoot = DEFAULT_STATIC, approvalTimeoutMs, stateDir = defaultStateDir(), mcpConfirmTtlMs, pushOptions = {} }) {
+export async function startServer({ settings, dataDir, runner, ibni = createIbniLink(), staticRoot = DEFAULT_STATIC, approvalTimeoutMs, settleMs, stateDir = defaultStateDir(), mcpConfirmTtlMs, pushOptions = {} }) {
   ensurePrivateDir(dataDir);
   const store = openStore(path.join(dataDir, "segwi.db"));
   const { bind, auth, runner: runnerId } = settings.segwi;
@@ -43,7 +43,7 @@ export async function startServer({ settings, dataDir, runner, ibni = createIbni
   const theRunner = runner ?? createRunner(runnerId, { dataDir, stateDir });
   const broker = createBroker({ store });
   let serverUrl = "";
-  const runs = createRunService({ store, settings, runner: theRunner, ibni, broker, serverUrl: () => serverUrl });
+  const runs = createRunService({ store, settings, runner: theRunner, ibni, broker, serverUrl: () => serverUrl, settleMs });
   const approvals = createApprovalService({ store, settings, runs, broker, timeoutMs: approvalTimeoutMs });
   const push = createPushService({ store, settings, stateDir, ...pushOptions });
   runs.onStatus((status, run) => push.notify(status, run));

@@ -49,7 +49,10 @@ export function makeSettings({ repos, auth = {}, limits = {}, host = "127.0.0.1"
   };
 }
 
-/** An adapter whose "claude" replays a recording. Returns the adapter and where the host's report lands. */
+/**
+ * An adapter whose "claude" replays a recording. Returns the adapter, where the host's report lands, and
+ * `release()`, which lets a replay waiting at an await_release marker carry on.
+ */
 export function fakeAdapter(t, fixture, options = {}) {
   const dir = tempDir(t, "segwi-host-");
   const reportFile = path.join(dir, "report.json");
@@ -57,7 +60,7 @@ export function fakeAdapter(t, fixture, options = {}) {
   const adapter = createClaudeCodeAdapter({
     bin: process.execPath, binArgs: [fakeHost, file, reportFile], dataDir: path.join(dir, "data"), killGraceMs: [200, 200], ...options,
   });
-  return { adapter, report: () => JSON.parse(readFileSync(reportFile, "utf8")), dir };
+  return { adapter, report: () => JSON.parse(readFileSync(reportFile, "utf8")), dir, release: () => writeFileSync(`${reportFile}.release`, "") };
 }
 
 export async function waitFor(check, { timeoutMs = 10_000, intervalMs = 20, what = "condition" } = {}) {
