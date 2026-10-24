@@ -71,18 +71,6 @@ export async function runSetup({ plan, worktreePath, evidenceDir, lockfiles }) {
   };
 }
 
-export function deferredSetup(plan, sessionId, lockfiles) {
-  return {
-    ran: false,
-    deferred: true,
-    command: plan.command,
-    source: plan.source,
-    reason: "IBNI_DEFER_SETUP is set, so setup runs inside the caller's sandbox instead",
-    nextAction: setupNextAction(sessionId),
-    lockfiles,
-  };
-}
-
 const sameLockfiles = (a = {}, b = {}) => JSON.stringify(Object.entries(a).sort()) === JSON.stringify(Object.entries(b).sort());
 
 // Whether a retained worktree's dependencies were installed from the lockfiles
@@ -97,7 +85,6 @@ export function dependencyState(setup, lockfiles, sessionId) {
       nextAction: `If its dependencies may be out of date, run ibni setup --session ${sessionId}.`,
     };
   }
-  if (setup.deferred) return stale("setup was deferred and has not run");
   if (setup.ran && !setup.passed) return stale("the last setup failed");
   if (!setup.ran && setup.command) return stale("setup did not finish");
   if (!sameLockfiles(setup.lockfiles, lockfiles)) return stale("the lockfiles changed since the last setup");

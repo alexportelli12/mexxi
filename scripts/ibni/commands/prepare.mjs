@@ -25,7 +25,7 @@ import { withRepositoryLock } from "../lib/lock.mjs";
 import { evidenceDirectoryFor, inspectImplementationWorktrees, readMetadata, summarizeSetup, writeMetadata } from "../lib/metadata.mjs";
 import { allocatePort } from "../lib/ports.mjs";
 import { workspaceCandidates } from "../lib/session.mjs";
-import { deferredSetup, lockfilesAt, runSetup, setupPlan } from "../lib/setup.mjs";
+import { lockfilesAt, runSetup, setupPlan } from "../lib/setup.mjs";
 import { sweepConsumedWorkspaces } from "./cleanup.mjs";
 
 const ENV_FILE_PREFIX = ".env";
@@ -111,62 +111,22 @@ async function rollbackAllocatedWorkspace(root, allocation, baseSha, { force = f
   }
 }
 
-const normalPrefix = (value) => sanitizePrefix(value.replace(/\/+$/, ""));
-
-/**
- * segwi names, one per line, the only branch prefixes its sandbox lets a run write. A branch under any other
- * would be made here, outside the sandbox, and then fail at the run's first commit, so it is refused up front.
- */
-function assertWritablePrefix(prefix, environment) {
-  if (!environment.IBNI_BRANCH_PREFIXES) return;
-  const writable = environment.IBNI_BRANCH_PREFIXES.split("\n").filter(Boolean).map(normalPrefix);
-  if (writable.includes(normalPrefix(prefix))) return;
-  throw new WorkspaceError(
-    `--prefix ${prefix} isn't one this run can write`,
-    `This segwi run may only write branches under ${writable.map((name) => `${name}/`).join(", ")}. Run ibni prepare without --prefix, `
-      + `or, if the repository's instructions require ${normalPrefix(prefix)}/, add it to segwi.branchPrefixes in config.json and start a new run.`,
-  );
-}
-
-// segwi's sandbox keeps the checkout's git directory read-only. It runs ibni prepare outside only as a call of its own,
-// so a chained one (`echo …; ibni prepare …`) fails here, at the lock, and the agent learns the form that works.
-// Only in a segwi run, which names the checkout in IBNI_LAUNCH_CHECKOUT; elsewhere the error stays as it was.
-function cannotWriteGitDirectory(error, repository, environment) {
-  return Boolean(environment.IBNI_LAUNCH_CHECKOUT) && ["EROFS", "EACCES", "EPERM"].includes(error?.code) && typeof error.path === "string"
-    && (error.path === repository.commonDirectory || error.path.startsWith(`${repository.commonDirectory}${path.sep}`));
-}
-
-export async function prepareWorkspace({ cwd = process.cwd(), slug, prefix, environment = process.env }) {
+export async function prepareWorkspace({ cwd = process.cwd(), slug, prefix }) {
   if (!slug) throw new WorkspaceError("prepare requires --slug <short-name>");
   const config = await workspaceConfig();
-  // The same prefix the branch gets: an empty --prefix means the configured one, as it does when allocating.
+  // An empty --prefix means the configured one, as it does when allocating.
   const branchPrefix = prefix || config.workflow.branchPrefix.replace(/\/$/, "");
-  assertWritablePrefix(branchPrefix, environment);
   const repository = await repositoryAt(cwd);
   if (repository.gitDirectory !== repository.commonDirectory) {
     throw new WorkspaceError("ibni prepare must run from the repository's primary control worktree");
   }
-
-  let prepared;
-  try {
-    prepared = await prepareLocked({ repository, config, slug, branchPrefix });
-  } catch (error) {
-    if (!cannotWriteGitDirectory(error, repository, environment)) throw error;
-    throw new WorkspaceError(
-      `can't write the repository's git directory (${error.code}: ${error.path})`,
-      "In a segwi run, ibni prepare leaves the sandbox only as a Bash call of its own: run `ibni prepare --slug <name>` "
-        + "with nothing before or after it (no echo, cd, ;, && or |).",
-    );
-  }
-  return setUpPrepared(repository, prepared, environment);
+  return setUpPrepared(repository, await prepareLocked({ repository, config, slug, branchPrefix }));
 }
 
 // Setup runs after the repository lock is released: an install can take
 // minutes, and other sessions' ibni commands give up on the lock after 30
 // seconds. A failed setup takes the lock again to roll the allocation back.
-// segwi sets IBNI_DEFER_SETUP because its prepare runs outside its sandbox,
-// and install scripts must not; its run calls ibni setup inside instead.
-async function setUpPrepared(repository, { result, allocation, plan, lockfiles, gitDirectory }, environment) {
+async function setUpPrepared(repository, { result, allocation, plan, lockfiles, gitDirectory }) {
   // A rollback that fails (the lock timing out, say) never hides why setup
   // failed; its own error is added to the details. The workspace it leaves
   // behind says "setup did not finish", so nothing later mistakes it for ready.
@@ -177,7 +137,7 @@ async function setUpPrepared(repository, { result, allocation, plan, lockfiles, 
         if (metadata?.sessionId === result.sessionId) {
           await rollbackAllocatedWorkspace(repository.root, allocation, result.baseSha, { force: true });
         }
-      }, { env: {} });
+      });
     } catch (rollbackError) {
       return new WorkspaceError(
         error.message.replace("; the workspace was rolled back", "; rolling the workspace back failed too"),
@@ -188,9 +148,7 @@ async function setUpPrepared(repository, { result, allocation, plan, lockfiles, 
   };
   let setup;
   try {
-    setup = environment.IBNI_DEFER_SETUP === "1"
-      ? deferredSetup(plan, result.sessionId, lockfiles)
-      : await runSetup({ plan, worktreePath: result.worktreePath, evidenceDir: result.evidenceDir, lockfiles });
+    setup = await runSetup({ plan, worktreePath: result.worktreePath, evidenceDir: result.evidenceDir, lockfiles });
   } catch (error) {
     throw await rollback(error);
   }
@@ -204,7 +162,7 @@ async function setUpPrepared(repository, { result, allocation, plan, lockfiles, 
     const metadata = await readMetadata(gitDirectory);
     if (metadata?.sessionId !== result.sessionId) throw new WorkspaceError("the new workspace changed owner while its setup ran");
     await writeMetadata(gitDirectory, { ...metadata, setup, updatedAt: new Date().toISOString() });
-  }, { env: {} });
+  });
   return { ...result, setup: summarizeSetup(setup) };
 }
 
@@ -266,11 +224,7 @@ function prepareLocked({ repository, config, slug, branchPrefix }) {
       );
     }
 
-    // segwi sets IBNI_SKIP_SWEEP: its run may have rewritten retained worktrees, and the sweep runs git in each,
-    // outside the run's sandbox. Your own sessions still sweep.
-    const cleanup = process.env.IBNI_SKIP_SWEEP === "1"
-      ? { removed: [], kept: [], skipped: "IBNI_SKIP_SWEEP is set" }
-      : await sweepConsumedWorkspaces(repository, config);
+    const cleanup = await sweepConsumedWorkspaces(repository, config);
     const baseSha = cleanOutput(await git(repository.root, ["rev-parse", "HEAD"]));
     const settings = await repositorySettings(repository.root, baseSha);
     const verifyCommand = verifyCommandFrom(settings);

@@ -5,7 +5,7 @@ sources:
   - scripts/lib/claude-mods.mjs
   - scripts/lib/browser.mjs
   - scripts/lib/host-hooks.mjs
-reviewed: 2026-10-23
+reviewed: 2026-10-24
 ---
 
 # Host details

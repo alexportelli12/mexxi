@@ -7,7 +7,7 @@ import { isLoopbackAddress } from "./bind.mjs";
 import { HttpError } from "./errors.mjs";
 
 /**
- * A run's browser (Playwright MCP) runs outside the sandbox. It puts this in its user agent, and segwi refuses
+ * A run's browser (Playwright MCP) puts this in its user agent, and segwi refuses
  * any request that carries it. Unlike an origin list, that holds through redirects and however the host is
  * spelled, and no browser tool a run may use can change the user agent.
  */

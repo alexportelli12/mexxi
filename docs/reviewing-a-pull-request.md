@@ -4,7 +4,7 @@ sources:
   - skills/implement-review/SKILL.md
   - skills/test-design/SKILL.md
   - commands/wettaq.md
-reviewed: 2026-10-23
+reviewed: 2026-10-24
 ---
 
 # Reviewing a mexxi pull request

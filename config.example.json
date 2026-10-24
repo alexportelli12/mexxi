@@ -86,10 +86,6 @@
     },
     "runner": "claude-code",
     "model": "",
-    "allowUnsandboxed": false,
-    "permissions": "auto",
-    "branchPrefixes": [],
-    "allowedDomains": [],
     "repositories": [],
     "auth": {
       "web": {

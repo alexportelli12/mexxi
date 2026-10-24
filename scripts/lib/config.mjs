@@ -96,8 +96,32 @@ export function abbreviateHome(value, home = os.homedir()) {
   return relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? `~/${relative.split(path.sep).join("/")}` : value;
 }
 
-export async function resolveConfig(value, { home = os.homedir(), source = "config" } = {}) {
+// Keys segwi's sandbox and permission modes used, retired by decision 0016. For one release a config that still
+// names them loads: they are dropped before validation, and segwi warns about each (see segwi/lib/settings.mjs).
+// Remove this shim, and let the schema refuse them again, after 2026-12-01.
+const RETIRED_SEGWI_KEYS = ["permissions", "mcpPermissions", "branchPrefixes", "allowUnsandboxed", "allowedDomains"];
+const RETIRED_REPOSITORY_KEYS = ["permissions", "allowedDomains"];
+
+const isObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
+const omit = (value, keys) => Object.fromEntries(Object.entries(value).filter(([key]) => !keys.includes(key)));
+
+/** The retired keys `value` still sets, as paths to delete, and `value` without them. */
+export function withoutRetiredKeys(value) {
+  const segwi = isObject(value) ? value.segwi : undefined;
+  if (!isObject(segwi)) return { value, retired: [] };
+  const retired = RETIRED_SEGWI_KEYS.filter((key) => key in segwi).map((key) => `segwi.${key}`);
+  const repositories = Array.isArray(segwi.repositories) ? segwi.repositories.map((repository, index) => {
+    if (!isObject(repository)) return repository;
+    retired.push(...RETIRED_REPOSITORY_KEYS.filter((key) => key in repository).map((key) => `segwi.repositories[${index}].${key}`));
+    return omit(repository, RETIRED_REPOSITORY_KEYS);
+  }) : segwi.repositories;
+  if (!retired.length) return { value, retired };
+  return { value: { ...value, segwi: { ...omit(segwi, RETIRED_SEGWI_KEYS), ...(repositories ? { repositories } : {}) } }, retired };
+}
+
+export async function resolveConfig(input, { home = os.homedir(), source = "config" } = {}) {
   const schema = await loadSchema();
+  const { value } = withoutRetiredKeys(input);
   const errors = validate(value, schema);
   if (errors.length) throw new ConfigError(`${source} is invalid:\n${errors.join("\n")}`);
   const config = withDefaults(value, schema);
@@ -121,7 +145,7 @@ export async function loadConfig({ file = configPath(), home = os.homedir() } = 
     text = await readFile(file, "utf8");
   } catch (error) {
     if (error.code !== "ENOENT") throw error;
-    return { file, exists: false, config: await resolveConfig({}, { home, source: file }) };
+    return { file, exists: false, config: await resolveConfig({}, { home, source: file }), retired: [] };
   }
   let value;
   try {
@@ -129,7 +153,7 @@ export async function loadConfig({ file = configPath(), home = os.homedir() } = 
   } catch (error) {
     throw new ConfigError(`${file} is not valid JSON: ${error.message}`);
   }
-  return { file, exists: true, config: await resolveConfig(value, { home, source: file }) };
+  return { file, exists: true, config: await resolveConfig(value, { home, source: file }), retired: withoutRetiredKeys(value).retired };
 }
 
 // What the installer writes on first run: only where the clone is, so every

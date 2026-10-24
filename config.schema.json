@@ -245,29 +245,6 @@
         },
         "runner": { "description": "Which coding agent segwi starts. Only Claude Code exists so far.", "type": "string", "enum": ["claude-code"], "default": "claude-code" },
         "model": { "description": "Model every run uses, such as sonnet. Empty uses your coding agent's own default, which may cost more than a run needs.", "type": "string", "pattern": "^[A-Za-z0-9._-]*$", "default": "" },
-        "allowUnsandboxed": {
-          "description": "Start runs even when Claude Code's sandbox can't start, because bubblewrap or socat is missing. Dangerous: without the sandbox, every command on the allow list, such as npm run or a test, runs with all of your access. It can write anywhere you can, reach any network address, and reach segwi itself to answer its own approvals.",
-          "type": "boolean",
-          "default": false
-        },
-        "permissions": {
-          "description": "Who decides on a build or ready run's actions that the allow list doesn't cover. The sandbox, the deny list and segwi's denied paths apply in every mode, and an ask run always uses strict. auto: Claude Code's auto mode classifier decides each one and refuses what looks risky or beyond the task; you are asked only if it keeps refusing, and a refused run stops to ask you what to do. sandboxed: any command that runs inside the sandbox runs unasked, and you approve only what would run outside it or isn't a command, such as an off-list browser tool. strict: you approve every action off the allow list, sandboxed or not.",
-          "type": "string",
-          "enum": ["auto", "sandboxed", "strict"],
-          "default": "auto"
-        },
-        "branchPrefixes": {
-          "description": "Branch prefixes, besides workflow.branchPrefix, that a run may create and commit to, such as security/ for a repository whose own instructions require it. The sandbox lets a run write only these branches, so ibni prepare refuses any other --prefix in a run. Don't list a prefix that holds branches you care about: the sandbox can't protect one git has packed into packed-refs.",
-          "type": "array",
-          "items": { "type": "string", "pattern": "^([a-z0-9]+(-[a-z0-9]+)*/)+$" },
-          "default": []
-        },
-        "allowedDomains": {
-          "description": "Hosts every run may reach, besides GitHub and the npm registry, such as fonts.googleapis.com and fonts.gstatic.com for a build that inlines Google Fonts. A name, or *. and a name for its subdomains; IP addresses and well-known local names are refused, but any name whose address is this machine or your network would let a run reach it. Anything a run reads can be sent to these hosts, so add only what a verify command needs.",
-          "type": "array",
-          "items": { "type": "string", "pattern": "^(\\*\\.)?([a-z0-9]([a-z0-9-]*[a-z0-9])?\\.)+[a-z]{2,63}$" },
-          "default": []
-        },
         "repositories": {
           "description": "The only repositories a run may start in, each with a name, the path of its control checkout and the actions allowed there (build, ready or ask).",
           "type": "array",
@@ -277,9 +254,7 @@
             "properties": {
               "name": { "description": "Short name shown in the app.", "type": "string", "pattern": "^[A-Za-z0-9._-]+$", "default": "my-app" },
               "path": { "description": "Control checkout of the repository.", "type": "string", "pattern": "^(~/|/)", "default": "~/workspace/my-app" },
-              "actions": { "description": "What a run may do here: build runs /wettaq, ready runs /lesti, ask answers a question without changing anything.", "type": "array", "items": { "type": "string", "enum": ["build", "ready", "ask"] }, "default": ["build", "ready", "ask"] },
-              "permissions": { "description": "segwi.permissions for this repository's build and ready runs, such as strict for one you trust less. Empty uses segwi.permissions.", "type": "string", "enum": ["", "auto", "sandboxed", "strict"], "default": "" },
-              "allowedDomains": { "description": "Hosts this repository's runs may reach besides segwi.allowedDomains, in the same form.", "type": "array", "items": { "type": "string", "pattern": "^(\\*\\.)?([a-z0-9]([a-z0-9-]*[a-z0-9])?\\.)+[a-z]{2,63}$" }, "default": [] }
+              "actions": { "description": "What a run may do here: build runs /wettaq, ready runs /lesti, ask answers a question without changing anything.", "type": "array", "items": { "type": "string", "enum": ["build", "ready", "ask"] }, "default": ["build", "ready", "ask"] }
             }
           },
           "default": []

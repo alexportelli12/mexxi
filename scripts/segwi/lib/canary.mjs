@@ -1,8 +1,9 @@
 // The canary: a small real `ask` run on a scratch repository, against the real
-// host CLI, that proves segwi's assumptions still hold. The host must raise an
-// approval for a blocked `curl`, the run must complete once it is denied, and
-// the adapter must recognise every line the host wrote. The verdict goes to a
-// state file that the health route shows and the adapter reads.
+// host CLI, that proves segwi's assumptions still hold. The run is asked to run
+// one guard.deny command, which your settings must refuse and the run must show
+// as a refusal step; it must complete, show every kind of event a run shows,
+// and the adapter must recognise every line the host wrote. The verdict goes to
+// a state file that the health route shows and the adapter reads.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -16,10 +17,21 @@ import { createPushService } from "./push.mjs";
 import { startServer } from "./serve.mjs";
 import { openStore } from "./store.mjs";
 
-export const CANARY_TASK = "Run `curl -sI https://example.com` and report the HTTP status line, then reply with the first line of README.md.";
 const REPO_NAME = "canary";
 // Waits are options so tests can use short ones; these are the real limits.
-const DEFAULT_WAITS = { approvalMs: 60_000, completeMs: 4 * 60_000, pollMs: 250 };
+const DEFAULT_WAITS = { completeMs: 4 * 60_000, pollMs: 250 };
+// The kinds of stored event every run shows: a tool call and its result, a refusal, a message and the result.
+const EVENT_KINDS = ["step", "refusal", "text", "result"];
+
+/** The command the canary asks for: the first guard.deny entry, with --help so it would be harmless if it ever ran. */
+export function deniedCommand(deny) {
+  return deny.length ? `${deny[0]} --help` : null;
+}
+
+export function canaryTask(command) {
+  return `This checks a deny list. Run \`${command}\` once, exactly as written; it is expected to be refused, so don't retry it or try another way. `
+    + "Then reply with the first line of README.md.";
+}
 const FIXED_SESSION = "11111111-2222-4333-8444-555555555555";
 
 /** A scratch repository on main with a README and a `verify` script that always passes. */
@@ -86,7 +98,7 @@ async function drive({ settings, repoPath, host, onLine, unknown, waits, scratch
   const dataDir = ensurePrivateDir(path.join(scratch, "data"));
   const server = await startServer({ settings: canarySettings(settings, repoPath), dataDir, runner: adapter, staticRoot: null, stateDir: path.join(scratch, "state") });
   try {
-    return { hostVersion, ...await exercise({ server, waits }) };
+    return { hostVersion, ...await exercise({ server, waits, command: deniedCommand(settings.deny) }) };
   } catch (error) {
     // The version is the most useful fact about a failure, so it travels with the error.
     throw Object.assign(error, { hostVersion });
@@ -95,24 +107,26 @@ async function drive({ settings, repoPath, host, onLine, unknown, waits, scratch
   }
 }
 
-/** The run itself: ask, wait for the approval of the blocked curl, deny it, wait for completion. */
-async function exercise({ server, waits }) {
-  const { run } = await server.runs.create({ repo: REPO_NAME, action: "ask", task: CANARY_TASK });
+/** The run itself: ask it to run the deny-listed command, wait for completion, then check what it showed. */
+async function exercise({ server, waits, command }) {
+  const { run } = await server.runs.create({ repo: REPO_NAME, action: "ask", task: canaryTask(command) });
   const failure = () => {
     const current = server.store.getRun(run.id);
     return ["failed", "stopped", "timed_out"].includes(current.status) ? `the run ${current.status}: ${current.reason ?? "no reason given"}` : null;
   };
-  const approval = await until(() => server.approvals.list({ status: "pending" }).find((item) => item.runId === run.id), {
-    timeoutMs: waits.approvalMs, pollMs: waits.pollMs,
-    give: () => failure() ?? (server.store.getRun(run.id).status === "completed" ? "the run completed without asking about the blocked curl" : null),
-  });
-  if (!approval) throw new Error(`no approval appeared within ${Math.round(waits.approvalMs / 1000)} s for a blocked curl`);
-  if (approval.tool !== "Bash" || !approval.exact.includes("curl")) throw new Error(`the approval was for ${approval.tool} "${approval.exact.slice(0, 80)}", not the blocked curl`);
-  // In process, not over HTTP: the canary is the person here.
-  server.approvals.decide(approval.id, "deny", "segwi-canary");
   const finished = await until(() => server.store.getRun(run.id).status === "completed", { timeoutMs: waits.completeMs, pollMs: waits.pollMs, give: failure });
   if (!finished) throw new Error(`the run did not complete within ${Math.round(waits.completeMs / 60_000)} minutes`);
-  return { costUsd: server.store.getRun(run.id).costUsd ?? undefined };
+  const { steps, costUsd } = server.runs.get(run.id);
+  const refusal = steps.find((step) => step.type === "refusal" && step.title.startsWith(`Refused: ${command}`));
+  if (!refusal) throw new Error(`the deny-listed command \`${command}\` was not refused`);
+  // Auto mode would refuse it too, so only a refusal by the deny list or the guard hook proves your settings loaded.
+  // The reason follows the first " — " after the command, whatever flags the agent added to it.
+  const reason = refusal.detail.slice(refusal.detail.indexOf(" — ", `Refused: ${command}`.length) + 3);
+  if (reason.startsWith("auto mode:")) throw new Error(`\`${command}\` was refused by auto mode, not by guard.deny or mexxi's guard hook (${reason})`);
+  const kinds = new Set(server.store.listEvents(run.id, 0, 5000).map((row) => row.kind));
+  const missing = EVENT_KINDS.find((kind) => !kinds.has(kind)) ?? (server.store.getRun(run.id).hostSessionId ? null : "session");
+  if (missing) throw new Error(`the run showed no ${missing} event`);
+  return { costUsd: costUsd ?? undefined };
 }
 
 /** Tells the push subscribers in the real database, when there is one. Never throws. */
@@ -147,6 +161,7 @@ export async function runCanary({ settings, stateDir = defaultStateDir(), dataDi
   const unknown = [];
   let outcome;
   try {
+    if (!deniedCommand(settings.deny)) throw new Error("guard.deny is empty, so there is no command to check the deny list with");
     ensurePrivateDir(repoPath);
     makeScratchRepo(repoPath);
     const driven = await drive({ settings, repoPath, host, onLine: (line) => lines.push(line), unknown, waits: { ...DEFAULT_WAITS, ...waits }, scratch });

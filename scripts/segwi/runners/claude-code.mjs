@@ -1,137 +1,35 @@
 // The Claude Code adapter: host mechanics only. It builds the headless command
-// from a fixed argument array, renders the per-run settings and MCP config, and
-// turns the host's stream-json output into normalised RunEvents. No caller value
-// reaches the command line: the task goes to stdin, the rest comes from config.
-import { execFile, spawn, spawnSync } from "node:child_process";
+// from a fixed argument array, renders the per-run MCP config, and turns the
+// host's stream-json output into normalised RunEvents. A run is the session you
+// would start by hand (decision 0016): your own settings, auto mode, your checkout.
+// No caller value reaches the command line: the task goes to stdin, the rest comes from config.
+import { execFile, spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { accessSync, constants, existsSync, readFileSync, readdirSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { playwrightArguments } from "../../lib/browser.mjs";
-import { branchFolder, gitWritePaths, isPlainVerifyCommand, renderSettings, VERIFY_NOT_ALLOWED, writablePrefixes } from "../lib/allow-list.mjs";
 import { RUN_BROWSER_MARK } from "../lib/auth.mjs";
 import { canaryTestedVersions } from "../lib/canary-state.mjs";
-import { BROWSER_LAUNCHER, findHeadlessShell, HEADLESS_SHELL_ENV } from "../lib/headless-shell.mjs";
 
 const execFileAsync = promisify(execFile);
 const serverEntry = fileURLToPath(new URL("../server.mjs", import.meta.url));
 const testedVersions = JSON.parse(readFileSync(new URL("./claude-code.tested.json", import.meta.url), "utf8"));
 
-// What happens to a call off the allow list, in each permissions mode (segwi.permissions). Auto mode asks nobody
-// first, so it says what to do instead when a call is refused: stop and ask, which shows as "Needs your reply".
-const PERMISSION_PROMPTS = {
-  strict: "A person must approve any tool call outside this run's allow list, and the run waits until they answer from their phone. ",
-  sandboxed: "Commands that run inside the sandbox run without asking. A person must approve any other tool call outside this run's allow list, "
-    + "and the run waits until they answer from their phone. ",
-  auto: "Claude Code's auto mode reviews each tool call outside this run's allow list and may refuse it. "
-    + "If an action is refused, never retry it in pieces or rephrase it, and don't reach the same result another way, even where the refusal suggests one: "
-    + "stop and ask the person what to do, saying what you were trying to do and why, then wait for their reply. ",
-};
-// Concrete on purpose: with a vaguer prompt, a real build run edited files through heredocs and sed, and each edit
-// waited on a person. Later runs also waited on a cat and ls chain, which the allow list doesn't cover, and on an
-// inline multi-line PR body. The packed-refs line is there because the sandbox keeps that file read-only on purpose.
-const SYSTEM_PROMPT = "Change files only with the Edit and Write tools, never with shell redirection, heredocs, tee or sed -i. "
-  + "Read, list and search files only with the Read, Glob and Grep tools, never with cat, head, ls, find or grep in Bash. "
-  + "Keep each Bash call to plain commands, without variable assignments or subshells. "
-  + "Give gh pr create and gh pr edit their description with --body-file, after writing it with the Write tool, never inline with --body. "
-  + "git commit here prints \"Unable to create '.../packed-refs.lock': Read-only file system\" and still succeeds: that is expected, so leave it alone. "
-  + "This holds even where other guidance suggests editing through the shell.";
+// Auto mode refuses some calls and asks nobody first, so the agent is told what to do then: stop and ask, which shows
+// as "Needs your reply". The same rule holds in a session you start by hand.
+const REFUSAL_PROMPT = "Claude Code's auto mode reviews each tool call and may refuse it. "
+  + "If an action is refused, never retry it in pieces or rephrase it, and don't reach the same result another way, even where the refusal suggests one: "
+  + "stop and ask the person what to do, saying what you were trying to do and why, then wait for their reply.";
 const ASK_PROMPT = " This run only answers a question: read what you need and change nothing.";
-// A real run set CHROME_BIN=/usr/bin/chromium on its verify command, as the repository's instructions said, and every
-// browser test failed: that Chromium can't start inside the sandbox.
-const BROWSER_PROMPT = " CHROME_BIN already names a headless Chromium that works in this sandbox: never set or override it, "
-  + "even where the repository's instructions name another browser.";
-
-/**
- * How a build or ready run must call ibni prepare. A real run chained it after an echo, so the whole call stayed in
- * the sandbox and couldn't lock the checkout's git directory, and another passed --prefix for a branch the sandbox
- * can't write.
- */
-function preparePrompt(prefixes) {
-  const [own, ...others] = prefixes;
-  const prefix = others.length
-    ? `Pass --prefix to ibni prepare only when the repository's own instructions require one of ${others.join(", ")}; otherwise leave it out, and the branch goes under ${own}. No other prefix can be written here.`
-    : `Never pass --prefix to ibni prepare: this run may write only branches under ${own}, even where a repository instruction asks for another prefix.`;
-  return " Run ibni prepare as a Bash call of its own, with nothing before or after it (no echo, cd, ;, && or |): only then does it run outside the sandbox, "
-    + `where it can update your checkout. ${prefix}`;
-}
-const NO_HEADLESS_SHELL = "No chrome-headless-shell is installed, so browser tests in this run (Karma, Playwright through CHROME_BIN) can't start inside the sandbox. "
-  + "Install one with npx playwright install chromium.";
+// An ask run promises to change nothing, so the tools that write files are taken away. Not plan mode: it let network
+// commands such as curl run unasked and switched to a larger model than --model names (decision 0011).
+const ASK_DISALLOWED_TOOLS = "Edit,Write,NotebookEdit";
 const RESULT_DETAIL_MAX = 8000;
-// What Claude Code's sandbox needs on Linux. Without them it runs commands unsandboxed and says nothing.
-const SANDBOX_TOOLS = ["bwrap", "socat"];
-// Credentials nothing inside the sandbox needs; gh's own config stays readable, because gh pr view needs it.
-const SECRET_PATHS = [".ssh", ".gnupg", ".aws", ".netrc", ".git-credentials", ".npmrc", ".docker", ".codex", ".claude/.credentials.json", ".claude.json"];
-// What the file tools may never write or create, besides the secrets: what runs as you or steers an agent later (shell
-// and git config, ~/.config with its systemd units, ~/.local/bin, Claude Code's own config), and mexxi itself, where ibni lives.
-const PROTECTED_HOME_FILES = [".bashrc", ".bash_profile", ".bash_login", ".profile", ".zshrc", ".zshenv", ".zprofile", ".zlogin", ".gitconfig"];
-const PROTECTED_HOME_FOLDERS = [".config", ".local/bin", ".claude"];
-const MEXXI_ROOT = path.resolve(fileURLToPath(new URL("../../../", import.meta.url)));
 const INPUT_KEYS = ["command", "description", "file_path", "path", "pattern", "url", "query", "skill", "subagent_type", "prompt"];
-
-function onPath(name) {
-  return (process.env.PATH ?? "").split(path.delimiter).some((directory) => {
-    try {
-      accessSync(path.join(directory, name), constants.X_OK);
-      return true;
-    } catch {
-      return false;
-    }
-  });
-}
-
-/**
- * Why Claude Code's sandbox can't start here, or nothing. Having bubblewrap is not enough: some systems
- * (Ubuntu 24.04, for one) forbid the user namespaces it needs, and a seccomp filter on segwi's own process
- * can block it too, so this starts a throwaway sandbox to see and passes on bubblewrap's own reason.
- */
-export function probeSandbox() {
-  const missing = SANDBOX_TOOLS.filter((name) => !onPath(name));
-  if (missing.length) return [`Claude Code's sandbox can't start: install bubblewrap and socat (missing: ${missing.join(", ")}).`];
-  const trial = spawnSync("bwrap", ["--ro-bind", "/", "/", "--dev", "/dev", "--unshare-net", "true"], { stdio: ["ignore", "ignore", "pipe"], encoding: "utf8", timeout: 5000 });
-  if (trial.status !== 0) {
-    const reason = trial.error?.message ?? (trial.stderr.trim().split("\n").at(-1).slice(0, 300) || `exit ${trial.status ?? trial.signal}`);
-    return [`Claude Code's sandbox can't start: bubblewrap is installed but can't create a sandbox here (${reason}).`];
-  }
-  return [];
-}
-
-/**
- * Everything in the worktree root when the run starts that isn't for it: other repositories' folders whole, and
- * in this repository's folders (where its worktrees already are) every existing worktree and evidence folder.
- * Those are other sessions', your own included, and planting files there would reach git commands you run later.
- * The run's own worktree doesn't exist yet: ibni prepare makes it.
- */
-async function existingWorkspaces(worktreeRoot, repoPath) {
-  let listing = "";
-  try {
-    ({ stdout: listing } = await execFileAsync("git", ["-C", repoPath, "worktree", "list", "--porcelain"], { timeout: 5000 }));
-  } catch {
-    // No worktree list: every folder counts as another repository's.
-  }
-  // The first entry is the control checkout itself, which isn't one of the worktree root's folders.
-  const linked = listing.split("\n").filter((line) => line.startsWith("worktree ")).slice(1);
-  const ownFolders = new Set(linked.map((line) => path.dirname(path.resolve(line.slice(9)))));
-  // Real entries only: the sandbox resolves a symlink, so denying one would deny wherever it points.
-  const list = (dir) => { try { return readdirSync(dir, { withFileTypes: true }).filter((entry) => !entry.isSymbolicLink()).map((entry) => entry.name); } catch { return []; } };
-  return list(worktreeRoot).flatMap((name) => {
-    const folder = path.join(worktreeRoot, name);
-    return ownFolders.has(folder) ? list(folder).map((leaf) => path.join(folder, leaf)) : [folder];
-  });
-}
-
-/** The control checkout's shared git directory, where a linked worktree's commits land. */
-async function gitCommonDir(repoPath) {
-  try {
-    const { stdout } = await execFileAsync("git", ["-C", repoPath, "rev-parse", "--path-format=absolute", "--git-common-dir"], { timeout: 5000 });
-    return stdout.trim() || path.join(repoPath, ".git");
-  } catch {
-    return path.join(repoPath, ".git");
-  }
-}
 
 /** The first stdin line for each action. `ready` appends a task only if one is given. */
 export function actionMessage({ action, task }) {
@@ -140,35 +38,30 @@ export function actionMessage({ action, task }) {
   return task;
 }
 
-/**
- * The appended system prompt for a run, from its action, permissions mode and writable branch prefixes, and
- * whether the run's CHROME_BIN names segwi's browser launcher.
- */
-export function systemPrompt(spec, { browser = false } = {}) {
-  const permissions = PERMISSION_PROMPTS[spec.permissions] ?? PERMISSION_PROMPTS.strict;
-  if (spec.action === "ask") return permissions + SYSTEM_PROMPT + ASK_PROMPT;
-  return permissions + SYSTEM_PROMPT + preparePrompt(writablePrefixes(spec.branchPrefix ?? "agent/", spec.branchPrefixes)) + (browser ? BROWSER_PROMPT : "");
+/** The appended system prompt for a run, from its action. */
+export function systemPrompt(spec) {
+  return REFUSAL_PROMPT + (spec.action === "ask" ? ASK_PROMPT : "");
 }
 
-/** The host's argument array. Pure, so a test can pin it. */
-export function buildArgs({ spec, sessionId, settingsFile, mcpFile, browser = false }) {
+/**
+ * The host's argument array. Pure, so a test can pin it. No --settings and no --setting-sources: Claude Code reads
+ * your own settings, with mexxi's guard hook, loop breaker and deny list, as in a session you start yourself.
+ */
+export function buildArgs({ spec, sessionId, mcpFile }) {
   return [
     "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
     "--session-id", sessionId,
-    "--setting-sources", "user",
-    // Not plan mode for ask: it lets network commands such as curl run unasked
-    // and switches to a larger model than --model names (see the plan's Spike results).
-    // Auto mode (segwi.permissions) leaves calls off the allow list to its classifier, inside the same sandbox.
-    "--permission-mode", spec.permissions === "auto" ? "auto" : "default",
-    "--settings", settingsFile,
+    "--permission-mode", "auto",
     "--max-turns", String(spec.limits.maxTurns),
     ...(spec.model ? ["--model", spec.model] : []),
+    // ibni prepare makes the run's worktree under the worktree root, outside the checkout the run starts in.
     "--add-dir", spec.worktreeRoot,
-    // Wired in every mode: auto mode asks it too, once its classifier has refused several calls in a row.
+    ...(spec.action === "ask" ? ["--disallowedTools", ASK_DISALLOWED_TOOLS] : []),
+    // The rare call auto mode escalates, after its classifier has refused several in a row, goes to a person.
     "--permission-prompt-tool", "mcp__segwi__approve",
     "--mcp-config", mcpFile,
     "--strict-mcp-config",
-    "--append-system-prompt", systemPrompt(spec, { browser }),
+    "--append-system-prompt", systemPrompt(spec),
   ];
 }
 
@@ -189,8 +82,8 @@ export function renderMcpConfig({ spec }) {
         args: [serverEntry, "approver", "--run", spec.runId],
         env: { SEGWI_URL: spec.serverUrl ?? "", SEGWI_RUN_SECRET: spec.runSecret ?? "" },
       },
-      // The browser runs outside the sandbox, and behind tailscale serve it would carry your identity,
-      // so it must never reach segwi itself, or the agent could open the app and tap Approve.
+      // segwi's own browser, not your Playwright MCP server (--strict-mcp-config), because behind tailscale serve it
+      // would carry your identity: it must never reach segwi itself, or the agent could open the app and tap Approve.
       playwright: {
         command: "npx",
         args: ["-y", ...playwrightArguments(spec.browser), `--user-agent=${RUN_BROWSER_AGENT}`, ...(ownOrigins(spec) ? [`--blocked-origins=${ownOrigins(spec)}`] : [])],
@@ -214,7 +107,7 @@ function resultText(content) {
 }
 
 // How Claude Code words a call it refused itself, as real 2.1.309 runs wrote it: the auto mode classifier, a deny
-// rule (the guard's list or segwi's own) and a PreToolUse hook such as mexxi's guard. A person's denial is already on
+// rule (guard.deny, from your settings) and a PreToolUse hook such as mexxi's guard. A person's denial is already on
 // the run as an approval, so the approval tool's own wording is not one of these.
 const REFUSALS = [
   { pattern: /^Permission for this action was denied by the Claude Code auto mode classifier\. Reason: (.+?)(?:\. If you have other tasks|\s*$)/s, reason: (match) => `auto mode: ${match[1].trim().replace(/\.$/, "")}` },
@@ -274,15 +167,12 @@ export function mapMessage(message) {
 
 /**
  * @param {{ bin?: string, binArgs?: string[], dataDir?: string, killGraceMs?: [number, number], stateDir?: string|null,
- *   onUnknown?: (what: string) => void, onLine?: (line: string) => void, sandboxProblems?: () => string[] }} [options]
+ *   onUnknown?: (what: string) => void, onLine?: (line: string) => void }} [options]
  *   `bin` and `binArgs` exist for tests and the canary only; nothing from config, a request or the environment reaches them.
- *   `sandboxProblems` lets tests decide whether the sandbox can start, whatever this machine has installed.
- *   `headlessShell` finds the browser a run's CHROME_BIN starts, or null; tests replace it the same way.
  *   `stateDir` is where a canary's passed versions are read from. `onUnknown` hears each line the adapter did not
  *   recognise, and `onLine` each raw line of the host's output, both for the canary.
  */
-export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir = path.join(os.tmpdir(), "segwi"), killGraceMs = [10_000, 5_000], stateDir = null, onUnknown = () => {}, onLine = () => {},
-  sandboxProblems = probeSandbox, headlessShell = () => findHeadlessShell({ home: os.homedir() }) } = {}) {
+export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir = path.join(os.tmpdir(), "segwi"), killGraceMs = [10_000, 5_000], stateDir = null, onUnknown = () => {}, onLine = () => {} } = {}) {
   /** @type {Map<string, { child: import("node:child_process").ChildProcess, closed: boolean, timers: NodeJS.Timeout[] }>} */
   const processes = new Map();
 
@@ -300,83 +190,28 @@ export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir 
     if (version && !tested.includes(version)) {
       problems.push(`Claude Code ${version} has not been tested with segwi (tested: ${tested.join(", ")}).`);
     }
-    const sandbox = sandboxProblems();
-    return { available: version !== null, version, testedVersions: tested, problems, sandbox: { available: !sandbox.length, problems: sandbox } };
+    return { available: version !== null, version, testedVersions: tested, problems };
   }
 
   async function start(spec, emit) {
     const runDir = path.join(dataDir, "runs", spec.runId);
     await mkdir(runDir, { recursive: true, mode: 0o700 });
-    const settingsFile = path.join(runDir, "settings.json");
     const mcpFile = path.join(runDir, "mcp.json");
-    const tempDir = `/tmp/claude-${process.getuid?.() ?? 0}`;
-    const commonDir = await gitCommonDir(spec.repoPath);
-    const prefixes = writablePrefixes(spec.branchPrefix ?? "agent/", spec.branchPrefixes);
-    // The sandbox can only open a path that exists, and ibni prepare makes the first branch under a prefix later.
-    if (spec.action !== "ask") await Promise.all(gitWritePaths(commonDir, prefixes).map((dir) => mkdir(dir, { recursive: true })));
-    const home = os.homedir();
-    const secrets = [...SECRET_PATHS.map((name) => path.join(home, name)), dataDir, ...(stateDir ? [stateDir] : [])].filter((file) => existsSync(file));
-    const ownFolders = new Set(prefixes.map((prefix) => branchFolder(commonDir, prefix)));
-    const existingGit = spec.action === "ask" ? [] : [
-      ...[path.join(commonDir, "worktrees"), ...ownFolders]
-        .flatMap((dir) => readdirSync(dir).map((name) => path.join(dir, name)))
-        // A listed prefix inside another (agent/ and agent/security/) is this run's to write, not another session's.
-        .filter((entry) => !ownFolders.has(entry)),
-      ...await existingWorkspaces(spec.worktreeRoot, spec.repoPath),
-    ];
-    const settings = renderSettings({
-      action: spec.action, worktreeRoot: spec.worktreeRoot, verifyCommand: spec.verifyCommand, setupCommand: spec.setupCommand ?? null, denyPatterns: spec.denyPatterns, repoPath: spec.repoPath,
-      tempDir, gitCommonDir: commonDir, branchPrefix: prefixes[0], branchPrefixes: prefixes, permissions: spec.permissions, controlEntries: readdirSync(spec.repoPath), existingGit, denyRead: secrets,
-      protectedFiles: PROTECTED_HOME_FILES.map((name) => path.join(home, name)),
-      protectedFolders: [...PROTECTED_HOME_FOLDERS.map((name) => path.join(home, name)), MEXXI_ROOT],
-      // Every configured repository's checkout, not only this run's: a file planted in any of them runs as you later.
-      controlCheckouts: spec.controlCheckouts ?? [],
-      allowedDomains: spec.allowedDomains ?? [],
-    });
-    await writeFile(settingsFile, `${JSON.stringify(settings, null, 2)}\n`, { mode: 0o600 });
     await writeFile(mcpFile, `${JSON.stringify(renderMcpConfig({ spec }), null, 2)}\n`, { mode: 0o600 });
 
-    if (!isPlainVerifyCommand(spec.verifyCommand)) emit({ kind: "text", text: VERIFY_NOT_ALLOWED });
-    // A build or ready run's tests may launch Chromium (see lib/headless-shell.mjs); an ask run runs none. The launcher
-    // turns off Chromium's own sandbox, which is safe only inside the run's, so not when segwi.allowUnsandboxed let a
-    // run start without one.
-    const browser = spec.action === "ask" || sandboxProblems().length ? null : headlessShell();
-    if (spec.action !== "ask" && !browser) emit({ kind: "text", text: NO_HEADLESS_SHELL });
     const sessionId = randomUUID();
-    const args = [...binArgs, ...buildArgs({ spec, sessionId, settingsFile, mcpFile, browser: Boolean(browser) })];
+    const args = [...binArgs, ...buildArgs({ spec, sessionId, mcpFile })];
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("SEGWI_")));
     // segwi's service runs with NODE_ENV=production, and a run is a developer's session: under it npm ci skips
     // devDependencies, so the repository's test and build tools would be missing.
     delete env.NODE_ENV;
-    if (browser) Object.assign(env, { CHROME_BIN: BROWSER_LAUNCHER, [HEADLESS_SHELL_ENV]: browser });
     // The approval tool holds its call open until a person answers, so Claude
     // Code must not give up on an MCP call before segwi's own approval expiry.
     env.MCP_TOOL_TIMEOUT = String((spec.limits.approvalTimeoutMinutes + 1) * 60_000);
-    // The sandbox can't write the home npm cache, so npm keeps one in the run's temporary directory.
-    env.npm_config_cache = path.join(tempDir, "npm-cache");
-    // Every git command in the run, ibni prepare's outside the sandbox too, uses only your own hooks: a hooks path
-    // set to a folder in the repository (as husky does) would run hooks the agent can edit. Added after any
-    // GIT_CONFIG_* entries you set yourself, never in their place.
-    const configCount = Number.parseInt(env.GIT_CONFIG_COUNT ?? "0", 10) || 0;
-    Object.assign(env, { GIT_CONFIG_COUNT: String(configCount + 1), [`GIT_CONFIG_KEY_${configCount}`]: "core.hooksPath", [`GIT_CONFIG_VALUE_${configCount}`]: path.join(commonDir, "hooks") });
-    // The run's ibni commands are sandboxed and can't lock the checkout's git directory, so they lock here.
-    env.IBNI_LOCK_ROOT = path.join(tempDir, "ibni-locks");
-    // ibni prepare runs outside the sandbox, and its sweep would run git in worktrees this run could rewrite.
-    env.IBNI_SKIP_SWEEP = "1";
-    // For the same reason, prepare installs nothing: an install runs the repository's code (npm install scripts), so
-    // the run calls ibni setup itself, inside the sandbox, which reaches the npm registry.
-    env.IBNI_DEFER_SETUP = "1";
-    // A build or ready run starts outside the control checkout (see allow-list.mjs), so ibni prepare is told where it is.
-    const startDir = spec.action === "ask" ? spec.repoPath : spec.worktreeRoot;
-    if (spec.action !== "ask") {
-      env.IBNI_LAUNCH_CHECKOUT = spec.repoPath;
-      // ibni prepare runs outside the sandbox, so it refuses a branch prefix the sandbox won't let the run write later.
-      env.IBNI_BRANCH_PREFIXES = prefixes.join("\n");
-      await mkdir(startDir, { recursive: true });
-    }
-    // Its own process group, so a stop reaches what the host started (MCP servers, browsers, background
-    // shells) and not only the host itself.
-    const child = spawn(bin, args, { cwd: startDir, env, stdio: ["pipe", "pipe", "pipe"], detached: true });
+    // In your checkout, where you would start claude yourself and where /wettaq's ibni prepare expects to be. Its
+    // own process group, so a stop reaches what the host started (MCP servers, browsers, background shells) and
+    // not only the host itself.
+    const child = spawn(bin, args, { cwd: spec.repoPath, env, stdio: ["pipe", "pipe", "pipe"], detached: true });
     const entry = { child, closed: false, timers: [] };
     processes.set(spec.runId, entry);
 

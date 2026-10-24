@@ -12,7 +12,6 @@ import { AuthConfigError } from "../lib/auth.mjs";
 import { startServer } from "../lib/serve.mjs";
 import { createBroker } from "../lib/sse.mjs";
 import { openStore } from "../lib/store.mjs";
-import { probeSandbox } from "../runners/claude-code.mjs";
 import { fakeAdapter, fixturesDir, makeRepo, makeSettings, tempDir, waitFor } from "./helpers.mjs";
 
 const serverEntry = fileURLToPath(new URL("../server.mjs", import.meta.url));
@@ -20,10 +19,10 @@ const TOKEN = `ghp_${"a1B2c3D4e5".repeat(4).slice(0, 36)}`;
 const noIbni = { findNewWorkspace: async () => null, summary: async () => { throw new Error("no ibni in this test"); }, list: async () => [] };
 
 /** Starts a server over a fresh repo. `fixture` names a recording or a file path. */
-async function boot(t, { fixture = "ask-completed", auth, limits, actions = ["build", "ready", "ask"], repoPath, dataDir, adapterOptions, staticRoot = null, settingsPatch = {}, ibni = noIbni, wrapRunner = (runner) => runner } = {}) {
+async function boot(t, { fixture = "ask-completed", auth, limits, actions = ["build", "ready", "ask"], repoPath, dataDir, staticRoot = null, settingsPatch = {}, ibni = noIbni, wrapRunner = (runner) => runner } = {}) {
   const repo = repoPath ?? makeRepo(t);
   const dir = dataDir ?? tempDir(t, "segwi-data-");
-  const { adapter } = fakeAdapter(t, fixture, adapterOptions);
+  const { adapter } = fakeAdapter(t, fixture);
   const settings = { ...makeSettings({ repos: [{ name: "my-app", path: repo, actions }], auth, limits }), ...settingsPatch };
   const server = await startServer({ settings, dataDir: dir, runner: wrapRunner(adapter), ibni, staticRoot });
   t.after(() => server.close());
@@ -208,46 +207,6 @@ test("a dirty checkout, or one off its default branch, is 409 and audited", asyn
   assert.ok(!JSON.stringify(repos).includes(repo), "the repository path is never shown");
 });
 
-test("without a working sandbox a run is refused, health says why, and allowUnsandboxed lets it start with a warning", async (t) => {
-  const noSandbox = { sandboxProblems: () => ["Claude Code's sandbox can't start: install bubblewrap and socat (missing: bwrap)."] };
-  const { server } = await boot(t, { adapterOptions: noSandbox });
-  const refused = await startRun(server);
-  assert.equal(refused.status, 409);
-  assert.match(refused.json.error, /sandbox can't start, so segwi won't start a run/);
-  assert.equal(server.store.listRuns().length, 0);
-  assert.match(lastRejected(server).detail, /^409 .*sandbox/);
-  const health = (await request(server, "GET", "/api/health")).json;
-  assert.equal(health.ok, false);
-  assert.deepEqual({ available: health.sandbox.available, required: health.sandbox.required }, { available: false, required: true });
-  assert.match(health.sandbox.problems.join(" "), /missing: bwrap.*won't start a run/);
-
-  const repo = makeRepo(t);
-  const settings = makeSettings({ repos: [{ name: "my-app", path: repo, actions: ["ask"] }] });
-  settings.segwi.allowUnsandboxed = true;
-  const loose = await startServer({ settings, dataDir: tempDir(t, "segwi-data-"), runner: fakeAdapter(t, "ask-completed", noSandbox).adapter, ibni: noIbni, staticRoot: null });
-  t.after(() => loose.close());
-  assert.equal((await startRun(loose)).status, 201);
-  const warned = (await request(loose, "GET", "/api/health")).json;
-  assert.equal(warned.ok, true);
-  assert.deepEqual({ available: warned.sandbox.available, required: warned.sandbox.required }, { available: false, required: false });
-  assert.match(warned.sandbox.problems.at(-1), /without Claude Code's sandbox, because segwi.allowUnsandboxed is on/);
-});
-
-test("when bubblewrap is installed but can't create a sandbox, the probe passes on bubblewrap's own reason", (t) => {
-  const bin = tempDir(t, "segwi-bin-");
-  writeFileSync(path.join(bin, "bwrap"), "#!/bin/sh\necho 'bwrap: Creating new namespace failed: Operation not permitted' >&2\nexit 1\n", { mode: 0o755 });
-  writeFileSync(path.join(bin, "socat"), "#!/bin/sh\n", { mode: 0o755 });
-  const searchPath = process.env.PATH;
-  process.env.PATH = bin;
-  t.after(() => { process.env.PATH = searchPath; });
-  assert.deepEqual(probeSandbox(), [
-    "Claude Code's sandbox can't start: bubblewrap is installed but can't create a sandbox here (bwrap: Creating new namespace failed: Operation not permitted).",
-  ]);
-  // A bubblewrap that fails silently still gets a reason, never an empty pair of brackets.
-  writeFileSync(path.join(bin, "bwrap"), "#!/bin/sh\nexit 1\n", { mode: 0o755 });
-  assert.match(probeSandbox()[0], /can't create a sandbox here \(exit 1\)\.$/);
-});
-
 test("over the concurrent-runs cap, or the daily cap, is 429 and audited", async (t) => {
   const concurrent = await boot(t, { fixture: "build-needs-input", limits: { concurrentRuns: 1 } });
   assert.equal((await startRun(concurrent.server, { action: "build" })).status, 201);
@@ -291,7 +250,9 @@ test("an ask run completes, shows readable steps, and a repeated clientId return
   const health = (await request(server, "GET", "/api/health")).json;
   assert.equal(health.runner.id, "claude-code");
   assert.equal(health.runner.tested, true);
-  assert.deepEqual(health.sandbox, { available: true, required: true, problems: [] });
+  assert.equal(health.ok, true);
+  // A run needs nothing beyond the agent itself, so health has no sandbox to warn about.
+  assert.ok(!("sandbox" in health));
   for (const header of ["content-security-policy", "x-content-type-options", "referrer-policy"]) assert.ok(health[header] === undefined && (await request(server, "GET", "/api/health")).headers[header]);
   assert.match((await request(server, "GET", "/api/health")).headers["cache-control"], /no-store/);
   assert.match((await request(server, "GET", "/")).text, /Build the web app/);

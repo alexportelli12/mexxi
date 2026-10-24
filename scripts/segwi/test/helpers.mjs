@@ -32,7 +32,7 @@ export function makeRepo(t) {
   return dir;
 }
 
-/** `segwi` overrides the rest of the segwi key. Tests run strict unless they say otherwise, as auto mode needs a real classifier. */
+/** `segwi` overrides the rest of the segwi key. */
 export function makeSettings({ repos, auth = {}, limits = {}, host = "127.0.0.1", worktreeRoot = "/tmp/segwi-test-worktrees", segwi = {} }) {
   return {
     segwi: {
@@ -43,22 +43,19 @@ export function makeSettings({ repos, auth = {}, limits = {}, host = "127.0.0.1"
         concurrentRuns: 2, runsPerDay: 20, maxTurns: 80, idleTimeoutMinutes: 30, hardTimeoutMinutes: 120,
         approvalTimeoutMinutes: 60, taskMaxChars: 8000, inputMaxChars: 4000, ...limits,
       },
-      push: true, vapidSubject: "mailto:segwi-tests@example.com", permissions: "strict", branchPrefixes: [], ...segwi,
+      push: true, vapidSubject: "mailto:segwi-tests@example.com", ...segwi,
     },
     deny: ["npm publish", "git push --force"], worktreeRoot, browser: { playwrightMcpVersion: "0.0.1", executablePath: null, outputDir: worktreeRoot },
   };
 }
 
-/**
- * An adapter whose "claude" replays a recording. Returns the adapter and where the host's report lands.
- * The sandbox counts as available unless a test passes its own `sandboxProblems`, so the suite doesn't depend on bubblewrap.
- */
+/** An adapter whose "claude" replays a recording. Returns the adapter and where the host's report lands. */
 export function fakeAdapter(t, fixture, options = {}) {
   const dir = tempDir(t, "segwi-host-");
   const reportFile = path.join(dir, "report.json");
   const file = path.isAbsolute(fixture) ? fixture : path.join(fixturesDir, "claude-code", `${fixture}.jsonl`);
   const adapter = createClaudeCodeAdapter({
-    bin: process.execPath, binArgs: [fakeHost, file, reportFile], dataDir: path.join(dir, "data"), killGraceMs: [200, 200], sandboxProblems: () => [], headlessShell: () => null, ...options,
+    bin: process.execPath, binArgs: [fakeHost, file, reportFile], dataDir: path.join(dir, "data"), killGraceMs: [200, 200], ...options,
   });
   return { adapter, report: () => JSON.parse(readFileSync(reportFile, "utf8")), dir };
 }

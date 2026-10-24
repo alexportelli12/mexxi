@@ -6,9 +6,8 @@ import { evidenceDirectoryFor, summarizeSetup, updateMetadata } from "../lib/met
 import { ownedSession } from "../lib/session.mjs";
 import { lockfilesAt, runSetup, setupPlan } from "../lib/setup.mjs";
 
-// Installs, or reinstalls, the session's dependencies in its worktree: after a
-// deferred setup (segwi), when adopt finds them out of date, or after a commit
-// changed a lockfile. The command comes from the default branch's .mexxi.json
+// Installs, or reinstalls, the session's dependencies in its worktree: when
+// adopt finds them out of date, or after a commit changed a lockfile. The command comes from the default branch's .mexxi.json
 // (at baseSha) or the lockfile at HEAD, as prepare resolves it. The lock is
 // held only to record the result, never while the install runs.
 export async function setupWorkspace({ cwd = process.cwd(), sessionId }) {

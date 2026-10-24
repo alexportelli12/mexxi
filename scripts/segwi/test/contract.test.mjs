@@ -1,12 +1,9 @@
 // The shared runner contract: every adapter is driven against recorded host
 // output replayed by the fake host. Add a runner to RUNNERS to hold it to the same rules.
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import os from "node:os";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
 import { mapMessage } from "../runners/claude-code.mjs";
 import { assertRunEvent, statusAfterResult } from "../runners/contract.mjs";
 import { fakeAdapter, makeRepo, makeSettings, tempDir, waitFor } from "./helpers.mjs";
@@ -18,7 +15,7 @@ function specFor(repoPath, overrides = {}) {
   const settings = makeSettings({ repos: [] });
   return {
     runId: "run-1", repoPath, action: "ask", task: TASK, limits: { maxTurns: 6, approvalTimeoutMinutes: 60 }, worktreeRoot: settings.worktreeRoot,
-    verifyCommand: "npm run verify", denyPatterns: settings.deny, browser: settings.browser, serverUrl: "http://127.0.0.1:1", runSecret: "per-run-secret",
+    browser: settings.browser, serverUrl: "http://127.0.0.1:1", runSecret: "per-run-secret",
     ...overrides,
   };
 }
@@ -58,207 +55,85 @@ for (const runner of RUNNERS) {
     assert.deepEqual(hostReport.stdin.map((line) => JSON.parse(line)), [{ type: "user", message: { role: "user", content: TASK } }]);
   });
 
-  test(`${runner.id}: the command line is exactly the fixed argument array`, async (t) => {
-    const { adapter, report, dir } = runner.adapter(t, "ask-completed");
-    const spec = specFor(makeRepo(t), { model: "haiku" });
+  /** Starts a run with `overrides` and returns its argument array, its prompt and the host's report. */
+  async function started(t, overrides = {}) {
+    const { adapter, dir, report } = runner.adapter(t, "ask-completed");
+    const spec = specFor(makeRepo(t), overrides);
     const events = await drive(adapter, spec, (all) => results(all).length === 1);
     adapter.close(spec.runId);
     await waitFor(() => exited(events));
+    const host = report();
+    return { spec, dir, events, args: host.args, prompt: host.args.at(-1), report: host };
+  }
 
+  test(`${runner.id}: a build run's command line is a session you start by hand, in auto mode, with segwi's approval tool and browser`, async (t) => {
+    const { spec, dir, args, prompt } = await started(t, { action: "build", task: "add a flag", model: "haiku" });
     const runDir = path.join(dir, "data", "runs", spec.runId);
-    const args = report().args;
     const sessionId = args[args.indexOf("--session-id") + 1];
     assert.match(sessionId, /^[0-9a-f-]{36}$/);
+    // No --settings and no --setting-sources: your own settings (the guard hook, the loop breaker, guard.deny) apply as
+    // they do in a session you start yourself, and segwi renders no allow, ask or deny list and no sandbox.
     assert.deepEqual(args, [
       "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
-      "--session-id", sessionId, "--setting-sources", "user", "--permission-mode", "default",
-      "--settings", path.join(runDir, "settings.json"), "--max-turns", "6", "--model", "haiku",
+      "--session-id", sessionId, "--permission-mode", "auto",
+      "--max-turns", "6", "--model", "haiku",
       "--add-dir", spec.worktreeRoot, "--permission-prompt-tool", "mcp__segwi__approve",
       "--mcp-config", path.join(runDir, "mcp.json"), "--strict-mcp-config",
-      "--append-system-prompt", args.at(-1),
+      "--append-system-prompt", prompt,
     ]);
-    // A real build run asked twice for heredoc and sed edits, so the prompt names the file tools and the shell forms to avoid.
-    assert.match(args.at(-1), /Edit and Write tools/);
-    assert.match(args.at(-1), /redirection, heredocs, tee or sed -i/);
-    // A later run asked for a cat and ls chain, and for gh pr create with an inline multi-line body.
-    assert.match(args.at(-1), /Read, Glob and Grep tools, never with cat, head, ls, find or grep/);
-    assert.match(args.at(-1), /--body-file, after writing it with the Write tool, never inline with --body/);
-    // Every commit in a run prints this, because the sandbox keeps packed-refs read-only on purpose.
-    assert.match(args.at(-1), /packed-refs\.lock.*still succeeds: that is expected/);
-    assert.match(args.at(-1), /change nothing\.$/);
+    assert.ok(!existsSync(path.join(runDir, "settings.json")), "no per-run settings file");
+    // Auto mode refuses some calls; the agent stops and asks rather than working around one.
+    assert.match(prompt, /If an action is refused, never retry it in pieces or rephrase it/);
+    assert.match(prompt, /stop and ask the person what to do/);
   });
 
-  test(`${runner.id}: no caller-supplied value reaches the command line or the environment`, async (t) => {
-    const { adapter, report } = runner.adapter(t, "ask-completed");
-    process.env.SEGWI_TEST_SECRET = "must-not-leak";
-    t.after(() => delete process.env.SEGWI_TEST_SECRET);
-    const repo = makeRepo(t);
-    const spec = specFor(repo, { task: "unique-task-marker --dangerously-skip-permissions" });
-    const events = await drive(adapter, spec, (all) => results(all).length === 1);
-    adapter.close(spec.runId);
-    await waitFor(() => exited(events));
-
-    const { args, stdin, segwiEnv } = report();
-    for (const word of [spec.task, repo, "per-run-secret"]) {
-      assert.ok(!args.some((arg) => arg.includes(word)), `${word} is not in argv`);
-    }
-    assert.ok(JSON.parse(stdin[0]).message.content.includes("unique-task-marker"));
-    assert.deepEqual(segwiEnv, [], "SEGWI_ variables are not passed to the host");
-  });
-
-  test(`${runner.id}: an ask run gets a read-only allow list`, async (t) => {
-    const { adapter, dir } = runner.adapter(t, "ask-completed");
-    const repo = makeRepo(t);
-    const spec = specFor(repo);
-    const events = await drive(adapter, spec, (all) => results(all).length === 1);
-    adapter.close(spec.runId);
-    await waitFor(() => exited(events));
-    const rendered = JSON.parse(readFileSync(path.join(dir, "data", "runs", spec.runId, "settings.json"), "utf8"));
-    const { allow } = rendered.permissions;
-    // An ask run starts in the checkout and may write nothing there.
-    assert.deepEqual({ ...rendered.sandbox.filesystem, denyRead: undefined }, { allowWrite: [`/tmp/claude-${process.getuid()}`], denyWrite: [repo], denyRead: undefined });
-    assert.ok(!("excludedCommands" in rendered.sandbox));
-    assert.ok(allow.includes("Bash(git status:*)") && allow.includes("Bash(gh pr view:*)") && allow.includes("Bash(ibni info:*)"));
-    assert.ok(allow.includes(`Read(/${repo}/**)`));
-    for (const writer of ["Edit(", "Write(", "NotebookEdit(", "Bash(gh pr create", "Bash(gh pr edit", "Bash(npm", "Bash(npx", "Bash(git add", "Bash(git commit",
-      "Bash(git rm", "Bash(git mv", "Bash(git fetch", "Bash(mkdir", "Bash(node", "Bash(ibni:", "Bash(ibni prepare", "Bash(npm run verify", "mcp__playwright"]) {
-      assert.ok(!allow.some((rule) => rule.startsWith(writer)), `${writer} is not allowed in an ask run`);
-    }
-  });
-
-  test(`${runner.id}: a build run can't change other sessions' worktrees or branches, and your git config entries stay`, async (t) => {
-    const { adapter, dir, report } = runner.adapter(t, "ask-completed");
-    const repo = makeRepo(t);
-    const other = path.join(tempDir(t, "segwi-root-"), "my-app-0123456789", "wt");
-    execFileSync("git", ["-C", repo, "worktree", "add", "-q", "-b", "agent/other", other]);
+  test(`${runner.id}: a build run starts in your checkout with your own environment, less NODE_ENV and segwi's own variables`, async (t) => {
+    process.env.NODE_ENV = "production";
     process.env.GIT_CONFIG_COUNT = "1";
     process.env.GIT_CONFIG_KEY_0 = "user.name";
     process.env.GIT_CONFIG_VALUE_0 = "You";
-    t.after(() => { for (const key of ["GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0"]) delete process.env[key]; });
-    const worktreeRoot = path.dirname(path.dirname(other));
-    mkdirSync(path.join(worktreeRoot, "someone-else"));
-    const spec = specFor(repo, { action: "build", worktreeRoot });
-    const events = await drive(adapter, spec, (all) => results(all).length === 1);
-    adapter.close(spec.runId);
-    await waitFor(() => exited(events));
-    const { denyWrite } = JSON.parse(readFileSync(path.join(dir, "data", "runs", spec.runId, "settings.json"), "utf8")).sandbox.filesystem;
-    const git = path.join(repo, ".git");
-    assert.ok(denyWrite.includes(path.join(git, "worktrees", "wt")), "the other worktree's metadata");
-    assert.ok(denyWrite.includes(path.join(git, "refs", "heads", "agent", "other")), "the other session's branch");
-    assert.ok(denyWrite.includes(other), "the other session's worktree itself");
-    assert.ok(denyWrite.includes(path.join(spec.worktreeRoot, "someone-else")), "another repository's folder");
-    assert.equal(report().skipSweep, "1");
-    assert.equal(report().deferSetup, "1", "prepare runs outside the sandbox, so it leaves the install to ibni setup inside");
-    assert.equal(report().lockRoot, `/tmp/claude-${process.getuid()}/ibni-locks`);
-    const env = report().gitConfig;
-    assert.deepEqual(env, { count: "2", first: ["user.name", "You"], second: ["core.hooksPath", path.join(git, "hooks")] });
+    t.after(() => { for (const key of ["NODE_ENV", "GIT_CONFIG_COUNT", "GIT_CONFIG_KEY_0", "GIT_CONFIG_VALUE_0"]) delete process.env[key]; });
+    const { spec, report } = await started(t, { action: "build", task: "x" });
+    // Where you would run claude yourself, so /wettaq's ibni prepare finds the checkout as it does for you.
+    assert.equal(report.cwd, spec.repoPath);
+    // segwi's service runs with NODE_ENV=production, under which npm ci would leave out the repository's dev tools.
+    assert.equal(report.nodeEnv, null);
+    assert.deepEqual(report.gitConfig, { count: "1", first: ["user.name", "You"], second: [null, null] }, "your git config entries, and nothing added");
+    assert.deepEqual(report.ibniEnv, Object.keys(process.env).filter((key) => key.startsWith("IBNI_")), "segwi adds no IBNI_ variable to steer ibni");
+    assert.equal(report.npmCache, process.env.npm_config_cache ?? null);
   });
 
-  test(`${runner.id}: rendered settings and MCP config follow the brief`, async (t) => {
-    const { adapter, dir, report } = runner.adapter(t, "ask-completed");
-    const spec = specFor(makeRepo(t), { action: "build" });
-    const events = await drive(adapter, spec, (all) => results(all).length === 1);
-    adapter.close(spec.runId);
-    await waitFor(() => exited(events));
+  test(`${runner.id}: an ask run is the same auto-mode session without the file-writing tools, told to change nothing`, async (t) => {
+    const ask = await started(t);
+    const build = await started(t, { action: "build", task: "x" });
+    const disallowed = (args) => (args.includes("--disallowedTools") ? args[args.indexOf("--disallowedTools") + 1] : null);
+    assert.equal(disallowed(ask.args), "Edit,Write,NotebookEdit");
+    assert.equal(disallowed(build.args), null, "a build run keeps every tool");
+    // Not plan mode: it let curl run unasked and switched to a larger model than --model names (decision 0011).
+    assert.equal(ask.args[ask.args.indexOf("--permission-mode") + 1], "auto");
+    assert.match(ask.prompt, /change nothing\.$/);
+    assert.doesNotMatch(build.prompt, /change nothing/);
+    assert.equal(ask.report.cwd, ask.spec.repoPath);
+  });
 
-    const runDir = path.join(dir, "data", "runs", spec.runId);
-    const settings = JSON.parse(readFileSync(path.join(runDir, "settings.json"), "utf8"));
-    const { allow, deny } = settings.permissions;
-    assert.ok(allow.includes("Bash(ibni:*)") && allow.includes("Bash(npm run verify)"));
-    // The browser runs outside the sandbox: named page tools only, never a wildcard, and never its code runner.
-    assert.ok(allow.includes("mcp__playwright__browser_navigate") && allow.includes("mcp__playwright__browser_click"));
-    for (const risky of ["mcp__playwright__*", "mcp__playwright__browser_evaluate", "mcp__playwright__browser_run_code_unsafe", "mcp__playwright__browser_file_upload",
-      "mcp__playwright__browser_route", "mcp__playwright__browser_unroute", "mcp__playwright__browser_pdf_save", "mcp__playwright__browser_set_storage_state"]) {
-      assert.ok(!allow.includes(risky), `${risky} is not allowed`);
+  test(`${runner.id}: no caller-supplied value reaches the command line or the environment`, async (t) => {
+    process.env.SEGWI_TEST_SECRET = "must-not-leak";
+    t.after(() => delete process.env.SEGWI_TEST_SECRET);
+    const { spec, args, report } = await started(t, { task: "unique-task-marker --dangerously-skip-permissions" });
+    for (const word of [spec.task, spec.repoPath, "per-run-secret"]) {
+      assert.ok(!args.some((arg) => arg.includes(word)), `${word} is not in argv`);
     }
-    assert.ok(!allow.includes("Bash(npm run verify:*)"), "the verify command is exact, never a prefix");
-    assert.ok(allow.includes("Bash(git fetch)") && allow.includes("Bash(git fetch origin)"));
-    assert.ok(allow.includes(`Edit(/${spec.worktreeRoot}/**)`) && allow.includes(`Read(/${spec.worktreeRoot}/**)`));
-    // mexxi's command-fixer mod prefixes a piped verify with exactly this; it is allowed as an exact command, never as a prefix.
-    assert.ok(allow.includes("Bash(set -o pipefail)") && !allow.some((rule) => rule.startsWith("Bash(set -o pipefail:")));
-    for (const forbidden of ["python3", "node -e", "curl", "wget", "rm", "cp", "kill", "git push", "gh api", "git grep", "git fetch:"]) {
-      assert.ok(!allow.some((rule) => rule.startsWith(`Bash(${forbidden}`)), `${forbidden} is not allowed`);
-    }
-    const editDenied = deny.filter((rule) => rule.startsWith("Edit(") && rule !== `Edit(/${spec.repoPath}/*)`);
-    assert.deepEqual(deny, ["Bash(npm publish:*)", "Bash(git push --force:*)", "Bash(git *--output*)", "Bash(gh *--output*)",
-      "mcp__playwright__browser_run_code_unsafe", `Edit(/${spec.repoPath}/*)`,
-      ...settings.sandbox.filesystem.denyRead.flatMap((file) => [`Read(/${file})`, `Read(/${file}/**)`]), ...editDenied]);
-    assert.equal(settings.permissions.disableBypassPermissionsMode, "disable");
-    assert.equal(settings.sandbox.enabled, true);
-    assert.equal(settings.sandbox.allowUnsandboxedCommands, false);
-    assert.equal(settings.sandbox.autoAllowBashIfSandboxed, false);
-    const git = path.join(spec.repoPath, ".git");
-    assert.deepEqual(settings.sandbox.filesystem.allowWrite, [spec.worktreeRoot, `/tmp/claude-${process.getuid()}`,
-      ...["objects", "refs/heads/agent", "refs/remotes", "refs/tags", "logs/refs", "worktrees"].map((part) => path.join(git, part))]);
-    for (const part of ["refs/heads/agent", "refs/remotes", "logs/refs", "worktrees"]) assert.ok(existsSync(path.join(git, part)), `${part} exists for the sandbox`);
-    // segwi's own data (run secrets, pending approvals) is unreadable inside the sandbox.
-    assert.ok(settings.sandbox.filesystem.denyRead.includes(path.join(dir, "data")));
-    assert.ok(deny.includes(`Read(/${path.join(dir, "data")}/**)`), "and denied to the Read tool, which runs outside the sandbox");
-    assert.equal(report().gitHooksPath, path.join(git, "hooks"));
-    assert.deepEqual(settings.sandbox.filesystem.denyWrite, [path.join(git, "config"), path.join(git, "hooks"), path.join(git, "modules"), path.join(spec.repoPath, "README.md")]);
-    assert.deepEqual(settings.sandbox.excludedCommands, ["ibni prepare *"]);
-    // A build run starts outside the control checkout, which Claude Code would otherwise make writable, and tells ibni where it is.
-    assert.equal(report().cwd, spec.worktreeRoot);
-    assert.equal(report().launchCheckout, spec.repoPath);
-    assert.equal(report().npmCache, `/tmp/claude-${process.getuid()}/npm-cache`);
-    assert.ok(!("disableAllHooks" in settings));
-    const mcp = JSON.parse(readFileSync(path.join(runDir, "mcp.json"), "utf8"));
+    assert.ok(JSON.parse(report.stdin[0]).message.content.includes("unique-task-marker"));
+    assert.deepEqual(report.segwiEnv, [], "SEGWI_ variables are not passed to the host");
+  });
+
+  test(`${runner.id}: the MCP config holds only segwi's approval tool and its own marked browser`, async (t) => {
+    const { spec, dir } = await started(t, { action: "build", task: "x" });
+    const mcp = JSON.parse(readFileSync(path.join(dir, "data", "runs", spec.runId, "mcp.json"), "utf8"));
     assert.deepEqual(Object.keys(mcp.mcpServers), ["segwi", "playwright"]);
     assert.deepEqual(mcp.mcpServers.segwi.args.slice(1), ["approver", "--run", "run-1"]);
     assert.equal(mcp.mcpServers.segwi.env.SEGWI_RUN_SECRET, "per-run-secret");
   });
-
-  test(`${runner.id}: a run drops NODE_ENV, reaches the hosts config adds, and gets segwi's browser launcher as CHROME_BIN`, async (t) => {
-    process.env.NODE_ENV = "production";
-    t.after(() => { delete process.env.NODE_ENV; });
-    const shell = "/opt/browsers/chrome-headless-shell";
-    const { adapter, dir, report } = runner.adapter(t, "ask-completed", { headlessShell: () => shell });
-    const spec = specFor(makeRepo(t), { action: "build", allowedDomains: ["fonts.googleapis.com", "github.com"] });
-    const events = await drive(adapter, spec, (all) => results(all).length === 1);
-    adapter.close(spec.runId);
-    await waitFor(() => exited(events));
-
-    const settings = JSON.parse(readFileSync(path.join(dir, "data", "runs", spec.runId, "settings.json"), "utf8"));
-    assert.deepEqual(settings.sandbox.network.allowedDomains, ["github.com", "*.github.com", "*.githubusercontent.com", "registry.npmjs.org", "fonts.googleapis.com"]);
-    const host = report();
-    // segwi's service runs with NODE_ENV=production, under which npm ci would leave out the repository's dev tools.
-    assert.equal(host.nodeEnv, null);
-    assert.equal(host.chromeBin, fileURLToPath(new URL("../bin/chromium.mjs", import.meta.url)));
-    assert.equal(host.headlessShell, shell);
-    assert.match(host.args.at(-1), /CHROME_BIN already names a headless Chromium/);
-    assert.ok(!events.some((event) => event.kind === "text" && /No chrome-headless-shell/.test(event.text)));
-  });
-
-  test(`${runner.id}: without a headless shell a build run says so and leaves CHROME_BIN alone, and an ask run never looks`, async (t) => {
-    let looked = 0;
-    const build = runner.adapter(t, "ask-completed", { headlessShell: () => { looked += 1; return null; } });
-    const buildSpec = specFor(makeRepo(t), { action: "build" });
-    const buildEvents = await drive(build.adapter, buildSpec, (all) => results(all).length === 1);
-    build.adapter.close(buildSpec.runId);
-    await waitFor(() => exited(buildEvents));
-    assert.ok(buildEvents.some((event) => event.kind === "text" && /No chrome-headless-shell is installed/.test(event.text)));
-    assert.equal(build.report().chromeBin, process.env.CHROME_BIN ?? null);
-    assert.doesNotMatch(build.report().args.at(-1), /CHROME_BIN/);
-
-    const ask = runner.adapter(t, "ask-completed", { headlessShell: () => { looked += 1; return "/opt/browsers/chrome-headless-shell"; } });
-    const askSpec = specFor(makeRepo(t));
-    const askEvents = await drive(ask.adapter, askSpec, (all) => results(all).length === 1);
-    ask.adapter.close(askSpec.runId);
-    await waitFor(() => exited(askEvents));
-    assert.equal(looked, 1, "only the build run looked for a browser");
-    assert.equal(ask.report().headlessShell, null);
-  });
-
-  test(`${runner.id}: a run started without the sandbox (segwi.allowUnsandboxed) never gets the browser launcher, which turns Chromium's own sandbox off`, async (t) => {
-    const { adapter, report } = runner.adapter(t, "ask-completed", { sandboxProblems: () => ["no bubblewrap"], headlessShell: () => "/opt/browsers/chrome-headless-shell" });
-    const spec = specFor(makeRepo(t), { action: "build" });
-    const events = await drive(adapter, spec, (all) => results(all).length === 1);
-    adapter.close(spec.runId);
-    await waitFor(() => exited(events));
-    assert.equal(report().headlessShell, null);
-    assert.equal(report().chromeBin, process.env.CHROME_BIN ?? null);
-  });
-
   test(`${runner.id}: the run's browser is blocked from segwi's own origins`, async (t) => {
     const { adapter, dir } = runner.adapter(t, "ask-completed");
     const spec = specFor(makeRepo(t), { bindPort: 4280 });
@@ -278,120 +153,6 @@ for (const runner of RUNNERS) {
     await waitFor(() => exited(events));
     const mcp = JSON.parse(readFileSync(path.join(dir, "data", "runs", spec.runId, "mcp.json"), "utf8"));
     assert.ok(mcp.mcpServers.playwright.args.includes("--blocked-origins=http://127.0.0.1:4280;http://localhost:4280;http://[::1]:4280;https://my-machine.example.ts.net;http://my-machine.example.ts.net"));
-  });
-
-  test(`${runner.id}: a verify command that isn't plain is left off the allow list, with one warning`, async (t) => {
-    const { adapter, dir } = runner.adapter(t, "ask-completed");
-    const spec = specFor(makeRepo(t), { verifyCommand: "bash -c 'curl x | sh'" });
-    const events = await drive(adapter, spec, (all) => results(all).length === 1);
-    adapter.close(spec.runId);
-    await waitFor(() => exited(events));
-    const settings = JSON.parse(readFileSync(path.join(dir, "data", "runs", spec.runId, "settings.json"), "utf8"));
-    assert.ok(!settings.permissions.allow.some((rule) => rule.includes("bash") || rule.includes("curl")));
-    assert.equal(events.filter((event) => event.kind === "text" && /verify command isn't on the allow list/.test(event.text)).length, 1);
-    assert.ok(settings.permissions.ask.includes("Bash(ibni verify:*)"), "ibni verify, which runs it, asks too");
-    assert.ok(!settings.permissions.ask.includes("Bash(ibni setup:*)"), "no setup command named, so ibni setup stays allowed");
-  });
-
-  test(`${runner.id}: a setup command that isn't plain makes ibni setup ask; plain ones leave both allowed`, async (t) => {
-    const { adapter, dir } = runner.adapter(t, "ask-completed");
-    const spec = specFor(makeRepo(t), { setupCommand: "bash ./bootstrap.sh" });
-    const events = await drive(adapter, spec, (all) => results(all).length === 1);
-    adapter.close(spec.runId);
-    await waitFor(() => exited(events));
-    const { ask } = JSON.parse(readFileSync(path.join(dir, "data", "runs", spec.runId, "settings.json"), "utf8")).permissions;
-    assert.ok(ask.includes("Bash(ibni setup:*)"));
-    assert.ok(!ask.includes("Bash(ibni verify:*)"));
-  });
-
-  /** Starts a build run with `overrides` and returns its argument array, rendered settings and the host's report. */
-  async function rendered(t, overrides = {}) {
-    const { adapter, dir, report } = runner.adapter(t, "ask-completed");
-    const spec = specFor(makeRepo(t), { action: "build", ...overrides });
-    const events = await drive(adapter, spec, (all) => results(all).length === 1);
-    adapter.close(spec.runId);
-    await waitFor(() => exited(events));
-    const settings = JSON.parse(readFileSync(path.join(dir, "data", "runs", spec.runId, "settings.json"), "utf8"));
-    const { args } = report();
-    return { spec, dir, args, prompt: args.at(-1), mode: args[args.indexOf("--permission-mode") + 1], settings, report: report() };
-  }
-
-  test(`${runner.id}: each permissions mode changes only who decides, never the deny list, denied writes or denied reads`, async (t) => {
-    const runs = Object.fromEntries(await Promise.all(["auto", "sandboxed", "strict"].map(async (permissions) => [permissions, await rendered(t, { permissions })])));
-    assert.deepEqual(Object.fromEntries(Object.entries(runs).map(([name, run]) => [name, [run.mode, run.settings.sandbox.autoAllowBashIfSandboxed]])), {
-      auto: ["auto", false], sandboxed: ["default", true], strict: ["default", false],
-    });
-    // A spec without a mode keeps today's behaviour.
-    assert.equal((await rendered(t)).mode, "default");
-    const boundary = (run) => ({
-      deny: run.settings.permissions.deny, disableBypass: run.settings.permissions.disableBypassPermissionsMode,
-      sandbox: { ...run.settings.sandbox, autoAllowBashIfSandboxed: undefined, filesystem: { ...run.settings.sandbox.filesystem, allowWrite: undefined } },
-      writable: run.settings.sandbox.filesystem.allowWrite.length,
-    });
-    for (const name of ["auto", "sandboxed"]) {
-      // Each run has its own repository and data folder, so those paths are made generic before comparing.
-      const generic = (run) => JSON.parse(JSON.stringify(boundary(run)).replaceAll(run.spec.repoPath, "<repo>").replaceAll(run.dir, "<data>"));
-      assert.deepEqual(generic(runs[name]), generic(runs.strict), `${name} keeps strict's boundary`);
-    }
-    for (const run of Object.values(runs)) {
-      assert.equal(run.settings.sandbox.enabled, true);
-      assert.equal(run.settings.sandbox.allowUnsandboxedCommands, false);
-      // The approval tool stays wired in every mode: auto mode falls back to it after repeated refusals.
-      assert.equal(run.args[run.args.indexOf("--permission-prompt-tool") + 1], "mcp__segwi__approve");
-    }
-    // Auto mode never asks first, so the agent is told what to do when something is refused.
-    assert.match(runs.auto.prompt, /If an action is refused, never retry it in pieces or rephrase it/);
-    assert.match(runs.auto.prompt, /stop and ask the person what to do/);
-    assert.doesNotMatch(runs.strict.prompt, /refused/);
-    assert.match(runs.sandboxed.prompt, /inside the sandbox run without asking/);
-  });
-
-  test(`${runner.id}: in every mode the file tools may never write the secrets, your shell and git config, agent config or mexxi itself, and pushes and GitHub API calls ask`, async (t) => {
-    // The file tools run outside the sandbox, so in auto mode only these rules, not a person, keep them out.
-    const home = os.homedir();
-    const mexxiRoot = path.resolve(fileURLToPath(new URL("../../../", import.meta.url)));
-    const otherCheckout = makeRepo(t);
-    for (const permissions of ["auto", "sandboxed", "strict"]) {
-      const { spec, settings } = await rendered(t, { permissions, controlCheckouts: [otherCheckout] });
-      const { deny, ask } = settings.permissions;
-      // Every configured repository's checkout, as the run's own: the `/*` form, never mounted over its git directory.
-      for (const checkout of [spec.repoPath, otherCheckout]) {
-        assert.ok(deny.includes(`Edit(/${checkout}/*)`) && !deny.includes(`Edit(/${checkout})`), `${permissions}: ${checkout}`);
-      }
-      // Whether or not each exists yet, so a run can't create one: files exactly, folders in the `/*` form only.
-      const files = [".bashrc", ".bash_profile", ".bash_login", ".profile", ".zshrc", ".zshenv", ".zprofile", ".zlogin", ".gitconfig"];
-      const folders = [".config", ".local/bin", ".claude", ...settings.sandbox.filesystem.denyRead.filter((file) => statSync(file).isDirectory()).map((file) => path.relative(home, file)), path.relative(home, mexxiRoot)];
-      for (const name of files) assert.ok(deny.includes(`Edit(/${path.join(home, name)})`), `${permissions}: ${name}`);
-      for (const name of folders) {
-        const folder = path.resolve(home, name);
-        assert.ok(deny.includes(`Edit(/${folder}/*)`) && !deny.includes(`Edit(/${folder})`), `${permissions}: ${folder} is denied and never mounted read-only`);
-      }
-      assert.deepEqual(ask, ["Bash(git push:*)", "Bash(gh api:*)", "Bash(gh repo:*)", "Bash(gh release:*)", "Bash(gh pr merge:*)"], permissions);
-    }
-  });
-
-  test(`${runner.id}: a build run may write only workflow.branchPrefix and segwi.branchPrefixes branches, and is told to prepare alone without --prefix`, async (t) => {
-    const plain = await rendered(t, { branchPrefix: "agent/" });
-    const heads = (run) => run.settings.sandbox.filesystem.allowWrite.filter((dir) => dir.includes(`${path.sep}refs${path.sep}heads`));
-    assert.deepEqual(heads(plain), [path.join(plain.spec.repoPath, ".git", "refs", "heads", "agent")]);
-    assert.equal(plain.report.branchPrefixes, "agent/");
-    assert.match(plain.prompt, /Run ibni prepare as a Bash call of its own, with nothing before or after it/);
-    assert.match(plain.prompt, /Never pass --prefix to ibni prepare: this run may write only branches under agent\//);
-
-    const listed = await rendered(t, { branchPrefix: "agent/", branchPrefixes: ["security/", "agent/"] });
-    assert.deepEqual(heads(listed), ["agent", "security"].map((name) => path.join(listed.spec.repoPath, ".git", "refs", "heads", name)));
-    for (const dir of heads(listed)) assert.ok(existsSync(dir), `${dir} exists for the sandbox`);
-    assert.equal(listed.report.branchPrefixes, "agent/\nsecurity/");
-    assert.match(listed.prompt, /Pass --prefix to ibni prepare only when the repository's own instructions require one of security\//);
-
-    // A listed prefix inside another is not mistaken for another session's branch folder.
-    const nested = await rendered(t, { branchPrefix: "agent/", branchPrefixes: ["agent/security/"] });
-    assert.ok(!nested.settings.sandbox.filesystem.denyWrite.includes(path.join(nested.spec.repoPath, ".git", "refs", "heads", "agent", "security")));
-
-    // An ask run prepares nothing, so it is told nothing about it.
-    const ask = await rendered(t, { action: "ask", branchPrefixes: ["security/"] });
-    assert.doesNotMatch(ask.prompt, /ibni prepare/);
-    assert.equal(ask.report.branchPrefixes, null);
   });
 
   test(`${runner.id}: an agent that stops to ask something leaves the run needing input, and a reply continues it`, async (t) => {
@@ -415,7 +176,7 @@ for (const runner of RUNNERS) {
     adapter.close(spec.runId);
     await waitFor(() => exited(events));
     assert.equal(JSON.parse(report().stdin[0]).message.content, "/lesti");
-    assert.equal(report().args[report().args.indexOf("--permission-mode") + 1], "default");
+    assert.equal(report().args[report().args.indexOf("--permission-mode") + 1], "auto");
   });
 
   for (const [scenario, subtype] of [["error-result", "error_during_execution"], ["max-turns", "error_max_turns"]]) {
@@ -462,15 +223,14 @@ for (const runner of RUNNERS) {
     assert.ok(events.some((event) => event.kind === "error" && /Could not start/.test(event.message)));
   });
 
-  test(`${runner.id}: detect reports the version, tested or not, and a sandbox verdict`, async (t) => {
+  test(`${runner.id}: detect reports the version, tested or not`, async (t) => {
     const { adapter } = runner.adapter(t, "ask-completed");
     const detected = await adapter.detect();
     assert.equal(detected.available, true);
     assert.equal(detected.version, "2.1.309");
     assert.deepEqual(detected.testedVersions, ["2.1.309"]);
     assert.deepEqual(detected.problems, []);
-    assert.equal(typeof detected.sandbox.available, "boolean");
-    if (!detected.sandbox.available) assert.match(detected.sandbox.problems[0], /Claude Code's sandbox can't start/);
+    assert.ok(!("sandbox" in detected), "there is no sandbox to report on");
     assert.throws(() => adapter.answer("r", "a", "allow"), /later version/);
   });
 }
@@ -492,7 +252,7 @@ test("claude-code: a refused call maps to its result and a refusal with the reas
   assert.deepEqual(refusal(DENY_RULE_REFUSAL), [{ kind: "refusal", toolUseId: "toolu_1", reason: "a deny rule" }]);
   assert.deepEqual(refusal(HOOK_REFUSAL), [{ kind: "refusal", toolUseId: "toolu_1", reason: "mexxi guard blocked this command: git push to main changes a protected branch (the default branch or guard.protectedBranches)" }]);
   assert.equal(mapMessage(toolResult(CLASSIFIER_REFUSAL))[0].kind, "step", "the call's own result still comes first");
-  // A person's denial is already on the run as an approval, and a failing command or the sandbox's refusal is a failed step.
+  // A person's denial is already on the run as an approval, and a failing command is a failed step.
   for (const text of ["A person denied this in segwi.", "touch: cannot touch 'x': Read-only file system", "Exit code 1\nnpm ERR! Permission to use the registry has been denied."]) {
     assert.deepEqual(refusal(text), [], text);
   }
