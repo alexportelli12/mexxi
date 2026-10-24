@@ -5,26 +5,26 @@ import { ActivatedRoute, RouterLink } from '@angular/router';
 import { map } from 'rxjs';
 import { LiveService } from '../core/live';
 import { RelativeTime } from '../core/relative-time';
-import { FILTERS, filterGroups, groupRuns, parseFilter } from '../core/runs-order';
+import { DEFAULT_FILTER, FILTERS, filterGroups, filterParam, groupRuns, parseFilter } from '../core/runs-order';
 import { Banner } from '../ui/banner';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { EmptyState } from '../ui/empty-state';
-import { NotificationsSetting } from '../ui/notifications-setting';
 import { Skeleton } from '../ui/skeleton';
 import { StatusPill } from '../ui/status-pill';
 import { actionLabels, commandFor, titles } from '../words';
 import type { Run } from '../models';
+import { waitingLine } from '../status';
 
 @Component({
-  imports: [NgTemplateOutlet, RouterLink, Banner, Button, Card, EmptyState, NotificationsSetting, RelativeTime, Skeleton, StatusPill],
+  imports: [NgTemplateOutlet, RouterLink, Banner, Button, Card, EmptyState, RelativeTime, Skeleton, StatusPill],
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <h1 class="text-2xl font-semibold">{{ title }}</h1>
 
     <nav class="flex flex-wrap gap-2" aria-label="Filter runs">
       @for (chip of filters; track chip.id) {
-        <a [routerLink]="[]" [queryParams]="{ filter: chip.id === 'all' ? null : chip.id }" replaceUrl
+        <a [routerLink]="[]" [queryParams]="{ filter: param(chip.id) }" replaceUrl
           [attr.aria-current]="filter() === chip.id ? 'true' : null"
           class="inline-flex min-h-11 items-center rounded-full border px-4 text-[15px]"
           [class]="filter() === chip.id ? 'border-accent bg-(--accent-soft) text-text' : 'border-border-strong text-muted hover:text-text'">{{ chip.label }}</a>
@@ -56,11 +56,14 @@ import type { Run } from '../models';
         </section>
       }
       @if (!groups().needs.length && !groups().rest.length) {
-        <segwi-empty-state title="Nothing here" hint="No runs match this filter." />
+        @if (filter() === 'active') {
+          <segwi-empty-state title="Nothing active" hint="No run is waiting, working or needs you. Finished runs are under Done and All." />
+        } @else {
+          <segwi-empty-state title="Nothing here" hint="No runs match this filter." />
+        }
       }
     }
 
-    <div class="lg:hidden"><segwi-notifications-setting /></div>
     <p class="lg:hidden"><a routerLink="/audit" class="inline-flex min-h-11 items-center text-muted underline underline-offset-4">Audit log</a></p>
 
     <ng-template #card let-run="run">
@@ -70,6 +73,7 @@ import type { Run } from '../models';
             <segwi-status-pill [status]="run.status" [reason]="run.reason" />
             <span class="text-sm text-muted"><segwi-time [iso]="run.lastActivityAt" /></span>
           </div>
+          @if (waiting(run); as line) { <p class="truncate text-sm text-muted">{{ line }}</p> }
           <p class="line-clamp-2 text-[15px] break-words">{{ run.task }}</p>
           <p class="flex flex-wrap gap-x-3 text-sm text-muted"><span class="font-code">{{ run.repo }}</span><span>{{ actionText(run) }}</span></p>
         </segwi-card>
@@ -81,8 +85,11 @@ export class RunsPage {
   protected readonly live = inject(LiveService);
   protected readonly title = titles.runs;
   protected readonly filters = FILTERS;
-  protected readonly filter = toSignal(inject(ActivatedRoute).queryParamMap.pipe(map((params) => parseFilter(params.get('filter')))), { initialValue: 'all' as const });
+  protected readonly filter = toSignal(inject(ActivatedRoute).queryParamMap.pipe(map((params) => parseFilter(params.get('filter')))), { initialValue: DEFAULT_FILTER });
   protected readonly groups = computed(() => filterGroups(groupRuns(this.live.runs(), this.live.approvals()), this.filter()));
+
+  protected readonly param = filterParam;
+  protected readonly waiting = waitingLine;
 
   protected actionText(run: Run): string {
     const command = commandFor(run.action);

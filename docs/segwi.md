@@ -22,10 +22,22 @@ segwi is opt-in and off by default. With the `segwi` key unset, nothing about yo
 ## What you can do with it
 
 - Start a run in a repository you listed, with one of three actions: build (`/wettaq`), get ready (`/lesti`) or ask a question that changes nothing.
-- Follow the run as readable steps, with its branch, pull request link and verify result.
+- See at a glance where a run stands, and follow it step by step when you want the detail.
 - Reply when the agent asks you something, and stop the run when you want.
 - Answer an [approval](glossary.md#approval): a question about one call that Claude Code's auto mode leaves to you.
 - Get a push notification when a run needs you, finishes or fails.
+
+## What the app shows
+
+A run can work for an hour, so the app shows only what you need to act on unless you ask for more.
+
+- **Runs** opens on **Active**: the runs that are queued, working or waiting for you, with finished runs left out. **Needs you**, **Running** and **Done** narrow it further, and **All** shows every run. Runs that need your reply or approval come first.
+- **New** names each action in Maltese, with the English underneath: Wettaq (build, `/wettaq`), Lesti (get ready, `/lesti`) and Saqsi (ask, which changes nothing).
+- **A run's page** fits on one phone screen in the common case. It shows the run's status, its task, repository, branch, pull request link, cost and how long it has run. Below that comes its journey from `ibni`'s record: the stage it is on, how many of the six stages are done, and how long the current one has taken. The same journey appears in the run pane beside a Claude Code session. A **Now** line shows the agent's latest message or step, with the three before it. The full list of steps is behind **Show activity**.
+
+Everything updates live over one connection to segwi, so you never reload.
+
+A run can be **Working** while it waits on something of its own, such as a verify command it runs in the background. Its page and its card then say what it waits on, such as "Waiting on npm run verify". That is part of Working, not a question for you. segwi sends no notification, and the idle limit does not stop the run, because the agent carries on by itself when the command ends. A run that asked you something goes back to Working as soon as the agent carries on without you.
 
 ## Turn it on
 
@@ -125,7 +137,7 @@ For a client that reads a JSON file:
 }
 ```
 
-Run output that segwi returns is labelled as untrusted and has secrets removed, because a repository can put text in it that tries to steer your client. Stopping a run takes two calls: the first returns a confirmation token that is valid for two minutes.
+`get_run` also says what a working run waits on, in `waitingOn`. Run output that segwi returns is labelled as untrusted and has secrets removed, because a repository can put text in it that tries to steer your client. Stopping a run takes two calls: the first returns a confirmation token that is valid for two minutes.
 
 ## Get push notifications
 
@@ -145,7 +157,7 @@ Then set `segwi.vapidSubject` in `config.json` to a `mailto:` address or an `htt
 
 Restart segwi after both steps. Until both are done, push counts as not set up: segwi sends nothing, and the app says push isn't set up. Push services such as Apple's refuse placeholder contacts, so segwi refuses them too when it reads its settings. That covers an address at `localhost`, a host name without a dot, a `.local` or `.test` name, and an IP address.
 
-Open the app on your phone and allow notifications when it asks. A notification names only the run, the repository and the new status, never the task or any output. On iOS, add the app to the Home Screen first, because Safari sends push only to installed apps. Each run keeps one notification, so a later event replaces the earlier one.
+Open the app on your phone and turn on the **Notifications** switch at the top right. The app explains what it sends before your browser asks for permission. When notifications can't work there, the switch is greyed out, with a short reason beside it that you can tap for the full explanation. The browser may block them or not support them, or push may not be set up on segwi. A notification names only the run, the repository and the new status, never the task or any output. On iOS, add the app to the Home Screen first, because Safari sends push only to installed apps. Each run keeps one notification, so a later event replaces the earlier one.
 
 Each time the app opens, it sends this device's subscription to segwi again. If you replaced the keys with `segwi vapid init --force`, it subscribes again with the new key, so notifications keep arriving. The app does the same when the browser renews a subscription on its own.
 

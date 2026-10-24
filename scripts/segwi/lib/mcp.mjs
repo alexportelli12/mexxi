@@ -149,7 +149,8 @@ function toolsFor({ settings, runs, approvals, confirmations, confirmTtlMs }) {
       description: "Shows one run: its status, the latest steps and the branch, pull request and verify result.",
       schema: z.strictObject({ id }),
       async run({ id: runId }) {
-        const { steps, branch, prUrl, verify: verifyResult, ...record } = runs.get(runId);
+        // The app draws the ibni snapshot; get_run keeps its short ibni summary, plus waitingOn from the record.
+        const { steps, branch, prUrl, verify: verifyResult, snapshot: _snapshot, ...record } = runs.get(runId);
         const shown = steps.slice(-STEPS_SHOWN).map(({ seq, type, title, ok, from }) => ({ seq, type, title, ok, from }));
         return { result: untrusted(`segwi run ${runId}`, { ...record, ibni: { branch, prUrl, verify: verifyResult }, stepCount: steps.length, steps: shown }), target: runId };
       },

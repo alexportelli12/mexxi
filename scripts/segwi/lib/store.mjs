@@ -10,7 +10,7 @@ export const FINAL = new Set(["completed", "failed", "stopped", "timed_out"]);
 export const ACTIVE = ["queued", "running", "needs_input", "needs_approval"];
 
 // Version 1 is the p2 schema, version 2 adds approvals (p3), version 3 push subscriptions (p5),
-// version 4 the content a file tool would write.
+// version 4 the content a file tool would write, version 5 what a run waits on and its ibni snapshot.
 const MIGRATIONS = [
   `CREATE TABLE runs (
      id TEXT PRIMARY KEY, repo TEXT NOT NULL, action TEXT NOT NULL, task TEXT NOT NULL, status TEXT NOT NULL,
@@ -48,12 +48,22 @@ const MIGRATIONS = [
      created_at TEXT NOT NULL, last_ok_at TEXT, last_error TEXT
    );`,
   "ALTER TABLE approvals ADD COLUMN content TEXT;",
+  "ALTER TABLE runs ADD COLUMN waiting_on TEXT; ALTER TABLE runs ADD COLUMN snapshot TEXT;",
 ];
 
 const RUN_COLUMNS = {
   status: "status", hostSessionId: "host_session_id", worktreePath: "worktree_path", branch: "branch", prUrl: "pr_url",
   verify: "verify", costUsd: "cost_usd", reason: "reason", lastActivityAt: "last_activity_at", endedAt: "ended_at",
+  waitingOn: "waiting_on", snapshot: "snapshot",
 };
+
+/** A column's stored value: texts from outside are redacted, and the ibni snapshot is kept as JSON. */
+function columnValue(key, value) {
+  if (value === undefined || value === null) return null;
+  if ((key === "reason" || key === "waitingOn") && value) return cleanText(value, 500);
+  if (key === "snapshot") return JSON.stringify(cleanDeep(value));
+  return value;
+}
 
 function runFromRow(row) {
   if (!row) return null;
@@ -62,6 +72,7 @@ function runFromRow(row) {
     hostSessionId: row.host_session_id, worktreePath: row.worktree_path, branch: row.branch, prUrl: row.pr_url,
     verify: row.verify, costUsd: row.cost_usd, reason: row.reason, createdAt: row.created_at,
     updatedAt: row.updated_at, lastActivityAt: row.last_activity_at, endedAt: row.ended_at,
+    waitingOn: row.waiting_on ?? null, snapshot: row.snapshot ? JSON.parse(row.snapshot) : null,
   };
 }
 
@@ -150,7 +161,7 @@ export function openStore(file, { now = () => new Date() } = {}) {
       const entries = Object.entries(fields).filter(([key]) => key in RUN_COLUMNS);
       const at = stamp();
       const sets = entries.map(([key]) => `${RUN_COLUMNS[key]} = ?`);
-      const values = entries.map(([key, value]) => (key === "reason" && value ? cleanText(value, 500) : value ?? null));
+      const values = entries.map(([key, value]) => columnValue(key, value));
       db.prepare(`UPDATE runs SET ${[...sets, "updated_at = ?"].join(", ")} WHERE id = ?`).run(...values, at, id);
       return this.getRun(id);
     },

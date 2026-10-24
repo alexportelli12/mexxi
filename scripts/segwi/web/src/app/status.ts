@@ -39,4 +39,12 @@ export function statusCopy(status: RunStatus, run?: Pick<Run, 'reason'>): string
   return STATUS[status].copy;
 }
 
+/**
+ * What a Working run waits on, such as its own background command, or null. Only a running run shows
+ * it: it is a calm part of Working, never something that needs you.
+ */
+export function waitingLine(run: Pick<Run, 'status' | 'waitingOn'>): string | null {
+  return run.status === 'running' && run.waitingOn ? run.waitingOn : null;
+}
+
 export const isFinal = (status: RunStatus): boolean => !ACTIVE_STATUSES.includes(status);

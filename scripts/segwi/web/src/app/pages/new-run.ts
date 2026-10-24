@@ -7,7 +7,7 @@ import type { Repo } from '../models';
 import { Banner } from '../ui/banner';
 import { Button } from '../ui/button';
 import { Skeleton } from '../ui/skeleton';
-import { Action, actionLabels, commandFor, titles, whatHappens } from '../words';
+import { Action, actionLabels, actionNames, titles, whatHappens } from '../words';
 
 const ALL_ACTIONS: Action[] = ['build', 'ready', 'ask'];
 
@@ -53,8 +53,8 @@ export function repoProblem(repo: Repo): string | null {
               <label class="relative flex min-h-11 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-card border px-2 py-2 text-center text-[15px] has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent"
                 [class]="action() === option ? 'border-accent bg-(--accent-soft)' : 'border-border-strong bg-surface-raised'">
                 <input type="radio" name="action" class="sr-only" [value]="option" [checked]="action() === option" (change)="pickAction(option)" />
-                <span class="font-medium">{{ labels[option] }}</span>
-                @if (command(option)) { <span class="font-code text-xs text-muted">{{ command(option) }}</span> }
+                <span class="text-[17px] font-semibold">{{ names[option] }}</span>
+                <span class="text-sm text-muted">{{ labels[option] }}</span>
               </label>
             }
           </div>
@@ -85,6 +85,7 @@ export class NewRunPage {
   protected readonly live = inject(LiveService);
   protected readonly title = titles.newRun;
   protected readonly labels = actionLabels;
+  protected readonly names = actionNames;
   protected readonly repos = signal<Repo[] | null>(null);
   protected readonly loadError = signal('');
   protected readonly error = signal('');
@@ -110,7 +111,6 @@ export class NewRunPage {
   }
 
   protected problem = repoProblem;
-  protected command = commandFor;
 
   protected async loadRepos(): Promise<void> {
     this.loadError.set('');

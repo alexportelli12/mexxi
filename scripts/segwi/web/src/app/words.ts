@@ -24,6 +24,19 @@ export function commandFor(action: Action): string | null {
 
 export const actionLabels: Record<Action, string> = { build: 'Build', ready: 'Get ready', ask: 'Ask' };
 
+/**
+ * Each action's Maltese name, shown above its English label. Build and Get ready are named after the
+ * command they run. Ask runs no command, so its name, saqsi ("ask"), lives here rather than in
+ * names.json, which lists only commands, CLIs, skills and the repository, each checked against its files.
+ */
+const ASK_NAME = 'saqsi';
+const capitalised = (word: string): string => word.charAt(0).toUpperCase() + word.slice(1);
+export const actionNames: Record<Action, string> = {
+  build: capitalised(commandNames.build),
+  ready: capitalised(commandNames.ready),
+  ask: capitalised(ASK_NAME),
+};
+
 /** The "what happens" line on the New run screen. */
 export function whatHappens(action: Action, repo: string): string {
   const command = commandFor(action);

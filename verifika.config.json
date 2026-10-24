@@ -55,18 +55,18 @@
       "paths": ["README.md", "docs/**", "site/index.html", "skills/docs-writing/**", "scripts/docs/vale.mjs", ".vale.ini", ".vale/**"]
     },
     "segwi": {
-      "command": "node --test scripts/segwi/test/server.test.mjs scripts/segwi/test/config.test.mjs scripts/segwi/test/tokens.test.mjs scripts/segwi/test/check-design.test.mjs scripts/segwi/test/web-check.test.mjs scripts/segwi/test/bundle-size.test.mjs scripts/segwi/test/contract.test.mjs scripts/segwi/test/ibni-contract.test.mjs scripts/segwi/test/security.test.mjs scripts/segwi/test/steps.test.mjs scripts/segwi/test/settings.test.mjs scripts/segwi/test/approver.test.mjs scripts/segwi/test/approvals.test.mjs scripts/segwi/test/risk.test.mjs scripts/segwi/test/mcp.test.mjs scripts/segwi/test/token.test.mjs scripts/segwi/test/push.test.mjs scripts/segwi/test/static.test.mjs scripts/segwi/test/pwa.test.mjs scripts/segwi/test/canary.test.mjs scripts/segwi/test/audit.test.mjs",
+      "command": "node --test scripts/segwi/test/server.test.mjs scripts/segwi/test/config.test.mjs scripts/segwi/test/tokens.test.mjs scripts/segwi/test/check-design.test.mjs scripts/segwi/test/web-check.test.mjs scripts/segwi/test/bundle-size.test.mjs scripts/segwi/test/contract.test.mjs scripts/segwi/test/ibni-contract.test.mjs scripts/segwi/test/security.test.mjs scripts/segwi/test/steps.test.mjs scripts/segwi/test/settings.test.mjs scripts/segwi/test/approver.test.mjs scripts/segwi/test/approvals.test.mjs scripts/segwi/test/risk.test.mjs scripts/segwi/test/mcp.test.mjs scripts/segwi/test/token.test.mjs scripts/segwi/test/push.test.mjs scripts/segwi/test/static.test.mjs scripts/segwi/test/pwa.test.mjs scripts/segwi/test/canary.test.mjs scripts/segwi/test/audit.test.mjs scripts/segwi/test/waiting.test.mjs",
       "paths": ["scripts/segwi/**", "scripts/ibni/**", "scripts/lib/config.mjs", "scripts/lib/redact.mjs", "scripts/lib/browser.mjs", "scripts/lib/secret-patterns.json", "config.schema.json", "site/tokens.css"],
       "exclude": ["scripts/segwi/web/**"]
     },
     "segwi-web": {
       "command": "node scripts/segwi/web-check.mjs",
-      "paths": ["scripts/segwi/web/**", "scripts/segwi/web-check.mjs", "site/tokens.css", "names.json"]
+      "paths": ["scripts/segwi/web/**", "scripts/segwi/web-check.mjs", "site/tokens.css", "names.json", "claude/mods/run-pane/hooks/journey.ts"]
     },
     "segwi-e2e": {
       "command": "node --test scripts/segwi/test/web.e2e.mjs",
       "dependsOn": ["segwi-web"],
-      "paths": ["scripts/segwi/web/**", "scripts/segwi/lib/**", "scripts/segwi/test/web.e2e.mjs", "scripts/segwi/test/web-harness.mjs", "scripts/segwi/test/fixtures/**", "scripts/segwi/runners/**", "site/tokens.css"]
+      "paths": ["scripts/segwi/web/**", "scripts/segwi/lib/**", "scripts/segwi/test/web.e2e.mjs", "scripts/segwi/test/web-harness.mjs", "scripts/segwi/test/fixtures/**", "scripts/segwi/runners/**", "site/tokens.css", "claude/mods/run-pane/hooks/journey.ts"]
     },
     "design": {
       "command": "node scripts/segwi/check-design.mjs",

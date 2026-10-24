@@ -6,6 +6,7 @@ sewwi
 fassal
 irrifletti
 lesti
+saqsi
 ibda
 Maltese
 Verifika

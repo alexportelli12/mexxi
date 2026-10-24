@@ -97,7 +97,44 @@ function summariseInput(input) {
   for (const key of INPUT_KEYS) {
     if (typeof input?.[key] === "string") summary[key] = input[key].slice(0, 2000);
   }
+  if (input?.run_in_background === true) summary.run_in_background = true;
   return summary;
+}
+
+const BACKGROUND_MAX = 20;
+const DESCRIPTION_MAX = 200;
+
+/**
+ * What one host session still runs in the background, from the system messages Claude Code 2.1.310 wrote in a
+ * recorded run (fixtures/claude-code/background-*.jsonl). `background_tasks_changed` lists every task still
+ * running, a Bash command started with run_in_background and a Monitor alike; `task_started` names the call that
+ * started one. When a task ends, `task_notification` arrives and the host starts a turn of its own to read it,
+ * even after the agent ended its turn; only a task the agent stopped itself (status "stopped") starts none.
+ */
+export function createBackgroundTracker() {
+  let tasks = [];
+  const callFor = new Map();
+  let wakePending = false;
+  const event = () => ({ kind: "background", tasks: tasks.map((task) => ({ ...task, toolUseId: callFor.get(task.taskId) ?? null })) });
+  return {
+    get wakePending() { return wakePending; },
+    /** The events a system message adds: the whole list again whenever it, or the call behind a task, changes. */
+    see(message) {
+      if (message.type !== "system") return [];
+      if (message.subtype === "init") wakePending = false;
+      if (message.subtype === "task_notification" && message.status !== "stopped") wakePending = true;
+      if (message.subtype === "task_started" && typeof message.task_id === "string" && typeof message.tool_use_id === "string") {
+        callFor.set(message.task_id, message.tool_use_id);
+        return tasks.some((task) => task.taskId === message.task_id) ? [event()] : [];
+      }
+      if (message.subtype === "background_tasks_changed" && Array.isArray(message.tasks)) {
+        tasks = message.tasks.filter((task) => typeof task?.task_id === "string" && task.task_id).slice(0, BACKGROUND_MAX)
+          .map((task) => ({ taskId: task.task_id, description: typeof task.description === "string" ? task.description.slice(0, DESCRIPTION_MAX) : "" }));
+        return [event()];
+      }
+      return [];
+    },
+  };
 }
 
 function resultText(content) {
@@ -131,11 +168,12 @@ const KNOWN_MESSAGE_TYPES = new Set(["system", "assistant", "user", "result", "r
 
 export const isKnownMessage = (message) => KNOWN_MESSAGE_TYPES.has(message?.type);
 
-/** Maps one parsed stream-json object to RunEvents. Unknown shapes map to nothing. */
-export function mapMessage(message) {
+/** Maps one parsed stream-json object to RunEvents. Unknown shapes map to nothing. `background` follows one session. */
+export function mapMessage(message, background = createBackgroundTracker()) {
   const events = [];
-  if (message.type === "system" && message.subtype === "init" && typeof message.session_id === "string") {
-    events.push({ kind: "session", hostSessionId: message.session_id });
+  if (message.type === "system") {
+    if (message.subtype === "init" && typeof message.session_id === "string") events.push({ kind: "session", hostSessionId: message.session_id });
+    events.push(...background.see(message));
   } else if (message.type === "assistant" && Array.isArray(message.message?.content)) {
     for (const block of message.message.content) {
       if (block.type === "text" && block.text) events.push({ kind: "text", text: block.text });
@@ -160,6 +198,7 @@ export function mapMessage(message) {
       costUsd: typeof message.total_cost_usd === "number" ? message.total_cost_usd : null,
       hostSessionId: typeof message.session_id === "string" ? message.session_id : null,
       durationMs: typeof message.duration_ms === "number" ? message.duration_ms : null,
+      wakePending: background.wakePending,
     });
   }
   return events;
@@ -217,6 +256,7 @@ export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir 
 
     let buffer = "";
     let stderrTail = "";
+    const background = createBackgroundTracker();
     const handleLine = (line) => {
       if (!line.trim()) return;
       onLine(line);
@@ -234,7 +274,7 @@ export function createClaudeCodeAdapter({ bin = "claude", binArgs = [], dataDir 
         return;
       }
       if (!isKnownMessage(message)) onUnknown(`a "${String(message.type).slice(0, 40)}" message`);
-      for (const event of mapMessage(message)) emit(event);
+      for (const event of mapMessage(message, background)) emit(event);
     };
     child.stdout.on("data", (chunk) => {
       buffer += chunk;

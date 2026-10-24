@@ -7,8 +7,9 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { RunPaneSnapshot } from '../types'
-import type { StageState } from './run'
-import { bar, confidenceTone, duration, headline, journey, lastEventAt, nudge, nudgePercentFrom, progress, sessionIdFrom, since, snapshotFrom, taskTitle, triageRanking } from './run'
+import type { StageState } from './journey'
+import { duration, headline, journey, lastEventAt, progress, snapshotFrom } from './journey'
+import { bar, confidenceTone, nudge, nudgePercentFrom, sessionIdFrom, since, taskTitle, triageRanking } from './run'
 
 const PANE = 'run-pane'
 

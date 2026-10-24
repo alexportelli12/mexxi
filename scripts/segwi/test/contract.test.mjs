@@ -306,3 +306,37 @@ test("claude-code: when the host ends on its own, what it left in its group is e
   assert.equal(events.find((event) => event.kind === "exit").code, 0);
   await waitFor(() => !alive(pid), { what: "the grandchild to be gone" });
 });
+
+/** Replays a recorded background run through the adapter, releasing it once its first turn ends. */
+async function replayBackground(t, scenario, turns) {
+  const unknown = [];
+  const { adapter, release } = fakeAdapter(t, scenario, { onUnknown: (what) => unknown.push(what) });
+  const spec = specFor(makeRepo(t), { action: "build", task: "run the checks" });
+  const events = await drive(adapter, spec, (all) => results(all).length === 1);
+  const firstTurn = [...events];
+  release();
+  await waitFor(() => results(events).length === turns, { what: `${turns} turns` });
+  adapter.close(spec.runId);
+  await waitFor(() => exited(events));
+  assert.deepEqual(unknown, [], "every line the host wrote is recognised");
+  return { events, firstTurn };
+}
+const lastBackground = (events) => events.filter((event) => event.kind === "background").at(-1)?.tasks ?? [];
+
+test("claude-code: a recorded turn that ends while its background command runs reports the task, and the host's own next turn", async (t) => {
+  const { events, firstTurn } = await replayBackground(t, "background-wait", 2);
+  const call = firstTurn.find((event) => event.kind === "step" && event.phase === "call");
+  assert.equal(call.input.run_in_background, true, "the flag survives the input summary");
+  // When the first turn ends, the verify started by that call is still running.
+  assert.deepEqual(lastBackground(firstTurn), [{ taskId: "bler5ua20", description: "Run npm run verify in the repository", toolUseId: call.toolUseId }]);
+  assert.equal(statusAfterResult({ result: results(firstTurn)[0], action: "build", hasPullRequest: false, waiting: true }), "running");
+  assert.deepEqual(lastBackground(events), [], "nothing is left once it ends");
+  assert.deepEqual(results(events).map((result) => result.wakePending), [false, false]);
+});
+
+test("claude-code: a monitor's notice that arrives during a turn marks that turn's end as waking the host again, and a stopped task's does not", async (t) => {
+  const { events, firstTurn } = await replayBackground(t, "background-monitor", 3);
+  // The sleep the agent stopped with TaskStop is gone; the command and the monitor are running.
+  assert.deepEqual(lastBackground(firstTurn).map((task) => task.description), ["Create ready.flag after a 15-second delay", "Wait for ready.flag to appear"]);
+  assert.deepEqual(results(events).map((result) => result.wakePending), [false, true, false]);
+});

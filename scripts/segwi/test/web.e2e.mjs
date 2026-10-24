@@ -73,16 +73,29 @@ e2e("a run started from New appears with its steps and waits for a reply", async
   await page.getByLabel("Task").fill("List the tracked files");
   await page.getByRole("button", { name: "Start" }).click();
   await page.waitForURL(/\/runs\/[0-9a-f-]{36}$/);
-  await page.getByText("Needs your reply").first().waitFor();
+  await page.getByText("Needs your reply", { exact: true }).first().waitFor();
+  await page.getByTestId("now-line").waitFor();
+  await page.getByRole("button", { name: /Show activity/ }).click();
   await page.getByRole("button", { name: /git ls-files/ }).first().waitFor();
   assert.ok(await page.getByRole("textbox", { name: "Your reply" }).isVisible());
+  await close();
+});
+
+e2e("New names each action in Maltese, with the English underneath", async () => {
+  const { page, close } = await open("/new");
+  const labels = page.getByRole("radiogroup").locator("label");
+  await labels.first().waitFor();
+  const shown = await labels.evaluateAll((items) => items.map((item) => [...item.querySelectorAll("span")].map((span) => ({ text: span.textContent.trim(), size: parseFloat(getComputedStyle(span).fontSize) }))));
+  assert.deepEqual(shown.map((spans) => spans.map((span) => span.text)), [["Wettaq", "Build"], ["Lesti", "Get ready"], ["Saqsi", "Ask"]]);
+  for (const [name, english] of shown) assert.ok(name.size > english.size, `${name.text} is larger than ${english.text}`);
   await close();
 });
 
 e2e("scrolling up pauses following, Jump to latest resumes it", async () => {
   const { id } = (await post("/api/runs", { repo: "my-app", action: "build", task: "Audit every source file" })).run;
   const { page, close } = await open(`/runs/${id}`);
-  await page.getByText("Needs your reply").first().waitFor();
+  await page.getByText("Needs your reply", { exact: true }).first().waitFor();
+  await page.getByRole("button", { name: /Show activity/ }).click();
   await page.getByRole("button", { name: /file-30\.ts/ }).waitFor();
   const metrics = () => page.evaluate(() => ({ y: scrollY, atBottom: innerHeight + scrollY >= document.documentElement.scrollHeight - 160 }));
   assert.equal(await page.getByRole("button", { name: "Jump to latest" }).count(), 0, "not on load, before anyone has scrolled");
@@ -235,17 +248,147 @@ e2e("a draft survives a reload, with the last repo and action", async () => {
   await close();
 });
 
-e2e("the Runs screen puts what needs you first and keeps the filter in the URL", async () => {
+e2e("the Runs screen opens on Active, puts what needs you first and keeps the filter in the URL", async () => {
   const { page, close } = await open("/runs");
   await page.getByRole("heading", { name: "Needs you" }).waitFor();
   const first = await page.locator("main a[href^='/runs/']").first().textContent();
   assert.match(first, /Needs your (reply|OK)/);
+  // Active: nothing finished, and a run waiting on its background command is Working, not Needs you.
+  assert.equal(await page.getByRole("link", { name: "Active", exact: true }).getAttribute("aria-current"), "true");
+  assert.equal(new URL(page.url()).search, "");
+  const cards = async () => page.locator("main a[href^='/runs/']").allTextContents();
+  assert.ok(!(await cards()).some((text) => /Done|Failed|Stopped/.test(text)), "no finished run under Active");
+  const waiting = page.locator("main a[href^='/runs/']").filter({ hasText: "Bump the build tooling" });
+  assert.match(await waiting.textContent(), /Working.*Waiting on npm run verify/s);
+  assert.equal(await page.locator("section[aria-labelledby='needs-heading']").getByText("Bump the build tooling").count(), 0);
+  await page.getByRole("link", { name: "All", exact: true }).click();
+  await page.waitForURL(/filter=all/);
+  await page.getByText("Fix the flaky date test").first().waitFor();
   await page.getByRole("link", { name: "Done", exact: true }).click();
   await page.waitForURL(/filter=done/);
   await waitFor(async () => (await page.getByRole("heading", { name: "Needs you" }).count()) === 0, { what: "the needs-you group to go" });
   await page.getByText("Done", { exact: true }).first().waitFor();
   await page.reload();
   assert.equal(await page.getByRole("link", { name: "Done", exact: true }).getAttribute("aria-current"), "true");
+  await close();
+});
+
+// Notifications depend on the browser, so each state is set up by replacing the browser's push APIs before the
+// app loads, and the server's push routes answer as a server with push set up would. The harness has no push keys.
+const PUSH_KEY = "BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U";
+function fakePush({ permission, answer, supported }) {
+  if (!supported) {
+    delete window.PushManager;
+    return;
+  }
+  let current = permission;
+  Object.defineProperty(Notification, "permission", { get: () => current });
+  window.permissionAsks = 0;
+  Notification.requestPermission = async () => { window.permissionAsks += 1; current = answer; return answer; };
+  let subscription = null;
+  const made = { endpoint: "https://fcm.googleapis.com/fcm/send/e2e", options: { applicationServerKey: null }, toJSON: () => ({ endpoint: made.endpoint, keys: { p256dh: "p", auth: "a" } }), unsubscribe: async () => { subscription = null; return true; } };
+  const registration = { pushManager: { getSubscription: async () => subscription, subscribe: async () => (subscription = made) } };
+  Object.defineProperty(navigator, "serviceWorker", { configurable: true, value: { register: async () => registration, getRegistration: async () => registration, ready: Promise.resolve(registration) } });
+}
+
+async function openWithPush(path, { width, permission = "default", answer = "granted", supported = true, pushSetUp = true, userAgent }) {
+  const context = await browser.newContext({ viewport: { width, height: 844 }, serviceWorkers: "block", ...(userAgent ? { userAgent } : {}) });
+  await context.addInitScript(fakePush, { permission, answer, supported });
+  if (pushSetUp) {
+    await context.route("**/api/push/key", (route) => route.fulfill({ json: { publicKey: PUSH_KEY } }));
+    await context.route("**/api/push/subscriptions**", (route) => route.fulfill(route.request().method() === "POST" ? { status: 201, json: { id: "e2e-subscription" } } : { status: 204 }));
+  }
+  const page = await context.newPage();
+  await page.goto(`${harness.url}${path}`);
+  const toggle = page.locator("header").getByRole("switch", { name: "Notifications" });
+  await toggle.waitFor();
+  return { page, toggle, close: () => context.close() };
+}
+
+for (const width of [390, 1280]) {
+  e2e(`at ${width} px the header's notifications switch asks first, turns on and off, and the old row is gone`, async () => {
+    const { page, toggle, close } = await openWithPush("/runs", { width });
+    await waitFor(async () => !(await toggle.isDisabled()), { what: "the switch to be ready" });
+    assert.equal(await toggle.getAttribute("aria-checked"), "false");
+    await toggle.click();
+    const sheet = page.getByRole("dialog", { name: "Turn on notifications?" });
+    await sheet.waitFor();
+    assert.equal(await page.evaluate(() => window.permissionAsks), 0, "nothing is asked of the browser before Turn on");
+    await sheet.getByRole("button", { name: "Turn on" }).click();
+    await waitFor(async () => (await toggle.getAttribute("aria-checked")) === "true", { what: "the switch to turn on" });
+    assert.equal(await page.evaluate(() => window.permissionAsks), 1);
+    await toggle.click();
+    await waitFor(async () => (await toggle.getAttribute("aria-checked")) === "false", { what: "the switch to turn off" });
+    assert.equal(await page.getByText("Notifications:").count(), 0);
+    await close();
+  });
+
+  e2e(`at ${width} px the switch is disabled with a short hint wherever notifications can't work`, async () => {
+    const cases = [
+      [{ permission: "denied" }, "Blocked"],
+      [{ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1" }, "Add to Home Screen"],
+      [{ supported: false }, "Not supported"],
+      [{ pushSetUp: false }, "Not set up"],
+    ];
+    for (const [options, hint] of cases) {
+      const { page, toggle, close } = await openWithPush("/runs", { width, ...options });
+      await page.locator("header #notifications-hint").filter({ hasText: hint }).waitFor();
+      assert.ok(await toggle.isDisabled(), `disabled when ${hint}`);
+      assert.equal(await toggle.getAttribute("aria-checked"), "false");
+      // On a phone there is no hover: a tap on the hint gives the whole reason.
+      await page.locator("header #notifications-hint").click();
+      const why = page.getByRole("dialog", { name: "Notifications are off" });
+      await why.waitFor();
+      assert.ok((await why.textContent()).length > hint.length + 20, `the full reason for ${hint}`);
+      await page.keyboard.press("Escape");
+      await why.waitFor({ state: "hidden" });
+      await close();
+    }
+    // Refused at the browser's own prompt: the switch says so rather than staying off.
+    const { page, toggle, close } = await openWithPush("/runs", { width, answer: "denied" });
+    await waitFor(async () => !(await toggle.isDisabled()), { what: "the switch to be ready" });
+    await toggle.click();
+    await page.getByRole("dialog", { name: "Turn on notifications?" }).getByRole("button", { name: "Turn on" }).click();
+    await page.locator("header #notifications-hint").filter({ hasText: "Blocked" }).waitFor();
+    assert.ok(await toggle.isDisabled());
+    await close();
+  });
+}
+
+e2e("a run's page shows where it stands within one phone screen, with its activity collapsed", async () => {
+  const target = await runWith("Bump the build tooling");
+  const { page, close } = await open(`/runs/${target.id}`);
+  const journey = page.getByTestId("journey");
+  await journey.waitFor();
+  assert.equal((await page.getByTestId("journey-headline").textContent()).trim(), "BUILDING");
+  assert.equal((await page.getByTestId("journey-progress").textContent()).trim(), "1 of 6");
+  assert.deepEqual(await journey.locator("li").evaluateAll((items) => items.map((item) => item.dataset.state)), ["done", "current", "pending", "pending", "pending", "pending"]);
+  assert.match(await page.getByTestId("waiting-on").textContent(), /Waiting on npm run verify/);
+  assert.match(await page.getByTestId("run-summary").textContent(), /my-app.*Cost \$0\.52.*agent\/bump-tooling/s);
+  assert.equal(await page.getByText(/Needs your/).count(), 0, "waiting on a background command is not Needs you");
+  assert.equal((await page.getByTestId("now-line").textContent()).trim(), "Command: npm install");
+  // Everything above fits between the header and the bar holding Stop on a 390 by 844 phone.
+  const layout = await page.evaluate(() => ({ now: document.querySelector("[data-testid=now]").getBoundingClientRect().bottom, bar: document.querySelector(".sticky-bar").getBoundingClientRect().top, scrolled: scrollY }));
+  assert.equal(layout.scrolled, 0);
+  assert.ok(layout.now <= layout.bar, `the Now card ends at ${layout.now}, above the bar at ${layout.bar}`);
+  assert.equal(await page.locator("#steps").count(), 0, "the steps start collapsed");
+  await page.getByRole("button", { name: /Show activity/ }).click();
+  await page.locator("#steps").getByRole("button", { name: /npm install/ }).waitFor();
+  await close();
+});
+
+e2e("a run that ends its turn while its background command runs stays Working, live, then carries on by itself", async () => {
+  const { run } = await post("/api/runs", { repo: "my-app", action: "build", task: "Verify in the background and report the last line" });
+  const { page, close } = await open(`/runs/${run.id}`);
+  const waiting = page.getByTestId("waiting-on");
+  await waiting.waitFor();
+  assert.match(await waiting.textContent(), /Waiting on npm run verify/);
+  assert.equal(await page.getByText(/Needs your/).count(), 0);
+  assert.equal((await api(`/api/runs/${run.id}`)).run.status, "running");
+  harness.release("wait");
+  // The host's own next turn arrives over the stream: the waiting line goes and the run asks for a reply.
+  await page.getByText("Needs your reply", { exact: true }).first().waitFor();
+  assert.equal(await waiting.count(), 0);
   await close();
 });
 
@@ -274,7 +417,7 @@ e2e("deep links load directly, and an unknown page says so", async () => {
 
 const SCREENS = () => [
   "/runs", "/approvals", "/new", "/audit", "/nowhere",
-  `/runs/${runIds.running}`, `/runs/${runIds.completed}`, `/runs/${runIds.failed}`, `/runs/${runIds.timedOut}`,
+  `/runs/${runIds.running}`, `/runs/${runIds.waiting}`, `/runs/${runIds.completed}`, `/runs/${runIds.failed}`, `/runs/${runIds.timedOut}`,
 ];
 const runIds = {};
 e2e("every screen passes the axe scan, and every control is at least 44 by 44 on a phone", async () => {
@@ -283,6 +426,7 @@ e2e("every screen passes the axe scan, and every control is at least 44 by 44 on
   runIds.completed = all.find((run) => run.task.startsWith("Fix the flaky")).id;
   runIds.failed = all.find((run) => run.status === "failed").id;
   runIds.timedOut = all.find((run) => run.status === "timed_out").id;
+  runIds.waiting = all.find((run) => run.task.startsWith("Bump the build tooling")).id;
   const waitingRun = all.find((run) => run.status === "needs_input").id;
   const screens = [...SCREENS(), `/runs/${waitingRun}`];
   for (const screen of screens) {

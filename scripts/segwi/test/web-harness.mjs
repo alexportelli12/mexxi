@@ -15,9 +15,10 @@ import { makeSettings } from "./helpers.mjs";
 // Which recording a task replays. A task that mentions example.com asks for approval; one that
 // starts with "Audit every" produces a long run; "Print hidden characters" asks to approve a command
 // full of control and bidi characters; "Update the notes" asks to approve a Write, an Edit and a
-// NotebookEdit in turn. Anything else stops to ask for a reply.
-const FIXTURES = { default: "build-needs-input", approval: "approval-loop", long: "long-run", escapes: "approval-escapes", files: "approval-files" };
-const FIXTURE_FOR_TASK = [["approval", /example\.com/], ["long", /^Audit every/], ["escapes", /^Print hidden characters/], ["files", /^Update the notes/]];
+// NotebookEdit in turn. One that starts with "Verify in the background" ends its turn while npm run verify
+// runs in the background, until the harness's release("wait"). Anything else stops to ask for a reply.
+const FIXTURES = { default: "build-needs-input", approval: "approval-loop", long: "long-run", escapes: "approval-escapes", files: "approval-files", wait: "background-wait" };
+const FIXTURE_FOR_TASK = [["approval", /example\.com/], ["long", /^Audit every/], ["escapes", /^Print hidden characters/], ["files", /^Update the notes/], ["wait", /^Verify in the background/]];
 
 /** A runner that picks a recording by the task text, so one server can show every flow. */
 function createRoutingRunner(dataDir) {
@@ -93,6 +94,8 @@ export async function startHarness({ port = 0, seed = false, limits = {}, approv
   }
   return {
     server, url: server.url, port: server.port, root, repos,
+    /** Lets a replay waiting at its await_release marker carry on (fake-host.mjs). */
+    release: (key) => writeFileSync(path.join(dataDir, `host-${FIXTURES[key]}.json.release`), ""),
     async close() {
       await server.close();
       rmSync(root, { recursive: true, force: true });
@@ -110,17 +113,29 @@ function addSteps(store, runId, steps) {
   });
 }
 
-function seedRun(server, { repo = "my-app", action = "build", task, status, minutesOld, reason = null, prUrl = null, verify = null, branch = null, cost = null, steps = [], message = null }) {
+function seedRun(server, { repo = "my-app", action = "build", task, status, minutesOld, reason = null, prUrl = null, verify = null, branch = null, cost = null, steps = [], message = null, waitingOn = null, snapshot = null }) {
   const { store } = server;
   const id = randomUUID();
   store.createRun({ id, repo, action, task });
   if (message) store.addEvent(id, "text", { text: message });
   addSteps(store, id, steps);
   const ended = ["completed", "failed", "stopped", "timed_out"].includes(status);
-  store.updateRun(id, { status, reason, prUrl, verify, branch, costUsd: cost, ...(ended ? { endedAt: minutesAgo(Math.max(minutesOld - 12, 1)) } : {}) });
+  store.updateRun(id, { status, reason, prUrl, verify, branch, costUsd: cost, waitingOn, snapshot, ...(ended ? { endedAt: minutesAgo(Math.max(minutesOld - 12, 1)) } : {}) });
   const at = minutesAgo(minutesOld);
   store.db.prepare("UPDATE runs SET created_at = ?, last_activity_at = ?, updated_at = ? WHERE id = ?").run(minutesAgo(minutesOld + 12), at, at, id);
   return id;
+}
+
+/** ibni's snapshot of a run, as the server keeps it (lib/ibni-link.mjs ibniSnapshot): `steps` are [step, outcome, minutes ago]. */
+function ibniSnapshot({ branch, minutesOld, steps, verify = [], review = 0, qa = 0, prUrl = null }) {
+  const outcomes = verify.map(([outcome]) => outcome);
+  return {
+    branch, state: prUrl ? "pr-open" : "active", prUrl, createdAt: minutesAgo(minutesOld + 12),
+    steps: steps.map(([step, outcome, ago]) => ({ step, outcome, durationMs: 1200, endedAt: minutesAgo(ago) })),
+    verify: { attempts: verify.length, passed: outcomes.filter((outcome) => outcome === "pass").length, failed: outcomes.filter((outcome) => outcome === "fail").length, history: verify.map(([outcome, ago]) => ({ outcome, at: minutesAgo(ago) })) },
+    review: { rounds: review, findings: review * 2, byReviewer: { cross: { rounds: review } } },
+    qa: { rounds: qa, findings: 0 },
+  };
 }
 
 /** One run in every state, a pending approval, and a few audit rows. The two live ones go through the fake host. */
@@ -128,8 +143,27 @@ export async function seedDemo(server) {
   const edit = ["Edit", { file_path: "src/settings/theme-toggle.ts" }, "Updated the file."];
   const test = ["Bash", { command: "npm run verify" }, "All checks passed (14 tests)."];
   seedRun(server, { task: "Add a dark-mode toggle to the settings page", status: "queued", minutesOld: 1 });
-  seedRun(server, { task: "Replace the footer links with the new sitemap", status: "running", minutesOld: 4, branch: "agent/footer-sitemap", message: "Looking at the footer component first.", steps: [["Read", { file_path: "src/footer.ts" }, "export class Footer {}"], edit] });
-  seedRun(server, { task: "Fix the flaky date test in the billing module", status: "completed", minutesOld: 95, branch: "agent/billing-date-test", prUrl: "https://github.com/example/my-app/pull/42", verify: "pass", cost: 0.84, steps: [["Read", { file_path: "src/billing/date.test.ts" }, "it('rounds up')"], edit, test] });
+  seedRun(server, {
+    task: "Replace the footer links with the new sitemap", status: "running", minutesOld: 4, branch: "agent/footer-sitemap", cost: 0.31,
+    message: "Looking at the footer component first.", steps: [["Read", { file_path: "src/footer.ts" }, "export class Footer {}"], edit, test],
+    snapshot: ibniSnapshot({ branch: "agent/footer-sitemap", minutesOld: 4, steps: [["prepare", "succeeded", 15], ["verify", "succeeded", 6]], verify: [["pass", 6]] }),
+  });
+  // Waits on its own background command after its turn ended: still Working, never "Needs you".
+  seedRun(server, {
+    task: "Bump the build tooling and run the full verify before opening the PR", status: "running", minutesOld: 2, branch: "agent/bump-tooling", cost: 0.52,
+    waitingOn: "Waiting on npm run verify", message: "Verify takes a few minutes; I'll carry on when it finishes.",
+    steps: [["Read", { file_path: "package.json" }, "{}"], ["Edit", { file_path: "package.json" }, "Updated the file."], ["Bash", { command: "npm install" }, "added 2 packages"]],
+    snapshot: ibniSnapshot({ branch: "agent/bump-tooling", minutesOld: 2, steps: [["prepare", "succeeded", 14]] }),
+  });
+  seedRun(server, {
+    task: "Fix the flaky date test in the billing module", status: "completed", minutesOld: 95, branch: "agent/billing-date-test", prUrl: "https://github.com/example/my-app/pull/42", verify: "pass", cost: 0.84,
+    steps: [["Read", { file_path: "src/billing/date.test.ts" }, "it('rounds up')"], edit, test],
+    snapshot: ibniSnapshot({
+      branch: "agent/billing-date-test", minutesOld: 95, prUrl: "https://github.com/example/my-app/pull/42", review: 1, qa: 1,
+      steps: [["prepare", "succeeded", 105], ["verify", "failed", 101], ["verify", "succeeded", 99], ["publish", "succeeded", 97], ["mark-pr", "succeeded", 96]],
+      verify: [["fail", 101], ["pass", 99]],
+    }),
+  });
   seedRun(server, { repo: "docs-site", task: "Why does the build take so long on CI?", action: "ask", status: "completed", minutesOld: 180, cost: 0.12, steps: [["Bash", { command: "git log --oneline -5" }, "a1b2c3d Speed up the build"]] });
   seedRun(server, { task: "Get this repository ready for the workflow", action: "ready", status: "completed", minutesOld: 300, branch: "agent/get-ready", prUrl: "https://github.com/example/my-app/pull/41", verify: "fail", cost: 1.4, steps: [edit, ["Bash", { command: "npm run verify" }, "2 checks failed", false]] });
   seedRun(server, { task: "Upgrade the date library to the latest major", status: "failed", minutesOld: 400, reason: "Reached the turn limit", cost: 2.1, steps: [["Bash", { command: "npm install date-lib@latest" }, "added 3 packages"], ["Bash", { command: "npm test" }, "12 tests failed", false]] });

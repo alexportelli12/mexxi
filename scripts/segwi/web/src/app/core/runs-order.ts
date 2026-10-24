@@ -1,15 +1,22 @@
 import type { Approval, Run } from '../models';
+import { ACTIVE_STATUSES } from '../status';
 
-export type RunFilter = 'all' | 'needs' | 'running' | 'done';
+export type RunFilter = 'active' | 'needs' | 'running' | 'done' | 'all';
+/** Active is the default and has no URL parameter; every other chip is ?filter=<id>. */
+export const DEFAULT_FILTER: RunFilter = 'active';
 export const FILTERS: { id: RunFilter; label: string }[] = [
-  { id: 'all', label: 'All' },
+  { id: 'active', label: 'Active' },
   { id: 'needs', label: 'Needs you' },
   { id: 'running', label: 'Running' },
   { id: 'done', label: 'Done' },
+  { id: 'all', label: 'All' },
 ];
 
 export const parseFilter = (value: string | null | undefined): RunFilter =>
-  FILTERS.some((filter) => filter.id === value) ? (value as RunFilter) : 'all';
+  FILTERS.some((filter) => filter.id === value) ? (value as RunFilter) : DEFAULT_FILTER;
+
+/** The filter's URL parameter: none for the default. */
+export const filterParam = (filter: RunFilter): string | null => (filter === DEFAULT_FILTER ? null : filter);
 
 /** A run needs you when it waits on a reply or has an open approval. */
 export function needsYou(run: Run, approvals: Approval[]): boolean {
@@ -37,6 +44,8 @@ export function groupRuns(runs: Run[], approvals: Approval[]): RunGroups {
 /** Applies a filter chip; the needs-you group is kept apart so it stays on top. */
 export function filterGroups(groups: RunGroups, filter: RunFilter): RunGroups {
   switch (filter) {
+    // Everything not yet over: queued, Working (waiting on a background command too) and what needs you.
+    case 'active': return { needs: groups.needs, rest: groups.rest.filter((run) => ACTIVE_STATUSES.includes(run.status)) };
     case 'needs': return { needs: groups.needs, rest: [] };
     case 'running': return { needs: [], rest: groups.rest.filter((run) => run.status === 'running' || run.status === 'queued') };
     case 'done': return { needs: [], rest: groups.rest.filter((run) => ['completed', 'failed', 'stopped', 'timed_out'].includes(run.status)) };

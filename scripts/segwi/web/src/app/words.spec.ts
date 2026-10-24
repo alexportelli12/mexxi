@@ -1,5 +1,5 @@
 import names from '../../../../../names.json';
-import { actionLabels, commandFor, documentTitle, iosHomeScreenHint, notificationsExplainer, productName, titles, whatHappens } from './words';
+import { actionLabels, actionNames, commandFor, documentTitle, iosHomeScreenHint, notificationsExplainer, productName, titles, whatHappens } from './words';
 
 describe('words', () => {
   it('takes command names from names.json and shows none for an ask', () => {
@@ -20,6 +20,14 @@ describe('words', () => {
     const text = [...Object.values(titles), ...Object.values(actionLabels)].join(' ').toLowerCase();
     for (const entry of names) expect(text).not.toContain(entry.name.toLowerCase());
     expect(Object.values(actionLabels)).toEqual(['Build', 'Get ready', 'Ask']);
+  });
+
+  it('names each action in Maltese, Build and Get ready after the command they run', () => {
+    // The command names come from names.json, so the design check keeps them out of this file too.
+    expect(`/${actionNames.build.toLowerCase()}`).toBe(commandFor('build'));
+    expect(`/${actionNames.ready.toLowerCase()}`).toBe(commandFor('ready'));
+    expect(actionNames.ask).toBe('Saqsi');
+    for (const name of Object.values(actionNames)) expect(name).toMatch(/^[A-Z][a-z]+$/);
   });
 
   it('names the product in the page title and the notification copy', () => {
