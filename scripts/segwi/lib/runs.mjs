@@ -171,6 +171,9 @@ export function createRunService({ store, settings, runner, ibni, broker, server
     if (!state || !run || FINAL.has(run.status)) return;
     if (event.kind === "session") {
       store.updateRun(runId, { hostSessionId: event.hostSessionId });
+      // The host announces each turn it starts. One that starts by itself after its background work ended is
+      // reading that work, however long it thinks before it says anything: its own end decides, not the settle timer.
+      if (state.between && !state.background.length) endBetween(runId);
       return;
     }
     if (event.kind === "exit") {

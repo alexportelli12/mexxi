@@ -24,6 +24,16 @@ const object = (value) => (value !== null && typeof value === "object" && !Array
 const text = (value) => (typeof value === "string" ? value : undefined);
 const count = (value) => (typeof value === "number" && Number.isFinite(value) ? value : 0);
 
+// The journey reads "Workspace ready" from the prepare or adopt step, so a long run keeps its latest one
+// when older steps are dropped.
+const SETS_UP = new Set(["prepare", "adopt"]);
+function keptSteps(steps) {
+  if (steps.length <= STEPS_KEPT) return steps;
+  const setUp = steps.findLast((step) => SETS_UP.has(step.step) && step.outcome === "succeeded");
+  const recent = steps.slice(-STEPS_KEPT);
+  return setUp && !recent.includes(setUp) ? [setUp, ...recent.slice(1)] : recent;
+}
+
 /**
  * The run's snapshot from `ibni info` and `ibni stats` (stats wins where both carry a field, as in the run pane):
  * only the IBNI_FIELDS above, in ibni's own shape, so the app reads it with the run pane's own snapshotFrom. No
@@ -36,7 +46,7 @@ export function ibniSnapshot(info, stats) {
   const qa = object(merged.qa);
   return {
     branch: text(merged.branch), state: text(merged.state), prUrl: text(merged.prUrl) ?? null, createdAt: text(merged.createdAt),
-    steps: (Array.isArray(merged.steps) ? merged.steps : []).slice(-STEPS_KEPT).map(object).filter(Boolean).map((step) => ({
+    steps: keptSteps(Array.isArray(merged.steps) ? merged.steps.map(object).filter(Boolean) : []).map((step) => ({
       step: String(step.step ?? "?"), outcome: String(step.outcome ?? "?"),
       ...(typeof step.durationMs === "number" ? { durationMs: step.durationMs } : {}), ...(text(step.endedAt) ? { endedAt: step.endedAt } : {}),
     })),

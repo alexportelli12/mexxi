@@ -125,6 +125,19 @@ test("a finished task's notice with no turn after it ends in needs_input once th
   assert.deepEqual(await sent(), ["needs_input"]);
 });
 
+test("a turn the host starts by itself stays Working however long it thinks before it says anything", async (t) => {
+  const { server, host, start, sent } = await boot(t, fixture(t, [init, notice, say("Waiting for the notice."), done, init, marker("await_release"), say("Read it."), done, marker("await_input")]), { settleMs: 150 });
+  const id = await start();
+  await waitFor(() => server.store.listEvents(id).some((event) => event.kind === "result"), { what: "the first turn's end" });
+  // The second turn has begun (init) but says nothing for longer than the settle time.
+  await new Promise((resolve) => setTimeout(resolve, 600));
+  assert.equal(server.store.getRun(id).status, "running");
+  assert.deepEqual(await sent(), []);
+  host.release();
+  await waitFor(() => server.store.getRun(id).status === "needs_input", { what: "needs_input after the second turn" });
+  assert.deepEqual(await sent(), ["needs_input"]);
+});
+
 test("every ibni call refreshes the run's snapshot, which the run shows without paths and the list leaves out", async (t) => {
   let calls = 0;
   const ibni = {

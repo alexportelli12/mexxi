@@ -335,6 +335,13 @@ for (const width of [390, 1280]) {
       await page.locator("header #notifications-hint").filter({ hasText: hint }).waitFor();
       assert.ok(await toggle.isDisabled(), `disabled when ${hint}`);
       assert.equal(await toggle.getAttribute("aria-checked"), "false");
+      // On a phone there is no hover: a tap on the hint gives the whole reason.
+      await page.locator("header #notifications-hint").click();
+      const why = page.getByRole("dialog", { name: "Notifications are off" });
+      await why.waitFor();
+      assert.ok((await why.textContent()).length > hint.length + 20, `the full reason for ${hint}`);
+      await page.keyboard.press("Escape");
+      await why.waitFor({ state: "hidden" });
       await close();
     }
     // Refused at the browser's own prompt: the switch says so rather than staying off.

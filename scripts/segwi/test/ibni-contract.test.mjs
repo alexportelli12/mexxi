@@ -7,7 +7,7 @@ import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { createIbniLink, IBNI_FIELDS, parsePrepareOutput } from "../lib/ibni-link.mjs";
+import { createIbniLink, IBNI_FIELDS, ibniSnapshot, parsePrepareOutput } from "../lib/ibni-link.mjs";
 import { tempDir } from "./helpers.mjs";
 
 const ibniEntry = fileURLToPath(new URL("../../ibni/ibni.mjs", import.meta.url));
@@ -90,4 +90,15 @@ test("the ibni fields segwi reads exist in prepare, list, info and stats output"
   assert.equal((await link.findNewWorkspace(control, "1970-01-01T00:00:00.000Z", [prepared.worktreePath])), null);
   assert.equal((await link.findNewWorkspace(control, "1970-01-01T00:00:00.000Z"))?.sessionId, prepared.sessionId);
   assert.equal((await link.findNewWorkspace(control, "2999-01-01T00:00:00.000Z")), null);
+});
+
+test("a long run's snapshot keeps its workspace step when older steps are dropped", () => {
+  const verify = (index) => ({ step: "verify", outcome: index % 2 ? "failed" : "succeeded", endedAt: `2026-01-01T10:${String(index).padStart(2, "0")}:00Z` });
+  const steps = [{ step: "prepare", outcome: "succeeded" }, ...Array.from({ length: 70 }, (_, index) => verify(index))];
+  const kept = ibniSnapshot({ branch: "agent/x" }, { steps }).steps;
+  assert.equal(kept.length, 60);
+  assert.deepEqual(kept[0], { step: "prepare", outcome: "succeeded" });
+  assert.equal(kept.at(-1).endedAt, "2026-01-01T10:69:00Z", "the newest steps stay");
+  // A short run keeps every step as it is.
+  assert.equal(ibniSnapshot({}, { steps: steps.slice(0, 5) }).steps.length, 5);
 });
