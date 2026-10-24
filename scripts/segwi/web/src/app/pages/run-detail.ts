@@ -36,13 +36,13 @@ const MARKS: Record<StageState, { glyph: string; tone: string; words: string }> 
 const atBottom = (): boolean => window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - BOTTOM_SLACK_PX;
 const reducedMotion = (): boolean => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/** Only a plain https link is shown as one: a run's PR address comes from outside. */
 /** A short name for a PR link, so a long address never wraps mid-word: "Pull request #42". */
 export const prName = (url: string): string => {
   const number = /\/pull\/(\d+)/.exec(url)?.[1];
   return number ? `Pull request #${number}` : 'Pull request';
 };
 
+/** Only a plain https link is shown as one: a run's PR address comes from outside. */
 export const safeLink = (url: string | null): string | null => (url && /^https:\/\//.test(url) ? url : null);
 
 @Component({

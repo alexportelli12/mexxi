@@ -24,7 +24,9 @@ const UNAVAILABLE: Partial<Record<NotificationState, { short: string; full: stri
   host: { class: 'flex items-center gap-1' },
   template: `
     @if (unavailable(); as reason) {
-      <span id="notifications-hint" class="text-xs text-muted" [title]="reason.full">{{ reason.short }}<span class="sr-only">. {{ reason.full }}</span></span>
+      <!-- A tap shows the full reason: a phone has no hover for a title, and the iPhone one is a set of steps. -->
+      <button type="button" id="notifications-hint" class="inline-flex min-h-11 min-w-11 cursor-pointer items-center justify-center px-1 text-xs text-muted underline decoration-dotted underline-offset-4 hover:text-text"
+        [attr.aria-label]="reason.short + ': why notifications are off'" (click)="whyOpen.set(true)">{{ reason.short }}</button>
     } @else if (service.message()) {
       <span id="notifications-hint" class="max-w-40 truncate text-xs text-failed" role="alert" [title]="service.message()">{{ service.message() }}</span>
     }
@@ -42,6 +44,11 @@ const UNAVAILABLE: Partial<Record<NotificationState, { short: string; full: stri
       </span>
     </button>
 
+    <segwi-sheet [open]="whyOpen()" heading="Notifications are off" (closed)="whyOpen.set(false)">
+      <p class="text-muted">{{ unavailable()?.full }}</p>
+      <div class="flex justify-end"><button segwi-button type="button" autofocus (click)="whyOpen.set(false)">OK</button></div>
+    </segwi-sheet>
+
     <segwi-sheet [open]="explaining()" heading="Turn on notifications?" (closed)="explaining.set(false)">
       <p class="text-muted">{{ explainer }}</p>
       <div class="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
@@ -54,6 +61,7 @@ const UNAVAILABLE: Partial<Record<NotificationState, { short: string; full: stri
 export class NotificationsToggle {
   protected readonly service = inject(NotificationsService);
   protected readonly explaining = signal(false);
+  protected readonly whyOpen = signal(false);
   protected readonly explainer = notificationsExplainer;
   protected readonly on = computed(() => this.service.state() === 'on');
   protected readonly unavailable = computed(() => UNAVAILABLE[this.service.state()] ?? null);
