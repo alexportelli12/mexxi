@@ -130,6 +130,8 @@ export const safeLink = (url: string | null): string | null => (url && /^https:\
             <h2 id="now-heading" class="w-18 shrink-0 text-xs font-semibold tracking-wide text-accent uppercase">{{ isFinal() ? 'Last' : 'Now' }}</h2>
             @if (activity().now; as step) {
               <p class="min-w-0 line-clamp-2 text-[15px] break-words" [class.font-code]="step.type !== 'message'" data-testid="now-line"><span class="sr-only">{{ stepLabel(step) }}: </span>{{ step.title }}</p>
+              @if (step.ok === true) { <span class="ml-auto text-done" aria-hidden="true">✓</span><span class="sr-only">Succeeded</span> }
+              @if (step.ok === false) { <span class="ml-auto text-failed" aria-hidden="true">✗</span><span class="sr-only">Failed</span> }
             } @else {
               <p class="text-muted">{{ isFinal() ? 'No steps were recorded.' : 'Waiting for the first step…' }}</p>
             }
