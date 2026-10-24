@@ -99,6 +99,7 @@ const say = (text) => line({ type: "assistant", message: { content: [{ type: "te
 const done = line({ type: "result", subtype: "success", is_error: false, total_cost_usd: 0.01, session_id: "11111111-2222-4333-8444-555555555555", duration_ms: 10 });
 const notice = line({ type: "system", subtype: "task_notification", task_id: "b1", tool_use_id: "toolu_1", status: "completed", summary: "Background command completed" });
 const marker = (name) => line({ segwi_fixture: name });
+const tasks = (ids) => line({ type: "system", subtype: "background_tasks_changed", tasks: ids.map((id) => ({ task_id: id, description: `task ${id}` })) });
 
 function fixture(t, lines) {
   const file = path.join(tempDir(t, "segwi-fixture-"), "run.jsonl");
@@ -135,6 +136,21 @@ test("a turn the host starts by itself stays Working however long it thinks befo
   assert.deepEqual(await sent(), []);
   host.release();
   await waitFor(() => server.store.getRun(id).status === "needs_input", { what: "needs_input after the second turn" });
+  assert.deepEqual(await sent(), ["needs_input"]);
+});
+
+test("a turn the host starts while its second task still runs stays Working after that task ends, however long it thinks", async (t) => {
+  // The order the recorded monitor run shows (background-monitor.jsonl): the host's own turn begins with one task
+  // still listed, and the last task ends during that turn.
+  const lines = [init, tasks(["b1", "b2"]), say("Both are running; I'll wait."), done, tasks(["b2"]), init, tasks([]), marker("await_release"), say("Read both."), done, marker("await_input")];
+  const { server, host, start, sent } = await boot(t, fixture(t, lines), { settleMs: 150 });
+  const id = await start();
+  await waitFor(() => server.store.listEvents(id).some((event) => event.kind === "result") && !server.store.getRun(id).waitingOn && server.store.listEvents(id).filter((event) => event.kind === "status").length >= 3, { what: "the last task to end" });
+  await new Promise((resolve) => setTimeout(resolve, 600));
+  assert.equal(server.store.getRun(id).status, "running");
+  assert.deepEqual(await sent(), []);
+  host.release();
+  await waitFor(() => server.store.getRun(id).status === "needs_input", { what: "needs_input after the host's turn" });
   assert.deepEqual(await sent(), ["needs_input"]);
 });
 

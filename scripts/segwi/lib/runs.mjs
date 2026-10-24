@@ -53,8 +53,9 @@ export function createRunService({ store, settings, runner, ibni, broker, server
   /**
    * `background` is what the host still runs in the background. `between` is the result of a turn that ended while
    * the host still had work to come back to: set until the agent is active again or that result is decided.
+   * `hostTurn` is set when the host started its own turn while some of that work was still listed.
    * @type {Map<string, { folder: StepFolder, chain: Promise<void>, prepareCalls: Set<string>, ibniCalls: Set<string>, ibniSession: string|null,
-   *   runSecret: string, repoPath: string, background: object[], between: object|null, settle: NodeJS.Timeout|null, refreshing: Promise<void>|null, refreshAgain: boolean }>}
+   *   runSecret: string, repoPath: string, background: object[], between: object|null, hostTurn: boolean, settle: NodeJS.Timeout|null, refreshing: Promise<void>|null, refreshAgain: boolean }>}
    */
   const live = new Map();
   const watchdog = createWatchdog(limits, (runId, reason) => void timeOut(runId, reason));
@@ -97,6 +98,7 @@ export function createRunService({ store, settings, runner, ibni, broker, server
     clearTimeout(state.settle);
     state.settle = null;
     state.between = null;
+    state.hostTurn = false;
   }
 
   /** Decides a turn's end as if nothing were left in the background. */
@@ -171,9 +173,13 @@ export function createRunService({ store, settings, runner, ibni, broker, server
     if (!state || !run || FINAL.has(run.status)) return;
     if (event.kind === "session") {
       store.updateRun(runId, { hostSessionId: event.hostSessionId });
-      // The host announces each turn it starts. One that starts by itself after its background work ended is
-      // reading that work, however long it thinks before it says anything: its own end decides, not the settle timer.
-      if (state.between && !state.background.length) endBetween(runId);
+      // The host announces each turn it starts. One that starts by itself while a turn's end is pending is reading
+      // its background work, however long it thinks before it says anything: its own end decides, not the settle
+      // timer. With work still listed (a second task ends during that turn), the run keeps saying what is left.
+      if (state.between) {
+        if (state.background.length) state.hostTurn = true;
+        else endBetween(runId);
+      }
       return;
     }
     if (event.kind === "exit") {
@@ -190,7 +196,8 @@ export function createRunService({ store, settings, runner, ibni, broker, server
       } else {
         setStatus(runId, run.status, run.reason, { waitingOn: null });
         watchdog.touch(runId);
-        settleLater(runId);
+        if (state.hostTurn) endBetween(runId);
+        else settleLater(runId);
       }
       return;
     }
@@ -282,7 +289,7 @@ export function createRunService({ store, settings, runner, ibni, broker, server
       if (isFinal(id)) return { run: publicRun(store.getRun(id)), created: true };
       live.set(id, {
         folder: new StepFolder({ root: repository.path, verifyCommand }), chain: Promise.resolve(), prepareCalls: new Set(), ibniCalls: new Set(), ibniSession: null, runSecret,
-        repoPath: repository.path, background: [], between: null, settle: null, refreshing: null, refreshAgain: false,
+        repoPath: repository.path, background: [], between: null, hostTurn: false, settle: null, refreshing: null, refreshAgain: false,
       });
       setStatus(id, "running");
       watchdog.watch(id);
