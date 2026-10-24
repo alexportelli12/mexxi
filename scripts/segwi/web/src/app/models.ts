@@ -33,6 +33,24 @@ export interface Run {
   updatedAt: string;
   lastActivityAt: string;
   endedAt: string | null;
+  /** What a Working run waits on, such as its own background command; absent from servers that predate it. */
+  waitingOn?: string | null;
+  /** The workspace tool's record of the run, on one run's page only (the list leaves it out). */
+  snapshot?: IbniSnapshot | null;
+}
+
+/** The workspace tool's info and stats in its own shape, as the server keeps them: read with the run pane's snapshotFrom. */
+export interface IbniSnapshot {
+  branch?: string;
+  state?: string;
+  prUrl?: string | null;
+  createdAt?: string;
+  steps: { step: string; outcome: string; durationMs?: number; endedAt?: string }[];
+  verify?: { attempts: number; passed: number; failed: number; history: { outcome: string; at?: string }[] };
+  review?: { rounds: number; findings: number; byReviewer?: { cross?: { rounds: number } } };
+  qa?: { rounds: number; findings: number };
+  /** Set when the workspace tool stopped answering after the run had a workspace. */
+  error?: string;
 }
 
 export interface RunDetail extends Run {
@@ -92,6 +110,8 @@ export interface RunMessage {
   branch: string | null;
   prUrl: string | null;
   verify: 'pass' | 'fail' | null;
+  waitingOn?: string | null;
+  snapshot?: IbniSnapshot | null;
 }
 
 export interface EventMessage {

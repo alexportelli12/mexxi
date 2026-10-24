@@ -3,18 +3,18 @@ import { Title } from '@angular/platform-browser';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { LiveService } from './core/live';
 import { Banner } from './ui/banner';
-import { NotificationsSetting } from './ui/notifications-setting';
+import { NotificationsToggle } from './ui/notifications-toggle';
 import { documentTitle, productName } from './words';
 
 @Component({
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, Banner, NotificationsSetting],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, Banner, NotificationsToggle],
   selector: 'segwi-root',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-card focus:bg-accent focus:px-4 focus:py-3 focus:text-on-accent">Skip to content</a>
 
     <header class="border-b border-border">
-      <div class="mx-auto flex w-full max-w-180 items-center justify-between gap-6 px-4 py-3">
+      <div class="mx-auto flex w-full max-w-180 items-center justify-between gap-4 px-4 py-3">
         <a routerLink="/runs" class="inline-flex min-h-11 items-center gap-2.5" [attr.aria-label]="productName + ', Runs'">
           <svg class="size-6.5" viewBox="0 0 32 32" aria-hidden="true">
             <rect x="1" y="1" width="30" height="30" rx="8" class="fill-surface-raised stroke-border-strong" />
@@ -22,17 +22,20 @@ import { documentTitle, productName } from './words';
           </svg>
           <span class="font-code text-[15px] font-semibold tracking-tight">{{ productName }}</span>
         </a>
-        <nav class="hidden items-center gap-1 lg:flex" aria-label="Main">
-          @for (item of nav; track item.path) {
-            <a [routerLink]="item.path" routerLinkActive="bg-surface-raised text-text" ariaCurrentWhenActive="page"
-              class="inline-flex min-h-11 items-center gap-2 rounded-card px-4 text-[15px] text-muted hover:text-text">
-              {{ item.label }}
-              @if (item.badge && live.approvals().length) {
-                <span class="rounded-full bg-accent px-2 text-sm font-semibold text-on-accent">{{ live.approvals().length }}<span class="sr-only"> waiting</span></span>
-              }
-            </a>
-          }
-        </nav>
+        <div class="flex items-center gap-3">
+          <nav class="hidden items-center gap-1 lg:flex" aria-label="Main">
+            @for (item of nav; track item.path) {
+              <a [routerLink]="item.path" routerLinkActive="bg-surface-raised text-text" ariaCurrentWhenActive="page"
+                class="inline-flex min-h-11 items-center gap-2 rounded-card px-4 text-[15px] text-muted hover:text-text">
+                {{ item.label }}
+                @if (item.badge && live.approvals().length) {
+                  <span class="rounded-full bg-accent px-2 text-sm font-semibold text-on-accent">{{ live.approvals().length }}<span class="sr-only"> waiting</span></span>
+                }
+              </a>
+            }
+          </nav>
+          <segwi-notifications-toggle />
+        </div>
       </div>
     </header>
 
@@ -41,7 +44,6 @@ import { documentTitle, productName } from './words';
         <segwi-banner>Reconnecting…</segwi-banner>
       }
       <router-outlet />
-      <div class="hidden lg:block"><segwi-notifications-setting /></div>
     </main>
 
     <nav class="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-surface pb-[env(safe-area-inset-bottom)] lg:hidden" aria-label="Main">

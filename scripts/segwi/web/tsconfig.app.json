@@ -6,7 +6,8 @@
     "types": []
   },
   "include": [
-    "src/**/*.ts"
+    "src/**/*.ts",
+    "../../../claude/mods/run-pane/hooks/journey.ts"
   ],
   "exclude": [
     "src/**/*.spec.ts"

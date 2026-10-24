@@ -143,7 +143,7 @@ export class LiveService {
       return;
     }
     this.runs.update((list) => list.map((run) => (run.id === message.runId
-      ? { ...run, status: message.status, reason: message.reason, branch: message.branch, prUrl: message.prUrl, verify: message.verify, lastActivityAt: message.at, updatedAt: message.at, endedAt: ['completed', 'failed', 'stopped', 'timed_out'].includes(message.status) ? message.at : run.endedAt }
+      ? { ...run, status: message.status, reason: message.reason, branch: message.branch, prUrl: message.prUrl, verify: message.verify, waitingOn: message.waitingOn ?? null, lastActivityAt: message.at, updatedAt: message.at, endedAt: ['completed', 'failed', 'stopped', 'timed_out'].includes(message.status) ? message.at : run.endedAt }
       : run)));
     void this.refreshApprovals();
   }

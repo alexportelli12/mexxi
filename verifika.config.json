@@ -61,12 +61,12 @@
     },
     "segwi-web": {
       "command": "node scripts/segwi/web-check.mjs",
-      "paths": ["scripts/segwi/web/**", "scripts/segwi/web-check.mjs", "site/tokens.css", "names.json"]
+      "paths": ["scripts/segwi/web/**", "scripts/segwi/web-check.mjs", "site/tokens.css", "names.json", "claude/mods/run-pane/hooks/journey.ts"]
     },
     "segwi-e2e": {
       "command": "node --test scripts/segwi/test/web.e2e.mjs",
       "dependsOn": ["segwi-web"],
-      "paths": ["scripts/segwi/web/**", "scripts/segwi/lib/**", "scripts/segwi/test/web.e2e.mjs", "scripts/segwi/test/web-harness.mjs", "scripts/segwi/test/fixtures/**", "scripts/segwi/runners/**", "site/tokens.css"]
+      "paths": ["scripts/segwi/web/**", "scripts/segwi/lib/**", "scripts/segwi/test/web.e2e.mjs", "scripts/segwi/test/web-harness.mjs", "scripts/segwi/test/fixtures/**", "scripts/segwi/runners/**", "site/tokens.css", "claude/mods/run-pane/hooks/journey.ts"]
     },
     "design": {
       "command": "node scripts/segwi/check-design.mjs",

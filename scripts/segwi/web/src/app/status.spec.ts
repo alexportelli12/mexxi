@@ -1,4 +1,4 @@
-import { ACTIVE_STATUSES, STATUS, STATUSES, idleMinutes, isFinal, statusCopy } from './status';
+import { ACTIVE_STATUSES, STATUS, STATUSES, idleMinutes, isFinal, statusCopy, waitingLine } from './status';
 
 describe('status map', () => {
   it('covers every run state with words and an icon', () => {
@@ -29,5 +29,12 @@ describe('status map', () => {
   it('tells active states from final ones', () => {
     expect(ACTIVE_STATUSES.every((status) => !isFinal(status))).toBe(true);
     expect(isFinal('completed')).toBe(true);
+  });
+
+  it('shows what a Working run waits on, and nothing once the run asks you or ends', () => {
+    expect(waitingLine({ status: 'running', waitingOn: 'Waiting on npm run verify' })).toBe('Waiting on npm run verify');
+    expect(waitingLine({ status: 'running', waitingOn: null })).toBeNull();
+    expect(waitingLine({ status: 'needs_input', waitingOn: 'Waiting on npm run verify' })).toBeNull();
+    expect(waitingLine({ status: 'completed', waitingOn: 'Waiting on npm run verify' })).toBeNull();
   });
 });
