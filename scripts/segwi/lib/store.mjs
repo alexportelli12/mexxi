@@ -48,20 +48,20 @@ const MIGRATIONS = [
      created_at TEXT NOT NULL, last_ok_at TEXT, last_error TEXT
    );`,
   "ALTER TABLE approvals ADD COLUMN content TEXT;",
-  "ALTER TABLE runs ADD COLUMN waiting_on TEXT; ALTER TABLE runs ADD COLUMN ibni TEXT;",
+  "ALTER TABLE runs ADD COLUMN waiting_on TEXT; ALTER TABLE runs ADD COLUMN snapshot TEXT;",
 ];
 
 const RUN_COLUMNS = {
   status: "status", hostSessionId: "host_session_id", worktreePath: "worktree_path", branch: "branch", prUrl: "pr_url",
   verify: "verify", costUsd: "cost_usd", reason: "reason", lastActivityAt: "last_activity_at", endedAt: "ended_at",
-  waitingOn: "waiting_on", ibni: "ibni",
+  waitingOn: "waiting_on", snapshot: "snapshot",
 };
 
 /** A column's stored value: texts from outside are redacted, and the ibni snapshot is kept as JSON. */
 function columnValue(key, value) {
   if (value === undefined || value === null) return null;
   if ((key === "reason" || key === "waitingOn") && value) return cleanText(value, 500);
-  if (key === "ibni") return JSON.stringify(cleanDeep(value));
+  if (key === "snapshot") return JSON.stringify(cleanDeep(value));
   return value;
 }
 
@@ -72,7 +72,7 @@ function runFromRow(row) {
     hostSessionId: row.host_session_id, worktreePath: row.worktree_path, branch: row.branch, prUrl: row.pr_url,
     verify: row.verify, costUsd: row.cost_usd, reason: row.reason, createdAt: row.created_at,
     updatedAt: row.updated_at, lastActivityAt: row.last_activity_at, endedAt: row.ended_at,
-    waitingOn: row.waiting_on ?? null, ibni: row.ibni ? JSON.parse(row.ibni) : null,
+    waitingOn: row.waiting_on ?? null, snapshot: row.snapshot ? JSON.parse(row.snapshot) : null,
   };
 }
 

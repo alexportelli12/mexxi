@@ -87,7 +87,7 @@ export function createRunService({ store, settings, runner, ibni, broker, server
 
   /** A status row with the run as it stands: the app and SSE clients redraw it; nobody is notified. */
   function publishRun(run) {
-    broker.publish(store.addEvent(run.id, "status", { status: run.status, reason: run.reason, branch: run.branch, prUrl: run.prUrl, verify: run.verify, waitingOn: run.waitingOn, ibni: run.ibni }));
+    broker.publish(store.addEvent(run.id, "status", { status: run.status, reason: run.reason, branch: run.branch, prUrl: run.prUrl, verify: run.verify, waitingOn: run.waitingOn, snapshot: run.snapshot }));
   }
 
   /** The turn's end no longer waits on anything: no settle timer, no waitingOn. */
@@ -156,12 +156,12 @@ export function createRunService({ store, settings, runner, ibni, broker, server
         store.updateRun(runId, { worktreePath: found.worktreePath });
       }
       const summary = await ibni.summary(state.repoPath, state.ibniSession);
-      return store.updateRun(runId, { branch: summary.branch, prUrl: summary.prUrl, verify: summary.verify, worktreePath: summary.worktreePath, ibni: summary.snapshot });
+      return store.updateRun(runId, { branch: summary.branch, prUrl: summary.prUrl, verify: summary.verify, worktreePath: summary.worktreePath, snapshot: summary.snapshot });
     } catch {
       // Once a run has a workspace, an ibni that does not answer is worth showing (the run pane's IBNI OFFLINE).
       const current = store.getRun(runId);
       if (!state.ibniSession) return current;
-      return store.updateRun(runId, { ibni: { ...(current.ibni ?? { steps: [] }), error: "ibni didn't answer" } });
+      return store.updateRun(runId, { snapshot: { ...(current.snapshot ?? { steps: [] }), error: "ibni didn't answer" } });
     }
   }
 
@@ -307,7 +307,7 @@ export function createRunService({ store, settings, runner, ibni, broker, server
       return { ...publicRun(run), steps: folder.steps };
     },
     // The list leaves out each run's ibni snapshot; one run's page shows it.
-    list: (query) => store.listRuns(query).map((run) => { const { ibni: _snapshot, ...rest } = publicRun(run); return rest; }),
+    list: (query) => store.listRuns(query).map((run) => { const { snapshot: _snapshot, ...rest } = publicRun(run); return rest; }),
     events(id, since = 0) {
       if (!store.getRun(id)) throw new HttpError(404, "No such run.");
       return store.listEvents(id, since, 1000);

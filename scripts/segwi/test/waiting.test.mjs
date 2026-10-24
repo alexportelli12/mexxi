@@ -140,13 +140,13 @@ test("every ibni call refreshes the run's snapshot, which the run shows without 
   const { server, host, start, run } = await boot(t, fixture(t, [init, done, marker("await_release"), call, result, marker("await_input")]), { ibni });
   const id = await start();
   // The turn's end finds the workspace and reads it once.
-  await waitFor(() => server.store.getRun(id).ibni?.verify?.attempts === 1, { what: "the snapshot at the turn's end" });
+  await waitFor(() => server.store.getRun(id).snapshot?.verify?.attempts === 1, { what: "the snapshot at the turn's end" });
   host.release();
-  await waitFor(() => server.store.getRun(id).ibni?.verify?.attempts === 2, { what: "the snapshot after the ibni call" });
+  await waitFor(() => server.store.getRun(id).snapshot?.verify?.attempts === 2, { what: "the snapshot after the ibni call" });
   const shown = await run(id);
-  assert.deepEqual(shown.ibni.steps, [{ step: "verify", outcome: "succeeded" }]);
+  assert.deepEqual(shown.snapshot.steps, [{ step: "verify", outcome: "succeeded" }]);
   assert.ok(!("worktreePath" in shown), "no path on the run");
-  assert.ok((await streamedRuns(server, id)).some((message) => message.ibni?.verify?.attempts === 2), "SSE carries it");
+  assert.ok((await streamedRuns(server, id)).some((message) => message.snapshot?.verify?.attempts === 2), "SSE carries it");
   const listed = (await request(server, "GET", "/api/runs")).json.runs.find((entry) => entry.id === id);
-  assert.ok(listed && !("ibni" in listed), "the list stays small");
+  assert.ok(listed && !("snapshot" in listed), "the list stays small");
 });

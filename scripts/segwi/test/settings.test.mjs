@@ -57,14 +57,14 @@ test("a version 4 database gains waitingOn and the ibni snapshot, and keeps its 
   const file = path.join(tempDir(t, "segwi-store-"), "segwi.db");
   const old = openStore(file);
   old.createRun({ id: "r1", repo: "a", action: "build", task: "t" });
-  old.db.exec("ALTER TABLE runs DROP COLUMN waiting_on; ALTER TABLE runs DROP COLUMN ibni; PRAGMA user_version = 4;");
+  old.db.exec("ALTER TABLE runs DROP COLUMN waiting_on; ALTER TABLE runs DROP COLUMN snapshot; PRAGMA user_version = 4;");
   old.close();
   const store = openStore(file);
   t.after(() => store.close());
   assert.equal(store.db.prepare("PRAGMA user_version").get().user_version, 5);
   assert.equal(store.getRun("r1").waitingOn, null);
-  const updated = store.updateRun("r1", { waitingOn: "Waiting on npm run verify", ibni: { steps: [{ step: "prepare", outcome: "succeeded" }] } });
-  assert.deepEqual([updated.waitingOn, updated.ibni], ["Waiting on npm run verify", { steps: [{ step: "prepare", outcome: "succeeded" }] }]);
+  const updated = store.updateRun("r1", { waitingOn: "Waiting on npm run verify", snapshot: { steps: [{ step: "prepare", outcome: "succeeded" }] } });
+  assert.deepEqual([updated.waitingOn, updated.snapshot], ["Waiting on npm run verify", { steps: [{ step: "prepare", outcome: "succeeded" }] }]);
 });
 
 test("the VAPID subject is empty by default, takes a real contact, and refuses placeholders push services reject", async () => {
