@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, stat, utimes, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test, { after } from "node:test";
 import { checkFreshness, FreshnessError } from "./fresh.mjs";
+import { sweepStaleFixtures } from "./lib/fixtures.mjs";
 
 const run = (cwd, ...args) => execFileSync("git", ["-c", "user.name=t", "-c", "user.email=t@example.com", ...args], { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 const write = async (directory, file, text) => {
@@ -14,6 +15,8 @@ const write = async (directory, file, text) => {
 const page = (sources, reviewed = "2026-01-01") => `---\nsources:\n${sources.map((source) => `  - ${source}`).join("\n")}\nreviewed: ${reviewed}\n---\n# Page\n`;
 const sidecar = (reviewed = "2026-01-01") => `${JSON.stringify({ "README.md": { sources: ["src/**"], reviewed }, "site/index.html": { sources: ["src/b.txt"], reviewed } })}\n`;
 
+// Fixtures a killed run left behind are removed before any are made.
+await sweepStaleFixtures("mexxi-fresh-");
 const fixtures = [];
 after(() => Promise.all(fixtures.map((directory) => rm(directory, { recursive: true, force: true }))));
 
@@ -107,4 +110,25 @@ test("with no origin ref it fails loudly instead of skipping, and MEXXI_DOCS_BAS
   commit(clone, "change a source");
   const first = run(clone, "rev-list", "--max-parents=0", "HEAD").trim();
   assert.match((await checkFreshness({ root: clone, env: { MEXXI_DOCS_BASE: first } }))[0], /docs\/page\.md/);
+});
+
+// Break: the sweep removes a running suite's fresh fixtures, another prefix's
+// directories, or nothing at all.
+test("sweepStaleFixtures removes only its prefix's directories older than an hour", async (t) => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), "mexxi-sweep-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const now = Date.now();
+  const make = async (name, ageMs) => {
+    await mkdir(path.join(directory, name, "inside"), { recursive: true });
+    const when = new Date(now - ageMs);
+    await utimes(path.join(directory, name), when, when);
+  };
+  await make("mexxi-fresh-old", 2 * 60 * 60 * 1000);
+  await make("mexxi-fresh-young", 10 * 60 * 1000);
+  await make("mexxi-docs-old", 2 * 60 * 60 * 1000);
+  await writeFile(path.join(directory, "mexxi-fresh-file"), "not a directory");
+
+  const removed = await sweepStaleFixtures("mexxi-fresh-", { directory, now });
+  assert.deepEqual(removed, [path.join(directory, "mexxi-fresh-old")]);
+  for (const kept of ["mexxi-fresh-young", "mexxi-docs-old", "mexxi-fresh-file"]) assert.ok(await stat(path.join(directory, kept)), `${kept} is kept`);
 });

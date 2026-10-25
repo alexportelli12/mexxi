@@ -25,7 +25,7 @@ import { withMachineLock, withRepositoryLock } from "../lib/lock.mjs";
 import { evidenceDirectoryFor, inspectImplementationWorktrees, readMetadata, summarizeSetup, writeMetadata } from "../lib/metadata.mjs";
 import { allocatePortBlock, recordedBlock, sessionPortEnvironment, sessionRunEnvironment } from "../lib/ports.mjs";
 import { workspaceCandidates } from "../lib/session.mjs";
-import { lockfilesAt, runSetup, setupPlan } from "../lib/setup.mjs";
+import { lockfilesAt, nestedLockfilesAt, runSetup, setupPlan } from "../lib/setup.mjs";
 import { sweepConsumedWorkspaces } from "./cleanup.mjs";
 import { copyWarmCaches } from "../lib/caches.mjs";
 
@@ -234,7 +234,7 @@ function prepareLocked({ repository, config, slug, branchPrefix }) {
     const settings = await repositorySettings(repository.root, baseSha);
     const verifyCommand = verifyCommandFrom(settings);
     const lockfiles = await lockfilesAt(repository.root, baseSha);
-    const plan = setupPlan(settings, lockfiles);
+    const plan = setupPlan(settings, lockfiles, await nestedLockfilesAt(repository.root, baseSha));
     const forge = await detectForge({ root: repository.root, remote, baseSha, config });
     const baseline = await provenBaseline(repository.root, baseSha, settings, forge);
     const allocation = await allocateWorkspace(

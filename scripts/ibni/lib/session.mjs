@@ -15,6 +15,7 @@ import {
   remoteDefault,
   repositoryAt,
 } from "./git.mjs";
+import { MACHINE_STATE_DIRECTORY } from "./lock.mjs";
 import { EVIDENCE_SUFFIX, inspectImplementationWorktrees, readMetadata } from "./metadata.mjs";
 
 async function repositoryOrNull(cwd) {
@@ -57,6 +58,35 @@ export async function workspaceCandidates(cwd) {
   for (const worktreePath of new Set(candidates)) {
     const metadata = await metadataAt(worktreePath);
     if (metadata) found.push({ worktreePath, metadata });
+  }
+  return found;
+}
+
+// Folders under paths.worktreeRoot that ibni did not make, such as a worktree
+// added with plain `git worktree add`: ibni cleanup never finds them, so their
+// disk stays used. Reported for a person to look at, never removed. ibni makes
+// <root>/<repository>-<hash>/<leaf> with <leaf>.evidence beside it, and
+// <root>/.ibni for its machine-wide state.
+export async function unmanagedFolders(worktreeRoot) {
+  const directories = async (parent) => (await readdir(parent, { withFileTypes: true }).catch(() => []))
+    .filter((entry) => entry.isDirectory()).map((entry) => entry.name).sort();
+  const found = [];
+  for (const name of await directories(worktreeRoot)) {
+    const folder = path.join(worktreeRoot, name);
+    if (name === MACHINE_STATE_DIRECTORY) continue;
+    if (!/-[0-9a-f]{10}$/.test(name)) {
+      found.push({ path: folder, reason: "not a repository folder ibni made" });
+      continue;
+    }
+    const children = await directories(folder);
+    for (const child of children) {
+      const target = path.join(folder, child);
+      if (child.endsWith(EVIDENCE_SUFFIX)) {
+        if (!children.includes(child.slice(0, -EVIDENCE_SUFFIX.length))) found.push({ path: target, reason: "an evidence directory whose worktree is gone" });
+      } else if (!await metadataAt(target)) {
+        found.push({ path: target, reason: "a folder with no ibni workspace metadata" });
+      }
+    }
   }
   return found;
 }

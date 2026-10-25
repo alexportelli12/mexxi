@@ -6,7 +6,7 @@ import { withRepositoryLock } from "../lib/lock.mjs";
 import { evidenceDirectoryFor, summarizeSetup, updateMetadata } from "../lib/metadata.mjs";
 import { sessionRunEnvironment } from "../lib/ports.mjs";
 import { ownedSession } from "../lib/session.mjs";
-import { lockfilesAt, runSetup, setupPlan } from "../lib/setup.mjs";
+import { lockfilesAt, nestedLockfilesAt, runSetup, setupPlan } from "../lib/setup.mjs";
 
 // Installs, or reinstalls, the session's dependencies in its worktree: when
 // adopt finds them out of date, or after a commit changed a lockfile. The command comes from the default branch's .mexxi.json
@@ -20,7 +20,7 @@ export async function setupWorkspace({ cwd = process.cwd(), sessionId }) {
   await mkdir(evidenceDir, { recursive: true });
   const config = await workspaceConfig();
   const env = sessionRunEnvironment(metadata, config);
-  const setup = await runSetup({ plan: setupPlan(settings, lockfiles), worktreePath: repository.root, evidenceDir, lockfiles, env, config, sessionId });
+  const setup = await runSetup({ plan: setupPlan(settings, lockfiles, await nestedLockfilesAt(repository.root, "HEAD")), worktreePath: repository.root, evidenceDir, lockfiles, env, config, sessionId });
   await withRepositoryLock(repository.commonDirectory, async () => {
     const session = await ownedSession(cwd, sessionId);
     if (session.repository.gitDirectory !== repository.gitDirectory) throw new WorkspaceError("the session's workspace changed while setup ran");
