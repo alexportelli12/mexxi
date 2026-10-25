@@ -4,6 +4,8 @@ sources:
   - scripts/hooks/loop-breaker.mjs
   - claude/mods/command-fixer/hooks/fix.ts
   - config.schema.json
+  - docs/decisions/0017-workspace-port-blocks.md
+  - docs/decisions/0018-machine-wide-run-slots.md
 reviewed: 2026-10-25
 ---
 
@@ -18,3 +20,5 @@ Several of mexxi's parts answer these numbers. On Claude Code, the command fixer
 segwi's first two real runs, on 23 October, stopped four times to wait for an approval on a phone. Every one was harmless: a `cd` chained with `ls`, a pull request body with a heading, and two `ibni` chains. That is why segwi's runs moved to auto mode.
 
 A later segwi run in an Angular repository ran its verify command on an untouched main, and four of seven checks failed only because of the sandbox. Chromium couldn't start, the build couldn't fetch Google Fonts, and Firebase's emulators couldn't reach each other. Each fix loosened the sandbox or added machinery, so [segwi runs are now trusted like your own sessions](decisions/0016-segwi-runs-trusted-like-own-sessions.md), with no sandbox at all.
+
+Running several sessions side by side on one 8-core machine had its own problems, measured on 25 October. Two verify runs at once in a web app repository both failed, because its browser tests' servers wanted the same fixed ports. Transcripts showed the same error in eight sessions since 2 October. With distinct ports, two runs passed and took 29% longer. Three at once made unit tests time out under load. That is why each workspace gets a [port block](glossary.md#port-block), checks wait for a [run slot](glossary.md#run-slot), and each check runs in a [scope](glossary.md#scope). Every session also held about 230 MiB for a browser server it might never use, half of it in `npx`'s wrapper, so the server now runs with `node`.

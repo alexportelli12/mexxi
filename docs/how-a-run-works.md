@@ -5,7 +5,9 @@ sources:
   - skills/rendered-qa/SKILL.md
   - skills/test-design/SKILL.md
   - scripts/ibni/commands/**
-reviewed: 2026-10-24
+  - scripts/ibni/lib/lock.mjs
+  - scripts/ibni/lib/scope.mjs
+reviewed: 2026-10-25
 ---
 
 # How a run works
@@ -31,9 +33,9 @@ Not every change needs every step. A one-line fix skips the independent review; 
 
 ## The steps
 
-1. **Its own copy of the repository.** `ibni prepare`, from [`ibni`](cli/index.md), the command-line tool the agent runs, creates a [worktree](glossary.md#worktree) and branch for the task, so your checkout stays untouched. It picks a free block of ports for the install, the checks and the development server. So two tasks can run their servers and browser tests at once. It installs the dependencies too, with the command the repository's lockfile or `.mexxi.json` names, so the agent never guesses one. Then it copies the build and test caches your checkout has, so the first checks do not start cold. It also sweeps away worktrees whose pull requests have merged.
+1. **Its own copy of the repository.** `ibni prepare`, from [`ibni`](cli/index.md), the command-line tool the agent runs, creates a [worktree](glossary.md#worktree) and branch for the task, so your checkout stays untouched. It picks a free [block of ports](glossary.md#port-block) for the install, the checks and the development server. So two tasks can run their servers and browser tests at once. It installs the dependencies too, with the command the repository's lockfile or `.mexxi.json` names, so the agent never guesses one. Then it copies the build and test caches your checkout has, so the first checks do not start cold. It also sweeps away worktrees whose pull requests have merged.
 2. **Agree what done means.** The agent reads the repository, its closest examples and its tests, then writes down what done means before any code exists, so the target is settled first. It asks you only about product decisions it cannot work out from the code.
-3. **Start from green.** The repository's [verify command](glossary.md#verify) (`npm run verify` unless its `.mexxi.json` names another) must pass before work starts. Otherwise a failure at the end could be an old one, blamed on the change. `ibni verify` runs it, so the agent only waits for the result. If CI has already proven the starting commit, `ibni verify` cites that run instead.
+3. **Start from green.** The repository's [verify command](glossary.md#verify) (`npm run verify` unless its `.mexxi.json` names another) must pass before work starts. Otherwise a failure at the end could be an old one, blamed on the change. `ibni verify` runs it, so the agent only waits for the result. If CI has already proven the starting commit, `ibni verify` cites that run instead. When other tasks on the machine are already checking their work, the run waits for a free [run slot](glossary.md#run-slot) first, so parallel checks cannot overload the machine. It runs in a [scope](glossary.md#scope) that stops any server or browser it leaves behind.
 4. **Screenshots before.** When the change alters existing UI, the agent captures it first, so the pull request can show before and after.
 5. **Make the change, with tests.** A test that passes whatever the code does proves nothing, so each test names the break it catches. The agent tests only behaviour with a right answer it can check, such as a pricing rule from the request, at the cheapest level that sees the break. A date-formatting rule gets a unit test, not a browser test; a browser test is for a flow that crosses pages or services. The agent watches each new test fail before it passes. See [test-design](../skills/test-design/SKILL.md).
 6. **Your checks again.** The agent commits the change, and `ibni verify` runs the verify command again on that commit. It is the one authoritative gate, and a failure means the work is unfinished.
