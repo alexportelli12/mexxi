@@ -41,6 +41,11 @@
       "blockSize": 10
     },
     "verifySlots": 2,
+    "scope": {
+      "enabled": true,
+      "cpuWeight": 50,
+      "memoryMax": "50%"
+    },
     "portVariables": {}
   },
   "review": {

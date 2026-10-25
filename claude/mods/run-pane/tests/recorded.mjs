@@ -5,7 +5,8 @@
 // is tested against its real input. setup and verification were added by hand,
 // in that scenario's shape, when ibni began running setup and verify itself;
 // ports and portEnv likewise when workspaces got port blocks, and
-// verification.queuedMs when runs began waiting for a slot.
+// verification.queuedMs when runs began waiting for a slot, and its scope
+// fields when runs moved into systemd scopes (unscoped in that scenario).
 export const info = {
   "operation": "info",
   "sessionId": "2c026ea35efd82bef78e30b9",
@@ -32,6 +33,9 @@ export const info = {
     "exitCode": 0,
     "durationMs": 204,
     "queuedMs": 0,
+    "scope": null,
+    "scopeReason": "workflow.scope.enabled is false",
+    "resources": null,
     "logPath": "/tmp/implementation-workspace-test-CEZwIv/worktrees/control-d7a4ed7796/timed.evidence/verify-cc76f2831b4e.log",
     "ranAt": "2026-10-21T02:30:34.880Z",
     "command": "npm run verify",
@@ -129,7 +133,9 @@ export const stats = {
       },
       {
         "at": "2026-10-21T02:30:33.041Z",
-        "outcome": "pass"
+        "outcome": "pass",
+        "durationMs": 204,
+        "queuedMs": 0
       }
     ]
   },
@@ -171,6 +177,9 @@ export const stats = {
     "exitCode": 0,
     "durationMs": 204,
     "queuedMs": 0,
+    "scope": null,
+    "scopeReason": "workflow.scope.enabled is false",
+    "resources": null,
     "logPath": "/tmp/implementation-workspace-test-CEZwIv/worktrees/control-d7a4ed7796/timed.evidence/verify-cc76f2831b4e.log",
     "ranAt": "2026-10-21T02:30:34.880Z",
     "command": "npm run verify",

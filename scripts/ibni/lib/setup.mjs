@@ -6,7 +6,7 @@ import path from "node:path";
 import { OPT_IN_FILE } from "./baseline.mjs";
 import { WorkspaceError } from "./errors.mjs";
 import { cleanOutput, git } from "./git.mjs";
-import { logTail, runLoggedInSlot } from "./logged-run.mjs";
+import { logTail, runLoggedInSlot, scopeFields } from "./logged-run.mjs";
 
 export const LOCKFILE_SETUP = {
   "package-lock.json": "npm ci --prefer-offline --no-audit --no-fund",
@@ -67,6 +67,7 @@ export async function runSetup({ plan, worktreePath, evidenceDir, lockfiles, env
     exitCode: outcome.exitCode,
     durationMs: outcome.durationMs,
     queuedMs: outcome.queuedMs,
+    ...scopeFields(outcome),
     logPath,
     ranAt,
     lockfiles,

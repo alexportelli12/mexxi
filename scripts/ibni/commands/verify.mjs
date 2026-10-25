@@ -5,7 +5,7 @@ import { workspaceConfig } from "../lib/config.mjs";
 import { WorkspaceError } from "../lib/errors.mjs";
 import { assertClean, assertNoGitOperation, cleanOutput, git } from "../lib/git.mjs";
 import { withRepositoryLock } from "../lib/lock.mjs";
-import { logTail, runLoggedInSlot } from "../lib/logged-run.mjs";
+import { logTail, runLoggedInSlot, scopeFields } from "../lib/logged-run.mjs";
 import { evidenceDirectoryFor, sessionVerifyCommand, updateMetadata } from "../lib/metadata.mjs";
 import { busyPorts, recordedBlock, sessionRunEnvironment } from "../lib/ports.mjs";
 import { ownedSession } from "../lib/session.mjs";
@@ -58,7 +58,10 @@ async function recordVerification(cwd, sessionId, started, verification) {
       const changed = cleanOutput(await git(session.repository.root, ["status", "--short", "--untracked-files=all"])).split("\n").slice(0, 5).join("; ");
       return { recorded: false, reason: `the worktree was not clean when verify ended (${changed}); commit or remove those changes, or gitignore what the verify command writes, then run ibni verify again` };
     }
-    const record = { kind: "verify", at: verification.ranAt, sessionId, outcome: verification.passed ? "pass" : "fail", treeSha: verification.treeSha, source: "ibni" };
+    const record = {
+      kind: "verify", at: verification.ranAt, sessionId, outcome: verification.passed ? "pass" : "fail", treeSha: verification.treeSha, source: "ibni",
+      durationMs: verification.durationMs, queuedMs: verification.queuedMs, ...(verification.resources ?? {}),
+    };
     await updateMetadata(session, { verification, records: [...(session.metadata.records ?? []), record] });
     return { recorded: true };
   });
@@ -113,6 +116,7 @@ export async function verifyWorkspace({ cwd = process.cwd(), sessionId }) {
   const outcome = await runLoggedInSlot(config, { sessionId, kind: "verify", worktreePath: repository.root }, { command, cwd: repository.root, logPath, env }, { beforeRun: portsFree });
   const verification = {
     treeSha, headSha, passed: outcome.passed, exitCode: outcome.exitCode, durationMs: outcome.durationMs, queuedMs: outcome.queuedMs, logPath, ranAt, command, commandSource,
+    ...scopeFields(outcome),
     ...(outcome.signal ? { signal: outcome.signal } : {}),
   };
   const recorded = await recordVerification(cwd, sessionId, started, verification);
