@@ -36,8 +36,9 @@ In a workspace, `ibni prepare` (or `ibni setup`) has already installed the
 dependencies; do not install them again. Elsewhere, install with the
 lockfile-respecting command (for example `npm ci`). Either way, confirm
 `git status` is unchanged afterwards; a rewritten lockfile dirties the tree and
-blocks the lifecycle. In a workspace, serve on its recorded `port`
-(from `ibni prepare` or `info`) through the repository's own port setting, so
+blocks the lifecycle. In a workspace, export its `portEnv` and serve on its
+recorded `port` (both from `ibni prepare` or `info`) through the repository's
+own port setting, with any further server on another port of its block, so
 parallel worktrees never collide. Note the URL and port, wait until it serves, and
 stop any server you started when finished. If the app cannot start, report that as the result instead of
 guessing from source.

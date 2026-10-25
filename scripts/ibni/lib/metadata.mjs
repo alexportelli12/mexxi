@@ -118,6 +118,10 @@ export function workspaceSummary(entry) {
     state: metadata.state,
     prUrl: metadata.prUrl,
     port: metadata.port ?? null,
+    // Workspaces from before blocks hold their one port.
+    ports: metadata.ports
+      ? { ...metadata.ports, last: metadata.ports.first + metadata.ports.size - 1 }
+      : metadata.port ? { first: metadata.port, size: 1, last: metadata.port } : null,
     verifyCommand: sessionVerifyCommand(metadata),
     defaultBranch: metadata.defaultBranch,
     baseSha: metadata.baseSha,

@@ -7,7 +7,7 @@ sources:
   - scripts/lib/config.mjs
   - scripts/ibni/lib/baseline.mjs
   - scripts/ibni/lib/forge.mjs
-reviewed: 2026-10-24
+reviewed: 2026-10-25
 ---
 
 # Configuration

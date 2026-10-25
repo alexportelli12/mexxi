@@ -1,10 +1,13 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { DEFAULT_VERIFY_COMMAND, repositorySettings, verifyCommandFrom } from "../lib/baseline.mjs";
+import { workspaceConfig } from "../lib/config.mjs";
+import { WorkspaceError } from "../lib/errors.mjs";
 import { assertClean, assertNoGitOperation, cleanOutput, git } from "../lib/git.mjs";
 import { withRepositoryLock } from "../lib/lock.mjs";
 import { logTail, runLogged } from "../lib/logged-run.mjs";
 import { evidenceDirectoryFor, sessionVerifyCommand, updateMetadata } from "../lib/metadata.mjs";
+import { busyPorts, recordedBlock, sessionRunEnvironment } from "../lib/ports.mjs";
 import { ownedSession } from "../lib/session.mjs";
 
 const DIRTY_HINT = "ibni verify binds its result to a committed tree. Commit the change first (or, before any commit, leave the tree at baseSha for the baseline run), then run it again.";
@@ -89,11 +92,21 @@ export async function verifyWorkspace({ cwd = process.cwd(), sessionId }) {
     return result(verification, await recordVerification(cwd, sessionId, started, verification));
   }
 
+  // prepare found the block free, but anything can bind a port since; a test
+  // server that hits one fails half-way with a less clear EADDRINUSE.
+  const busy = await busyPorts(recordedBlock(metadata));
+  if (busy.length) {
+    throw new WorkspaceError(
+      `port ${busy.join(", ")} of this workspace's block is already in use`,
+      "Stop whatever listens there (often a dev server started in this workspace), then run ibni verify again.",
+    );
+  }
   // Sessions prepared before evidence directories existed get one on demand.
   const evidenceDir = evidenceDirectoryFor(repository.root);
   await mkdir(evidenceDir, { recursive: true });
   const logPath = path.join(evidenceDir, `verify-${treeSha.slice(0, 12)}.log`);
-  const outcome = await runLogged({ command, cwd: repository.root, logPath });
+  const env = sessionRunEnvironment(metadata, await workspaceConfig());
+  const outcome = await runLogged({ command, cwd: repository.root, logPath, env });
   const verification = {
     treeSha, headSha, passed: outcome.passed, exitCode: outcome.exitCode, durationMs: outcome.durationMs, logPath, ranAt, command, commandSource,
     ...(outcome.signal ? { signal: outcome.signal } : {}),

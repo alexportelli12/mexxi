@@ -1,8 +1,10 @@
 import { mkdir } from "node:fs/promises";
 import { repositorySettings } from "../lib/baseline.mjs";
+import { workspaceConfig } from "../lib/config.mjs";
 import { WorkspaceError } from "../lib/errors.mjs";
 import { withRepositoryLock } from "../lib/lock.mjs";
 import { evidenceDirectoryFor, summarizeSetup, updateMetadata } from "../lib/metadata.mjs";
+import { sessionRunEnvironment } from "../lib/ports.mjs";
 import { ownedSession } from "../lib/session.mjs";
 import { lockfilesAt, runSetup, setupPlan } from "../lib/setup.mjs";
 
@@ -16,7 +18,8 @@ export async function setupWorkspace({ cwd = process.cwd(), sessionId }) {
   const lockfiles = await lockfilesAt(repository.root, "HEAD");
   const evidenceDir = evidenceDirectoryFor(repository.root);
   await mkdir(evidenceDir, { recursive: true });
-  const setup = await runSetup({ plan: setupPlan(settings, lockfiles), worktreePath: repository.root, evidenceDir, lockfiles });
+  const env = sessionRunEnvironment(metadata, await workspaceConfig());
+  const setup = await runSetup({ plan: setupPlan(settings, lockfiles), worktreePath: repository.root, evidenceDir, lockfiles, env });
   await withRepositoryLock(repository.commonDirectory, async () => {
     const session = await ownedSession(cwd, sessionId);
     if (session.repository.gitDirectory !== repository.gitDirectory) throw new WorkspaceError("the session's workspace changed while setup ran");

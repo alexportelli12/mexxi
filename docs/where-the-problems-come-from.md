@@ -4,7 +4,7 @@ sources:
   - scripts/hooks/loop-breaker.mjs
   - claude/mods/command-fixer/hooks/fix.ts
   - config.schema.json
-reviewed: 2026-10-24
+reviewed: 2026-10-25
 ---
 
 # Where the problems come from

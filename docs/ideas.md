@@ -13,7 +13,7 @@ sources:
   - config.schema.json
   - scripts/ibni/commands/record-evidence.mjs
   - scripts/ibni/commands/cross-review.mjs
-reviewed: 2026-10-24
+reviewed: 2026-10-25
 ---
 
 # The ideas behind mexxi
@@ -26,9 +26,9 @@ Each idea starts with the problem, then says what mexxi does about it and what y
 
 An agent working in your checkout trips over your own unfinished work. It switches branches under you, leaves files changed, and two tasks at once collide on the same files and the same dev-server port.
 
-Before any work starts, `ibni`, the command-line tool the agent runs, makes a [worktree](glossary.md#worktree): a separate copy of the repository on a new branch, with its own free port. Every later step happens there.
+Before any work starts, `ibni`, the command-line tool the agent runs, makes a [worktree](glossary.md#worktree): a separate copy of the repository on a new branch. It gets its own block of free ports, which its install, its checks and its servers all use. Every later step happens there.
 
-Your checkout stays exactly as you left it, and you can run several tasks side by side. [Decision 0004](decisions/0004-isolated-worktree-per-task.md)
+Your checkout stays exactly as you left it, and you can run several tasks side by side, checks included. [Decision 0004](decisions/0004-isolated-worktree-per-task.md) and [decision 0017](decisions/0017-workspace-port-blocks.md)
 
 ## A pass/fail command defines "done"
 

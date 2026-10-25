@@ -18,8 +18,9 @@ export function processIsAlive(pid) {
   }
 }
 
-export async function acquireRepositoryLock(commonDirectory) {
-  const lockPath = path.join(commonDirectory, LOCK_DIRECTORY);
+// A lock is a directory holding its owner's pid, so a lock left by a process
+// that died is taken over rather than waited on. what names it in errors.
+async function acquireLock(lockPath, what) {
   const owner = {
     hostname: os.hostname(),
     pid: process.pid,
@@ -46,7 +47,7 @@ export async function acquireRepositoryLock(commonDirectory) {
           continue;
         }
         throw new WorkspaceError(
-          "repository lifecycle lock has no readable owner",
+          `${what} has no readable owner`,
           `Inspect ${lockPath}; it was not removed automatically because ownership is ambiguous.`,
         );
       }
@@ -54,7 +55,7 @@ export async function acquireRepositoryLock(commonDirectory) {
       if (existing.hostname !== os.hostname() || processIsAlive(existing.pid)) {
         if (Date.now() >= deadline) {
           throw new WorkspaceError(
-            "timed out waiting for another implementation workspace operation",
+            `timed out waiting for the ${what}`,
             `Lock owner: pid ${existing.pid} on ${existing.hostname}, started ${existing.startedAt}`,
           );
         }
@@ -73,6 +74,10 @@ export async function acquireRepositoryLock(commonDirectory) {
   }
 }
 
+export function acquireRepositoryLock(commonDirectory) {
+  return acquireLock(path.join(commonDirectory, LOCK_DIRECTORY), "repository lifecycle lock");
+}
+
 export async function releaseRepositoryLock(lock) {
   try {
     const existing = JSON.parse(await readFile(path.join(lock.lockPath, "owner.json"), "utf8"));
@@ -86,6 +91,22 @@ export async function releaseRepositoryLock(lock) {
 
 export async function withRepositoryLock(commonDirectory, operation) {
   const lock = await acquireRepositoryLock(commonDirectory);
+  try {
+    return await operation();
+  } finally {
+    await releaseRepositoryLock(lock);
+  }
+}
+
+// Machine-wide state, such as which ports each workspace holds, spans every
+// repository, so its lock lives under paths.worktreeRoot rather than in one
+// repository's Git directory.
+export const MACHINE_STATE_DIRECTORY = ".ibni";
+
+export async function withMachineLock(worktreeRoot, name, operation) {
+  const directory = path.join(worktreeRoot, MACHINE_STATE_DIRECTORY);
+  await mkdir(directory, { recursive: true });
+  const lock = await acquireLock(path.join(directory, `${name}.lock`), `machine-wide ${name} lock`);
   try {
     return await operation();
   } finally {

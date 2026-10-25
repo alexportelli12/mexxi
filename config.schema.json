@@ -107,13 +107,23 @@
           "default": [1440, 768, 390]
         },
         "ports": {
-          "description": "Range ibni assigns each new workspace's PORT from, so parallel worktrees' dev servers do not collide. Ports already recorded by a retained workspace or bound on this machine are skipped.",
+          "description": "Range ibni assigns each new workspace a block of consecutive ports from, so parallel worktrees' dev and test servers do not collide. A block that overlaps one a retained workspace holds, or has a port bound on this machine, is skipped.",
           "type": "object",
           "additionalProperties": false,
           "default": {},
           "properties": {
             "first": { "description": "Lowest port ibni assigns. Each task gets its own port from this range, so two tasks can run their development servers at once.", "type": "integer", "minimum": 1024, "maximum": 65535, "default": 4300 },
-            "last": { "description": "Highest port ibni assigns; at least first.", "type": "integer", "minimum": 1024, "maximum": 65535, "default": 4999 }
+            "last": { "description": "Highest port ibni assigns; at least first.", "type": "integer", "minimum": 1024, "maximum": 65535, "default": 4999 },
+            "blockSize": { "description": "Ports in each workspace's block. ibni passes them to setup and verify as PORT (the first) and MEXXI_PORT_0 to MEXXI_PORT_<blockSize-1>, so one workspace can run a dev server and several test servers at once.", "type": "integer", "minimum": 1, "maximum": 100, "default": 10 }
+          }
+        },
+        "portVariables": {
+          "description": "Variables a repository already reads for its ports, mapped to an offset in its workspace's block, keyed by the folder name of the repository's checkout. ibni sets each one as the block's first port plus the offset for setup and verify, so a repository's test servers move to the block without a code change. Offset 0 is PORT.",
+          "type": "object",
+          "default": {},
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": { "type": "integer", "minimum": 0, "maximum": 99 }
           }
         }
       }

@@ -52,11 +52,12 @@ const setupNextAction = (sessionId) => `Run ibni setup --session ${sessionId} to
 
 // Runs the plan in the worktree and returns what metadata and JSON report.
 // A plan without a command reports why nothing ran.
-export async function runSetup({ plan, worktreePath, evidenceDir, lockfiles }) {
+// env is the whole environment the command gets (sessionRunEnvironment).
+export async function runSetup({ plan, worktreePath, evidenceDir, lockfiles, env = process.env }) {
   if (!plan.command) return { ran: false, command: null, reason: plan.reason, lockfiles };
   const logPath = path.join(evidenceDir, SETUP_LOG);
   const ranAt = new Date().toISOString();
-  const outcome = await runLogged({ command: plan.command, cwd: worktreePath, logPath });
+  const outcome = await runLogged({ command: plan.command, cwd: worktreePath, logPath, env });
   return {
     ran: true,
     command: plan.command,

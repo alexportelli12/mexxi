@@ -8,7 +8,7 @@ sources:
   - prompts.json
   - scripts/ibni/**
   - skills/rendered-qa/SKILL.md
-reviewed: 2026-10-24
+reviewed: 2026-10-25
 ---
 
 # Getting started

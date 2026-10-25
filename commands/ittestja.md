@@ -18,8 +18,8 @@ observes and reports; it never edits code, commits, or switches branches.
 1. If `$ARGUMENTS` or this session identifies a retained implementation
    workspace, run `ibni info --session "<sessionId>"`. For
    a pull request, find its workspace with `ibni list` by
-   `prUrl`. Work in that `worktreePath`, start the app on its recorded `port`,
-   and write evidence to its `evidenceDir`.
+   `prUrl`. Work in that `worktreePath`, start the app with its `portEnv` on
+   its recorded `port`, and write evidence to its `evidenceDir`.
 2. Otherwise use the current checkout and a fresh system temporary directory
    for evidence. For a pull request with no retained workspace, confirm with
    the forge's CLI (`gh pr view` on GitHub, `glab mr view` on GitLab) that the

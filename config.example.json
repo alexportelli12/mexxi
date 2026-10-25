@@ -37,8 +37,10 @@
     ],
     "ports": {
       "first": 4300,
-      "last": 4999
-    }
+      "last": 4999,
+      "blockSize": 10
+    },
+    "portVariables": {}
   },
   "review": {
     "tool": "ocr"

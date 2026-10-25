@@ -128,7 +128,7 @@ The repository's own pass/fail command for "does it work?": `npm run verify`, or
 
 ## workspace
 
-A retained worktree together with its record: branch, port, evidence directory and pull request. Keeping it lets a later session pick up follow-up changes. `ibni list` lists them.
+A retained worktree together with its record: branch, block of ports, evidence directory and pull request. Keeping it lets a later session pick up follow-up changes. `ibni list` lists them.
 
 ## worktree
 
