@@ -1455,6 +1455,98 @@ test("waiting runs drop queue entries whose process is gone", { timeout: 60_000 
   assert.equal((await pending).json.passed, true, "the slot is taken once its holder is gone");
 });
 
+const scopeWorks = (await run("systemd-run", ["--user", "--scope", "--quiet", "--collect", "--", "true"], { allowedExitCodes: [0, 1, 127] }).catch(() => ({ code: 127 }))).code === 0;
+const scopeSkip = scopeWorks ? false : "systemd-run --user cannot start a scope here";
+
+function pidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Break: verify runs as a plain child where a scope could start, so a server
+// the command leaves behind keeps its port and the run's cost goes unmeasured.
+test("verify runs in a systemd scope, stops what the command left running and records what it used", { skip: scopeSkip }, async (t) => {
+  const fixture = await createFixture(t);
+  const pidFile = path.join(fixture.root, "leftover.pid");
+  const limits = path.join(fixture.root, "limits.txt");
+  const command = `sleep 300 & echo $! > ${JSON.stringify(pidFile)}; cat /sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)/memory.max /sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup)/cpu.weight > ${JSON.stringify(limits)}`;
+  await commitToDefaultBranch(fixture, { ".mexxi.json": `${JSON.stringify({ verify: command })}\n` }, "leaves a server");
+  await writeFile(fixture.config, JSON.stringify({ paths: { worktreeRoot: fixture.worktrees }, workflow: { scope: { cpuWeight: 30, memoryMax: "512M" } } }));
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "scoped" });
+
+  const result = await verify(fixture, prepared);
+  assert.equal(result.json.passed, true);
+  const leftover = Number(await readFile(pidFile, "utf8"));
+  t.after(() => { if (pidAlive(leftover)) process.kill(leftover); });
+  assert.equal(pidAlive(leftover), false, "stopping the scope ended the leftover process");
+  assert.match(result.json.scope.unit, /^ibni-verify-/);
+  assert.deepEqual([result.json.scope.stoppedLeftovers, result.json.scope.leftoverProcesses], [true, 1]);
+  assert.deepEqual((await readFile(limits, "utf8")).trim().split("\n"), [String(512 * 1024 * 1024), "30"]);
+  assert.ok(result.json.resources.memoryPeakBytes > 0, "peak memory from the cgroup");
+  assert.equal(typeof result.json.resources.cpuMs, "number");
+  const stats = await lifecycle(fixture, fixture.control, "stats", { session: prepared.json.sessionId });
+  const [attempt] = stats.json.verify.history;
+  assert.deepEqual([attempt.memoryPeakBytes, attempt.cpuMs], [result.json.resources.memoryPeakBytes, result.json.resources.cpuMs]);
+  assert.deepEqual(stats.json.verification.resources, result.json.resources);
+});
+
+// Break: a scope that held nothing at the end reports leftovers (systemd
+// marks an empty scope inactive only later), or a run killed at MemoryMax
+// loses its figures and reads as an outside kill.
+test("a scope reports leftovers only when processes remain, and a run killed at its memory ceiling says so", { skip: scopeSkip }, async (t) => {
+  const fixture = await createFixture(t);
+  await commitToDefaultBranch(fixture, { ".mexxi.json": `${JSON.stringify({ verify: "true" })}\n` }, "clean verify");
+  await writeFile(fixture.config, JSON.stringify({ paths: { worktreeRoot: fixture.worktrees }, workflow: { scope: { memoryMax: "64M" } } }));
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "clean scope" });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    await git(prepared.json.worktreePath, "commit", "--quiet", "--allow-empty", "-m", `again ${attempt}`);
+    const clean = await verify(fixture, prepared);
+    assert.deepEqual([clean.json.passed, clean.json.scope.stoppedLeftovers, clean.json.scope.leftoverProcesses], [true, false, 0]);
+  }
+
+  const hog = "node -e \"const keep = []; for (;;) keep.push(Buffer.alloc(8e6, 1))\"";
+  await commitToDefaultBranch(fixture, { ".mexxi.json": `${JSON.stringify({ verify: hog })}\n` }, "memory hog");
+  const hungry = await lifecycle(fixture, fixture.control, "prepare", { slug: "memory hog" });
+  const killed = await verify(fixture, hungry, [1]);
+  assert.equal(killed.json.passed, false);
+  assert.ok(killed.json.scope.oomKills >= 1, `the scope counted the kill (${JSON.stringify(killed.json.scope)})`);
+  assert.ok(killed.json.resources.memoryPeakBytes > 32 * 1024 * 1024, "the peak survived the kill");
+  assert.equal(killed.json.signal, "SIGKILL", "the kernel's signal is reported as such");
+});
+
+// Break: without a usable systemd-run, verify fails instead of running the
+// command as before, or hides why it ran unscoped.
+test("where no scope can start, setup and verify run as plain children and say why", async (t) => {
+  const fixture = await createFixture(t);
+  const stubs = await mkdtemp(path.join(os.tmpdir(), "ibni-no-systemd-"));
+  t.after(() => rm(stubs, { recursive: true, force: true }));
+  await writeFile(path.join(stubs, "systemd-run"), "#!/bin/sh\nexit 1\n");
+  await chmod(path.join(stubs, "systemd-run"), 493);
+  const noScope = { PATH: `${stubs}:${ghEnv(fixture.gh).PATH}` };
+  await commitToDefaultBranch(fixture, { ".mexxi.json": `${JSON.stringify({ setup: "true" })}\n` }, "setup");
+
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "unscoped" }, [0], noScope);
+  assert.deepEqual([prepared.json.setup.passed, prepared.json.setup.scope, prepared.json.setup.scopeReason], [true, null, "systemd-run --user could not start a scope (no user manager?)"]);
+  const result = await lifecycle(fixture, prepared.json.worktreePath, "verify", { session: prepared.json.sessionId }, [0], noScope);
+  assert.deepEqual([result.json.passed, result.json.scope, result.json.resources], [true, null, null]);
+
+  // The probe passes, but this run's own scope can't start: the command runs
+  // plainly, once, rather than being recorded as a failed verify.
+  await writeFile(path.join(stubs, "systemd-run"), "#!/bin/sh\nfor last; do :; done\n[ \"$last\" = true ] && exit 0\necho 'Failed to start transient scope unit' >&2\nexit 1\n");
+  await git(prepared.json.worktreePath, "commit", "--quiet", "--allow-empty", "-m", "scope fails");
+  const fellBack = await lifecycle(fixture, prepared.json.worktreePath, "verify", { session: prepared.json.sessionId }, [0], noScope);
+  assert.deepEqual([fellBack.json.passed, fellBack.json.scope, fellBack.json.scopeReason], [true, null, "systemd-run could not start this run's scope, so it ran as a plain child"]);
+
+  await writeFile(fixture.config, JSON.stringify({ paths: { worktreeRoot: fixture.worktrees }, workflow: { scope: { enabled: false } } }));
+  await git(prepared.json.worktreePath, "commit", "--quiet", "--allow-empty", "-m", "again");
+  const disabled = await verify(fixture, prepared);
+  assert.deepEqual([disabled.json.passed, disabled.json.scopeReason], [true, "workflow.scope.enabled is false"]);
+});
+
 // A local stand-in for OpenRouter's Decisions API: answers each request from
 // a queue ({status, body} or {hang: true}) and keeps what it was sent.
 async function jevStub(t, responses) {
@@ -1504,6 +1596,9 @@ test("lifecycle steps, verify attempts and finding counts are recorded and repor
   const fixture = await createFixture(t);
   const jev = await jevStub(t, [{ status: 200, body: JEV_ANSWERS }]);
   await useJev(fixture, { enabled: true, endpoint: jev.endpoint, owners: ["acme"], repositories: ["acme/widgets"] });
+  // Unscoped, so the recording below has the same shape on every machine.
+  const config = JSON.parse(await readFile(fixture.config, "utf8"));
+  await writeFile(fixture.config, JSON.stringify({ ...config, workflow: { scope: { enabled: false } } }));
   const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "timed" });
   const { sessionId, worktreePath } = prepared.json;
   const triaged = await lifecycle(fixture, fixture.control, "triage", { session: sessionId, ...await triageFiles(prepared.json.evidenceDir) }, [0], { OPENROUTER_API_KEY: "test-key" });
@@ -2348,7 +2443,8 @@ test("prepare installs from the root lockfile after env provisioning and records
   await commitToDefaultBranch(fixture, { "package-lock.json": "{}\n" }, "lockfile");
 
   const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "npm setup" }, [0], stub.env(fixture));
-  const { setup, worktreePath, evidenceDir } = prepared.json;
+  // The scope fields depend on the machine; the scope tests cover them.
+  const { setup: { scope: _scope, scopeReason: _reason, resources: _resources, ...setup }, worktreePath, evidenceDir } = prepared.json;
   assert.deepEqual(prepared.json.provisionedEnv, [".env"]);
   assert.deepEqual(
     { ...setup, durationMs: typeof setup.durationMs, queuedMs: typeof setup.queuedMs, ranAt: typeof setup.ranAt },
@@ -2475,8 +2571,10 @@ test("ibni verify runs the verify command on the committed tree and gates record
   await commit(worktreePath, "FAIL", "\n", "break verify");
   const failed = await verify(fixture, prepared, [1]);
   const treeSha = (await git(worktreePath, "rev-parse", "HEAD^{tree}")).stdout.trim();
+  // The scope fields depend on the machine; the scope tests cover them.
+  const { scope: _scope, scopeReason: _reason, resources: _resources, ...failedRun } = failed.json;
   assert.deepEqual(
-    { ...failed.json, durationMs: typeof failed.json.durationMs, queuedMs: typeof failed.json.queuedMs, ranAt: typeof failed.json.ranAt, logTail: typeof failed.json.logTail },
+    { ...failedRun, durationMs: typeof failed.json.durationMs, queuedMs: typeof failed.json.queuedMs, ranAt: typeof failed.json.ranAt, logTail: typeof failed.json.logTail },
     {
       operation: "verify", sessionId, baseline: false, treeSha, headSha: (await git(worktreePath, "rev-parse", "HEAD")).stdout.trim(),
       passed: false, exitCode: 1, durationMs: "number", queuedMs: "number", logPath: path.join(evidenceDir, `verify-${treeSha.slice(0, 12)}.log`), ranAt: "string",

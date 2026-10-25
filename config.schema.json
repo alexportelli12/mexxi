@@ -118,6 +118,17 @@
           }
         },
         "verifySlots": { "description": "How many setup and verify runs ibni lets run at once on this machine, across every repository; the rest wait in a queue and report the wait as queuedMs. Two eduline verify runs together on 8 vCPUs took 29% longer and passed; three made its unit tests time out.", "type": "integer", "minimum": 1, "maximum": 64, "default": 2 },
+        "scope": {
+          "description": "The systemd user scope ibni runs setup and verify in, where systemd-run --user works; elsewhere they run as plain child processes.",
+          "type": "object",
+          "additionalProperties": false,
+          "default": {},
+          "properties": {
+            "enabled": { "description": "Run setup and verify in a transient systemd user scope when one can start. Stopping the scope afterwards ends any server or browser the command left running.", "type": "boolean", "default": true },
+            "cpuWeight": { "description": "CPUWeight of the scope. Below systemd's default of 100, a run gives way to interactive sessions when the CPU is busy, and still uses every idle core.", "type": "integer", "minimum": 1, "maximum": 10000, "default": 50 },
+            "memoryMax": { "description": "MemoryMax of the scope: bytes with an optional K, M, G or T suffix, a percentage of physical memory, or infinity. Past it the kernel reclaims the run's cache and then stops the run, not an agent session.", "type": "string", "pattern": "^([1-9][0-9]*[KMGT]?|[1-9][0-9]?%|100%|infinity)$", "default": "50%" }
+          }
+        },
         "portVariables": {
           "description": "Variables a repository already reads for its ports, mapped to an offset in its workspace's block, keyed by the folder name of the repository's checkout. ibni sets each one as the block's first port plus the offset for setup and verify, so a repository's test servers move to the block without a code change. Offset 0 is PORT.",
           "type": "object",

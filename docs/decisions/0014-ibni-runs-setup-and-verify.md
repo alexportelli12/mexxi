@@ -1,5 +1,5 @@
 ---
-status: Accepted; its deferred setup for a launcher with a sandbox is superseded by 0016; extended by 0017 and 0018
+status: Accepted; its deferred setup for a launcher with a sandbox is superseded by 0016; extended by 0017, 0018 and 0019
 date: 2026-10-23
 ---
 

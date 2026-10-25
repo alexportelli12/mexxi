@@ -75,7 +75,8 @@ export function summarizeTimings(metadata) {
       attempts: verify.length,
       passed: verify.filter((record) => record.outcome === "pass").length,
       failed: verify.filter((record) => record.outcome === "fail").length,
-      history: verify.map(({ at, outcome }) => ({ at, outcome })),
+      // What each run cost, where its scope could measure it (decision 0019).
+      history: verify.map(({ at, outcome, durationMs, queuedMs, memoryPeakBytes, cpuMs }) => ({ at, outcome, durationMs, queuedMs, memoryPeakBytes, cpuMs })),
     },
     review: { ...findings("review"), byReviewer },
     qa: findings("qa"),
