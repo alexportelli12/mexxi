@@ -30,14 +30,16 @@ Its `opencode.json` is rendered, including the Playwright server and the guard p
 
 ## Playwright MCP
 
-The pin, browser path and output directory come from the `browser` group in `config.json`. Claude Code and Codex keep MCP servers in files that are yours, so the installer prints the registration lines and never runs them:
+The pin, browser path and output directory come from the `browser` group in `config.json`. Every agent session with the server registered starts it, so it runs with `node` from a copy the installer keeps in `~/.local/share/mexxi/playwright-mcp/<version>`, never through `npx`. That saves about 100 MiB per session, which `npx`'s npm wrapper would hold. Claude Code and Codex keep MCP servers in files that are yours, so the installer prints the registration lines and never runs them:
 
 ```bash
-claude mcp add --scope user playwright -- npx -y @playwright/mcp@0.0.83 --headless --isolated --browser=chromium --output-dir=<worktree root>
-codex mcp add playwright -- npx -y @playwright/mcp@0.0.83 --headless --isolated --browser=chromium --output-dir=<worktree root>
+claude mcp add --scope user playwright -- node ~/.local/share/mexxi/playwright-mcp/0.0.83/node_modules/@playwright/mcp/cli.js --headless --isolated --browser=chromium --output-dir=<worktree root>
+codex mcp add playwright -- node ~/.local/share/mexxi/playwright-mcp/0.0.83/node_modules/@playwright/mcp/cli.js --headless --isolated --browser=chromium --output-dir=<worktree root>
 ```
 
-These lines use Playwright's own Chromium: install it once with `npx -y @playwright/mcp@0.0.83 install-browser chromium`. With `browser.executablePath` set, they pass `--executable-path` instead. `install --check` reads those files back and fails when a server is missing or has another version, browser, output directory, or `--allow-unrestricted-file-access`. To change the pin, edit `config.json`, rerun the installer, remove the old server and register it again with the new lines.
+The printed lines spell out your home directory. They use Playwright's own Chromium: install it once with `npx -y @playwright/mcp@0.0.83 install-browser chromium`. With `browser.executablePath` set, they pass `--executable-path` instead. `install --check` fails when the pinned copy is missing. It also fails when a registered server is missing, runs through `npx`, or has another version, browser, output directory or `--allow-unrestricted-file-access`. To change the pin, edit `config.json` and rerun the installer, which fetches the new version. Then remove the old server and register it again with the new lines; the next installer run removes the old version once no host runs it.
+
+The output directory stays the worktree root, not a folder inside it. The server writes only inside its output directory or its working directory. Rendered QA saves screenshots to each task's evidence directory, which sits beside its worktree.
 
 ## The guard
 

@@ -85,8 +85,8 @@ export function renderMcpConfig({ spec }) {
       // segwi's own browser, not your Playwright MCP server (--strict-mcp-config), because behind tailscale serve it
       // would carry your identity: it must never reach segwi itself, or the agent could open the app and tap Approve.
       playwright: {
-        command: "npx",
-        args: ["-y", ...playwrightArguments(spec.browser), `--user-agent=${RUN_BROWSER_AGENT}`, ...(ownOrigins(spec) ? [`--blocked-origins=${ownOrigins(spec)}`] : [])],
+        command: "node",
+        args: [...playwrightArguments(spec.browser), `--user-agent=${RUN_BROWSER_AGENT}`, ...(ownOrigins(spec) ? [`--blocked-origins=${ownOrigins(spec)}`] : [])],
       },
     },
   };

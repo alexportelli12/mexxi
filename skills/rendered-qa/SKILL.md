@@ -173,6 +173,9 @@ Smallest fix) plus:
 Also list what you tested that worked, which checks you skipped and why, and
 any limit on the evidence (for example, video recording unavailable).
 
+End every pass that used the Playwright MCP with `browser_close`. An open
+browser holds about a gigabyte until the session ends.
+
 End with **Could become executable checks**: findings or checks that the app
 repository could automate, such as failing on console errors, asserting no
 horizontal overflow at mobile width, or loading under reduced motion. Suggest

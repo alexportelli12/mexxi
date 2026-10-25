@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { isDeepStrictEqual } from "node:util";
-import { registrationCommands, registrationDrift } from "./lib/browser.mjs";
+import { installPlaywrightMcp, npmInstall, registeredPlaywrightVersions, registrationCommands, registrationDrift } from "./lib/browser.mjs";
 import { applyMods, planMods } from "./lib/claude-mods.mjs";
 import { desiredSettings, planSettingsMerge, writeSettingsMerge } from "./lib/claude-settings.mjs";
 import { ConfigError, abbreviateHome, configPath, loadConfig, minimalConfig, resolveConfig } from "./lib/config.mjs";
@@ -257,7 +257,7 @@ export async function install(options = {}) {
   const migrateFrom = options.migrateFrom ? path.resolve(options.migrateFrom) : null;
   if (migrateFrom && within(checkout, migrateFrom)) throw new Error("--migrate-from must name the old checkout, not this one");
   const { config, exists, write: configToWrite } = await installationConfig({ home, checkout, configFile, configSource: options.configSource });
-  const rendered = await renderHostFiles({ checkout, config });
+  const rendered = await renderHostFiles({ checkout, config, home });
   const linkOptions = { ...options, home, checkout, generated, hosts: config.hosts, segwi: config.segwi.enabled };
   const entries = await links(linkOptions);
   const stale = await staleLinks({ ...linkOptions, migrateFrom, rendered, expected: new Set(entries.map(([destination]) => destination)) });
@@ -404,7 +404,7 @@ export async function install(options = {}) {
       ...(modsPlan?.drift ?? []),
       ...segwiUnits.drift,
       ...await registrationDrift({
-        browser: config.browser, hosts: config.hosts,
+        browser: config.browser, hosts: config.hosts, home,
         claudeJson: options.claudeJson ?? path.join(home, ".claude.json"),
         codexConfig: path.join(options.codex ?? path.join(home, ".codex"), "config.toml"),
       }),
@@ -453,10 +453,27 @@ export async function install(options = {}) {
       modsFailed = error.message;
     }
   }
-  const registration = Object.fromEntries(Object.entries(registrationCommands(config.browser)).filter(([host]) => config.hosts[host]));
+  // Like the mods: a failed npm install is reported, not thrown, and stays in
+  // --check's drift until a rerun installs it. Only the real home runs npm.
+  let playwrightMcp;
+  if (Object.values(config.hosts).some(Boolean)) {
+    const npm = options.npmInstall ?? (home === os.homedir() ? npmInstall : null);
+    playwrightMcp = npm
+      ? await installPlaywrightMcp(config.browser, {
+        home,
+        install: npm,
+        keep: await registeredPlaywrightVersions({
+          hosts: config.hosts,
+          claudeJson: options.claudeJson ?? path.join(home, ".claude.json"),
+          codexConfig: path.join(options.codex ?? path.join(home, ".codex"), "config.toml"),
+        }),
+      }).catch((error) => ({ version: config.browser.playwrightMcpVersion, failed: error.message }))
+      : { version: config.browser.playwrightMcpVersion, skipped: "not the real home" };
+  }
+  const registration = Object.fromEntries(Object.entries(registrationCommands(config.browser, home)).filter(([host]) => config.hosts[host]));
   return {
     created: pending.length, relinked: relinks.length, removed: stale.length, rendered: drift.length, checked: entries.length,
-    settings: settingsPlan?.drift.length ?? 0, ...(hasUnitWork && { segwi: { ...unitSummary, systemctl: unitOutcome.systemctl, failed: unitOutcome.failed } }), ...modsSummary(modsPlan), ...(modsFailed && { mods: "failed", modsFailed }), registration,
+    settings: settingsPlan?.drift.length ?? 0, ...(playwrightMcp && { playwrightMcp }), ...(hasUnitWork && { segwi: { ...unitSummary, systemctl: unitOutcome.systemctl, failed: unitOutcome.failed } }), ...modsSummary(modsPlan), ...(modsFailed && { mods: "failed", modsFailed }), registration,
     // Codex skips a new or changed hook until it is trusted in /hooks.
     codexHooksChanged: Boolean(codexHooksPlan?.file),
   };
