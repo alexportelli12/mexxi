@@ -36,25 +36,32 @@ test("Playwright comes from the cache of the pinned MCP version, then from the t
   };
   await install(path.join(cache, "aaa"), { "@playwright/mcp": "0.0.1", "playwright-core": "1.0.0" });
   await install(path.join(cache, "bbb"), { "@playwright/mcp": "0.0.83", "playwright-core": "1.64.0" });
+  const installed = path.join(root, "installed");
   assert.equal(
-    await locatePlaywright({ cacheRoot: cache, mcpVersion: "0.0.83", cwd: emptyCwd }),
+    await locatePlaywright({ installRoot: installed, cacheRoot: cache, mcpVersion: "0.0.83", cwd: emptyCwd }),
     path.join(cache, "bbb/node_modules/playwright-core/index.mjs"),
+  );
+  // The copy mexxi's installer keeps wins over npx's cache.
+  await install(path.join(installed, "0.0.83"), { "@playwright/mcp": "0.0.83", "playwright-core": "1.64.0" });
+  assert.equal(
+    await locatePlaywright({ installRoot: installed, cacheRoot: cache, mcpVersion: "0.0.83", cwd: emptyCwd }),
+    path.join(installed, "0.0.83/node_modules/playwright-core/index.mjs"),
   );
   // Node also resolves from NODE_PATH and ~/.node_modules, fixed at startup, so
   // the not-found case runs in a process with neither.
   const notFound = spawnSync(process.execPath, ["--input-type=module", "-e", `
     const { locatePlaywright } = await import(${JSON.stringify(pathToFileURL(script).href)});
-    await locatePlaywright({ cacheRoot: process.argv[1], mcpVersion: "9.9.9", cwd: process.argv[2] })
+    await locatePlaywright({ installRoot: process.argv[1], cacheRoot: process.argv[1], mcpVersion: "9.9.9", cwd: process.argv[2] })
       .then(() => process.exit(0), (error) => { process.stderr.write(error.message); process.exit(3); });
   `, cache, emptyCwd], { encoding: "utf8", env: { ...process.env, NODE_PATH: "", HOME: root, USERPROFILE: root } });
   assert.equal(notFound.status, 3, notFound.stderr);
-  assert.match(notFound.stderr, /Playwright was not found\. Run `npx -y @playwright\/mcp@9\.9\.9 --help`/);
+  assert.match(notFound.stderr, /Playwright was not found\. Run `node scripts\/install\.mjs` in the mexxi checkout to install @playwright\/mcp@9\.9\.9/);
   const repository = path.join(root, "repository");
   await install(repository, { "playwright-core": "1.2.3" });
   await writeFile(path.join(repository, "node_modules/playwright-core/index.js"), "");
   await writeFile(path.join(repository, "node_modules/playwright-core/package.json"), JSON.stringify({ name: "playwright-core", version: "1.2.3", main: "index.js" }));
   assert.equal(
-    await locatePlaywright({ cacheRoot: cache, mcpVersion: "9.9.9", cwd: repository }),
+    await locatePlaywright({ installRoot: installed, cacheRoot: cache, mcpVersion: "9.9.9", cwd: repository }),
     path.join(repository, "node_modules/playwright-core/index.js"),
   );
 });

@@ -88,17 +88,27 @@ async function copyCheckout(base) {
 // What `claude mcp add` and `codex mcp add` leave behind, so --check has the
 // registrations the installer asks the user to make. The installer never writes
 // these files itself.
+// It also stands in for the pinned @playwright/mcp the installer puts under
+// the home, which tests never fetch from npm.
 async function registerPlaywright(home, { codex = path.join(home, ".codex") } = {}) {
   const { config } = await loadConfig({ file: path.join(home, ".config/mexxi/config.json"), home });
-  const args = ["-y", ...playwrightArguments(config.browser)];
+  await fakePlaywrightMcp(home, config.browser.playwrightMcpVersion);
+  const args = playwrightArguments(config.browser, home);
   if (config.hosts.claude) {
-    await writeFile(path.join(home, ".claude.json"), JSON.stringify({ mcpServers: { playwright: { type: "stdio", command: "npx", args, env: {} } } }));
+    await writeFile(path.join(home, ".claude.json"), JSON.stringify({ mcpServers: { playwright: { type: "stdio", command: "node", args, env: {} } } }));
   }
   if (!config.hosts.codex) return;
   await mkdir(codex, { recursive: true });
   const file = path.join(codex, "config.toml");
   const existing = await readFile(file, "utf8").catch(() => "");
-  await writeFile(file, `${existing}[mcp_servers.playwright]\ncommand = "npx"\nargs = ${JSON.stringify(args)}\n`);
+  await writeFile(file, `${existing}[mcp_servers.playwright]\ncommand = "node"\nargs = ${JSON.stringify(args)}\n`);
+}
+
+async function fakePlaywrightMcp(home, version) {
+  const directory = path.join(home, ".local/share/mexxi/playwright-mcp", version, "node_modules/@playwright/mcp");
+  await mkdir(directory, { recursive: true });
+  await writeFile(path.join(directory, "package.json"), JSON.stringify({ name: "@playwright/mcp", version }));
+  await writeFile(path.join(directory, "cli.js"), "");
 }
 
 function execute(command, args, cwd, env = process.env) {
@@ -668,10 +678,34 @@ test("Playwright MCP comes from config.json: rendered for OpenCode, printed for 
   t.after(() => rm(home, { recursive: true, force: true }));
   const output = path.join(home, "evidence");
   await configure(home, { browser: { playwrightMcpVersion: "0.0.90", executablePath: "/opt/chrome", outputDir: output } });
-  const options = { home, checkout };
+  // The installer fetches the pinned server once, with npm, and drops a version config.json no longer pins.
+  const installs = [];
+  const npmInstall = async (directory, spec) => {
+    installs.push([directory, spec]);
+    await fakePlaywrightMcp(home, "0.0.90");
+  };
+  await fakePlaywrightMcp(home, "0.0.83");
+  const options = { home, checkout, npmInstall };
   const result = await install(options);
+  const installed = path.join(home, ".local/share/mexxi/playwright-mcp");
+  assert.deepEqual(installs, [[path.join(installed, "0.0.90"), "@playwright/mcp@0.0.90"]]);
+  assert.deepEqual(result.playwrightMcp, { version: "0.0.90", installed: true });
+  assert.deepEqual(await readdir(installed), ["0.0.90"]);
+  assert.deepEqual((await install(options)).playwrightMcp, { version: "0.0.90", installed: false }, "an installed version is not fetched again");
+  assert.equal(installs.length, 1);
 
-  const expected = ["npx", "-y", "@playwright/mcp@0.0.90", "--headless", "--isolated", "--executable-path=/opt/chrome", `--output-dir=${output}`];
+  // A version a host registration still runs is kept until it is registered again.
+  await fakePlaywrightMcp(home, "0.0.83");
+  await writeFile(path.join(home, ".claude.json"), JSON.stringify({ mcpServers: { playwright: { type: "stdio", command: "node", args: [path.join(installed, "0.0.83/node_modules/@playwright/mcp/cli.js"), "--headless"] } } }));
+  await install(options);
+  assert.deepEqual((await readdir(installed)).sort(), ["0.0.83", "0.0.90"], "the registered old version stays");
+  await rm(path.join(home, ".claude.json"));
+  await install(options);
+  assert.deepEqual(await readdir(installed), ["0.0.90"], "and goes once nothing runs it");
+
+  // Hosts run it with node, without npx's npm wrapper.
+  const cli = path.join(installed, "0.0.90/node_modules/@playwright/mcp/cli.js");
+  const expected = ["node", cli, "--headless", "--isolated", "--executable-path=/opt/chrome", `--output-dir=${output}`];
   const opencode = JSON.parse(await readFile(path.join(home, ".config/opencode/opencode.json"), "utf8"));
   assert.deepEqual(opencode.mcp.playwright, { type: "local", command: expected, enabled: true });
   assert.ok(!JSON.stringify(opencode).includes("allow-unrestricted-file-access"));
@@ -680,7 +714,7 @@ test("Playwright MCP comes from config.json: rendered for OpenCode, printed for 
     claude: `claude mcp add --scope user playwright ${line}`,
     codex: `codex mcp add playwright ${line}`,
   });
-  assert.deepEqual(result.registration, registrationCommands((await loadConfig({ file: path.join(home, ".config/mexxi/config.json"), home })).config.browser));
+  assert.deepEqual(result.registration, registrationCommands((await loadConfig({ file: path.join(home, ".config/mexxi/config.json"), home })).config.browser, home));
 
   // Nothing registered yet: --check says so and prints the fix.
   await assert.rejects(install({ ...options, check: true }), /claude: Playwright MCP not registered[\s\S]*run: claude mcp add[\s\S]*codex: Playwright MCP not registered[\s\S]*run: codex mcp add/);
@@ -690,8 +724,11 @@ test("Playwright MCP comes from config.json: rendered for OpenCode, printed for 
   // A different version or output directory in either host is drift.
   const claudeJson = path.join(home, ".claude.json");
   const registered = await readFile(claudeJson, "utf8");
-  await writeFile(claudeJson, registered.replace("0.0.90", "latest"));
-  await assert.rejects(install({ ...options, check: true }), /claude: Playwright MCP runs @playwright\/mcp@latest, config\.json pins 0\.0\.90; run claude mcp remove/);
+  await writeFile(claudeJson, registered.replace("/0.0.90/", "/latest/"));
+  await assert.rejects(install({ ...options, check: true }), /claude: Playwright MCP runs node \S*\/latest\/\S*cli\.js, config\.json expects node \S*\/0\.0\.90\/\S*cli\.js; run claude mcp remove/);
+  // A registration from before mexxi ran the server with node is drift too.
+  await writeFile(claudeJson, registered.replace('"command":"node"', '"command":"npx"').replace(JSON.stringify(cli), '"-y","@playwright/mcp@0.0.90"'));
+  await assert.rejects(install({ ...options, check: true }), /claude: Playwright MCP runs @playwright\/mcp@0\.0\.90 through npx, config\.json expects node /);
   await writeFile(claudeJson, registered.replace(output, "/tmp/opencode-playwright"));
   await assert.rejects(install({ ...options, check: true }), /claude: Playwright MCP writes to \/tmp\/opencode-playwright, config\.json expects/);
   await writeFile(claudeJson, registered.replace('"--headless"', '"--headless","--browser","chrome"'));
@@ -707,14 +744,19 @@ test("Playwright MCP comes from config.json: rendered for OpenCode, printed for 
   await writeFile(claudeJson, registered);
   const codexConfig = path.join(home, ".codex/config.toml");
   const codexRegistered = await readFile(codexConfig, "utf8");
-  await writeFile(codexConfig, codexRegistered.replace("0.0.90", "0.0.83"));
-  await assert.rejects(install({ ...options, check: true }), /codex: Playwright MCP runs @playwright\/mcp@0\.0\.83, config\.json pins 0\.0\.90/);
+  await writeFile(codexConfig, codexRegistered.replace("/0.0.90/", "/0.0.83/"));
+  await assert.rejects(install({ ...options, check: true }), /codex: Playwright MCP runs node \S*\/0\.0\.83\/\S*cli\.js, config\.json expects node /);
   // Codex users may format the table their own way: multi-line args, a trailing comma, other tables around it.
   const args = JSON.parse(codexRegistered.match(/^args = (.*)$/m)[1]);
-  await writeFile(codexConfig, `[tui]\nx = 1\n\n[mcp_servers.playwright]\ncommand = "npx"\nargs = [\n  ${args.map((arg) => JSON.stringify(arg)).join(",\n  ")},\n]\n\n[mcp_servers.other]\nargs = ["x"]\n`);
+  await writeFile(codexConfig, `[tui]\nx = 1\n\n[mcp_servers.playwright]\ncommand = "node"\nargs = [\n  ${args.map((arg) => JSON.stringify(arg)).join(",\n  ")},\n]\n\n[mcp_servers.other]\nargs = ["x"]\n`);
   await install({ ...options, check: true });
   await rm(codexConfig);
   await assert.rejects(install({ ...options, check: true }), /codex: Playwright MCP not registered \(.*does not exist\)/);
+  await registerPlaywright(home);
+  // The server the registrations point at must be there.
+  await rm(installed, { recursive: true });
+  await assert.rejects(install({ ...options, check: true }), /Playwright MCP 0\.0\.90 is not installed in \S+playwright-mcp\/0\.0\.90; run node scripts\/install\.mjs/);
+  await fakePlaywrightMcp(home, "0.0.90");
 
   // A host that is switched off is not inspected.
   await configure(home, { hosts: { codex: false }, browser: { playwrightMcpVersion: "0.0.90", executablePath: "/opt/chrome", outputDir: output } });
@@ -732,7 +774,8 @@ test("with no browser.executablePath, every host runs Playwright's own Chromium 
 
   const { browser } = (await loadConfig({ file: path.join(home, ".config/mexxi/config.json"), home })).config;
   assert.equal(browser.executablePath, null);
-  const expected = ["npx", "-y", `@playwright/mcp@${browser.playwrightMcpVersion}`, "--headless", "--isolated", "--browser=chromium", `--output-dir=${output}`];
+  const cli = path.join(home, ".local/share/mexxi/playwright-mcp", browser.playwrightMcpVersion, "node_modules/@playwright/mcp/cli.js");
+  const expected = ["node", cli, "--headless", "--isolated", "--browser=chromium", `--output-dir=${output}`];
   const opencode = JSON.parse(await readFile(path.join(home, ".config/opencode/opencode.json"), "utf8"));
   assert.deepEqual(opencode.mcp.playwright.command, expected);
   for (const line of Object.values(result.registration)) {

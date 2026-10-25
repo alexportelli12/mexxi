@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { playwrightMcpCli } from "./lib/browser.mjs";
 import assert from "node:assert/strict";
 import { access, readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
@@ -125,7 +126,7 @@ export async function check(base = root) {
     "each shared agent must have a Claude Code adapter",
   );
   assert.deepEqual(Object.keys(config.agent).filter((name) => name in claude).sort(), Object.keys(claude).sort());
-  assert.ok(config.mcp.playwright.command.includes(`@playwright/mcp@${defaults.browser.playwrightMcpVersion}`) &&
+  assert.ok(config.mcp.playwright.command[0] === "node" && config.mcp.playwright.command.includes(playwrightMcpCli(defaults.browser)) &&
     config.mcp.playwright.command.includes(`--output-dir=${defaults.browser.outputDir}`), "OpenCode must run the pinned Playwright MCP");
   assert.ok(config.permission.external_directory[`${defaults.paths.worktreeRoot}/**`], "OpenCode must reach the configured worktree root");
   for (const name of Object.keys(claude)) {

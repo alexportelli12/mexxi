@@ -2,6 +2,7 @@
 // installer writes the result to ~/.local/share/mexxi/generated/ and links the
 // hosts to it; `install --check` and `npm run verify` render again and compare,
 // so nothing generated is committed and nothing generated can go stale unseen.
+import os from "node:os";
 import { mkdir, readFile, readdir, rm, rmdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -121,7 +122,7 @@ async function renderCodex(checkout, config, files) {
   }
 }
 
-async function renderOpencode(checkout, config, files) {
+async function renderOpencode(checkout, config, files, home) {
   const template = JSON.parse(await readFile(path.join(checkout, "opencode/opencode.json"), "utf8"));
   const agent = structuredClone(template.agent ?? {});
   const models = config.models.opencode;
@@ -148,14 +149,14 @@ async function renderOpencode(checkout, config, files) {
   // The shared guard and loop breaker run in OpenCode through this plugin,
   // loaded from the clone so its imports of scripts/hooks resolve.
   const plugin = [...(template.plugin ?? []), pathToFileURL(path.join(checkout, "opencode/plugins/mexxi-guard.js")).href];
-  const rendered = { $schema: template.$schema, plugin, agent, permission, mcp: { playwright: opencodePlaywright(config.browser) } };
+  const rendered = { $schema: template.$schema, plugin, agent, permission, mcp: { playwright: opencodePlaywright(config.browser, home) } };
   files.set("opencode/opencode.json", `${JSON.stringify(rendered, null, 2)}\n`);
 }
 
 // Returns Map<relative path, content> for the generated directory.
-export async function renderHostFiles({ checkout, config }) {
+export async function renderHostFiles({ checkout, config, home = os.homedir() }) {
   const files = new Map();
-  await renderOpencode(checkout, config, files);
+  await renderOpencode(checkout, config, files, home);
   await renderClaude(checkout, config, files);
   await renderCodex(checkout, config, files);
   return files;

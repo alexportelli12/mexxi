@@ -4,14 +4,16 @@
 // targets, a dev-error-overlay check and console errors. Output is JSON.
 //
 // Playwright is not a dependency of this repository. It is resolved at run
-// time: first the playwright-core that the pinned @playwright/mcp brought into
-// npx's cache (the browser tooling agents already use), then the target
-// repository's own playwright-core or playwright.
+// time: first the playwright-core that the pinned @playwright/mcp brought along,
+// in the copy mexxi's installer keeps (the browser tooling agents already use)
+// or else npx's cache, then the target repository's own playwright-core or
+// playwright.
 import { createRequire } from "node:module";
 import { mkdir, readdir, readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { playwrightMcpRoot } from "../../../scripts/lib/browser.mjs";
 import { loadConfig } from "../../../scripts/lib/config.mjs";
 
 // WCAG 2.5.8 (AA) minimum, and the comfortable size used for primary actions.
@@ -40,8 +42,8 @@ Options:
   --timeout <ms>       Navigation and readiness timeout; default 15000.
   --help               Show this help.
 
-Playwright is resolved from the npx cache of the pinned @playwright/mcp, then from
-the current directory's node_modules.`;
+Playwright is resolved from the pinned @playwright/mcp that mexxi installed (or npx's
+cache of it), then from the current directory's node_modules.`;
 
 const OPTIONS = ["url", "out", "name", "phase", "viewports", "wait-for", "executable", "timeout"];
 
@@ -92,12 +94,15 @@ async function versionOf(directory) {
 
 // Returns the entry point of a usable playwright-core, or throws naming both
 // places it looked and how to provide one.
-export async function locatePlaywright({ cacheRoot = path.join(os.homedir(), ".npm", "_npx"), mcpVersion, cwd = process.cwd() } = {}) {
-  for (const entry of (await readdir(cacheRoot).catch(() => [])).sort()) {
-    const modules = path.join(cacheRoot, entry, "node_modules");
-    if (await versionOf(path.join(modules, "@playwright", "mcp")) === mcpVersion) {
-      const core = path.join(modules, "playwright-core");
-      if (await versionOf(core)) return path.join(core, "index.mjs");
+// Both roots hold <entry>/node_modules/@playwright/mcp.
+export async function locatePlaywright({ installRoot = playwrightMcpRoot(), cacheRoot = path.join(os.homedir(), ".npm", "_npx"), mcpVersion, cwd = process.cwd() } = {}) {
+  for (const root of [installRoot, cacheRoot]) {
+    for (const entry of (await readdir(root).catch(() => [])).sort()) {
+      const modules = path.join(root, entry, "node_modules");
+      if (await versionOf(path.join(modules, "@playwright", "mcp")) === mcpVersion) {
+        const core = path.join(modules, "playwright-core");
+        if (await versionOf(core)) return path.join(core, "index.mjs");
+      }
     }
   }
   const require = createRequire(path.join(cwd, "noop.js"));
@@ -109,7 +114,7 @@ export async function locatePlaywright({ cacheRoot = path.join(os.homedir(), ".n
     }
   }
   throw new Error(
-    `Playwright was not found. Run \`npx -y @playwright/mcp@${mcpVersion} --help\` once to fill npx's cache, ` +
+    `Playwright was not found. Run \`node scripts/install.mjs\` in the mexxi checkout to install @playwright/mcp@${mcpVersion}, ` +
     "or install playwright-core in the target repository, then run the sweep again.",
   );
 }
