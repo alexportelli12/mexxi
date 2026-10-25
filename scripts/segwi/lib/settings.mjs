@@ -59,6 +59,16 @@ export function settingsFromConfig(config, { home = os.homedir() } = {}) {
     if (unknown.length) throw new ConfigError(`segwi.repositories: ${repository.name} has unknown actions ${unknown.join(", ")}`);
     return { ...repository, path: path.resolve(expandHome(repository.path, home)) };
   });
+  const names = new Set();
+  segwi.extensions = (segwi.extensions ?? []).map((folder) => {
+    const resolved = path.resolve(expandHome(folder, home));
+    const name = path.basename(resolved);
+    if (!REPO_NAME.test(name)) throw new ConfigError(`segwi.extensions: folder name "${name}" must be lower-case letters, digits, dots, dashes or underscores (up to 64)`);
+    if (names.has(name)) throw new ConfigError(`segwi.extensions: two folders are named "${name}"`);
+    if (name === "tokens.css") throw new ConfigError(`segwi.extensions: "${name}" is a name segwi serves itself; rename the folder`);
+    names.add(name);
+    return resolved;
+  });
   const subjectProblem = vapidSubjectProblem(segwi.vapidSubject ?? "");
   if (subjectProblem) throw new ConfigError(`segwi.vapidSubject: "${segwi.vapidSubject}" ${subjectProblem}`);
   return { segwi, deny: [...config.guard.deny], worktreeRoot: config.paths.worktreeRoot, browser: config.browser, workflowPorts: config.workflow.ports };

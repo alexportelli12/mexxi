@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import type { Action } from '../words';
-import type { Approval, Health, AuditRow, Repo, Run, RunDetail } from '../models';
+import type { Approval, Health, AuditRow, Extension, Repo, Run, RunDetail } from '../models';
 
 /** A failed request: the status and the server's own words. */
 export class ApiError extends Error {
@@ -53,6 +53,10 @@ export class ApiService {
 
   async approvals(): Promise<Approval[]> {
     return (await this.call<{ approvals: Approval[] }>('GET', '/api/approvals?status=pending')).approvals;
+  }
+
+  async extensions(): Promise<Extension[]> {
+    return (await this.call<{ extensions: Extension[] }>('GET', '/api/extensions')).extensions;
   }
 
   async repos(): Promise<Repo[]> {

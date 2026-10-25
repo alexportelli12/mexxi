@@ -282,6 +282,12 @@
           },
           "default": []
         },
+        "extensions": {
+          "description": "Local folders whose page and API segwi serves at /ext/<folder name>/, behind the same sign-in, and links from its menu. Each holds a server.mjs and a public folder; docs/segwi.md describes the contract. An extension runs inside segwi with your permissions, so list only code you trust.",
+          "type": "array",
+          "items": { "type": "string", "pattern": "^(~/|/)" },
+          "default": []
+        },
         "auth": {
           "description": "Who may use the web app.",
           "type": "object",

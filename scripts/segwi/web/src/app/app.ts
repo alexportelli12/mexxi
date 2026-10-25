@@ -1,7 +1,9 @@
-import { ChangeDetectionStrategy, Component, effect, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, signal } from '@angular/core';
 import { Title } from '@angular/platform-browser';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
+import { ApiService } from './core/api';
 import { LiveService } from './core/live';
+import type { Extension } from './models';
 import { Banner } from './ui/banner';
 import { NotificationsToggle } from './ui/notifications-toggle';
 import { documentTitle, productName } from './words';
@@ -34,6 +36,10 @@ import { documentTitle, productName } from './words';
               </a>
             }
           </nav>
+          <!-- Extension pages are outside the app, so they are plain links on every screen size. -->
+          @for (extension of extensions(); track extension.name) {
+            <a [href]="extension.url" class="inline-flex min-h-11 items-center rounded-card px-3 text-[15px] text-muted hover:text-text">{{ extension.title }}</a>
+          }
           <segwi-notifications-toggle />
         </div>
       </div>
@@ -75,6 +81,7 @@ import { documentTitle, productName } from './words';
 export class App {
   protected readonly live = inject(LiveService);
   protected readonly productName = productName;
+  protected readonly extensions = signal<Extension[]>([]);
   protected readonly nav = [
     { path: '/runs', label: 'Runs', badge: false },
     { path: '/approvals', label: 'Approvals', badge: true },
@@ -86,5 +93,7 @@ export class App {
     const title = inject(Title);
     effect(() => title.setTitle(documentTitle(this.live.needsCount())));
     this.live.start();
+    // Without extensions, or when the list can't load, the menu is as it always was.
+    inject(ApiService).extensions().then((list) => this.extensions.set(list), () => undefined);
   }
 }
