@@ -34,8 +34,12 @@ export async function runLogged({ command, cwd, logPath, env = process.env }) {
 
 // runLogged once one of the machine's workflow.verifySlots is free. about
 // (sessionId, kind) is what the slot and the queue show; queuedMs is how long
-// the run waited, and durationMs still counts only the run.
-export async function runLoggedInSlot(config, about, options) {
-  const { queuedMs, result } = await withRunSlot(config.paths.worktreeRoot, config.workflow.verifySlots, about, () => runLogged(options));
+// the run waited, and durationMs still counts only the run. beforeRun checks
+// what the wait may have changed, inside the slot, and throws to stop.
+export async function runLoggedInSlot(config, about, options, { beforeRun = async () => {} } = {}) {
+  const { queuedMs, result } = await withRunSlot(config.paths.worktreeRoot, config.workflow.verifySlots, about, async () => {
+    await beforeRun();
+    return runLogged(options);
+  });
   return { ...result, queuedMs };
 }

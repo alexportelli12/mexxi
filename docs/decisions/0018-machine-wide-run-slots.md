@@ -16,9 +16,9 @@ Measured on 2026-10-25 on an 8 vCPU machine, with a web app repository whose ver
 ## Decision
 
 - **A fixed number of slots for the whole machine.** `workflow.verifySlots` (2 by default) is how many setup and verify runs `ibni` lets run at once, in any repository. Both kinds share the slots, since both load the same CPU.
-- **A run beyond that waits in a queue.** It waits as long as it takes, with no timeout, as setup and verify themselves have none. While it waits, a file in `<paths.worktreeRoot>/.ibni/slots/queue/` names its session and kind, so anyone can see what is queued.
+- **A run beyond that waits for a free slot.** It waits as long as it takes, with no timeout, as setup and verify themselves have none. While it waits, a file in `<paths.worktreeRoot>/.ibni/slots/queue/` names its session and kind, so anyone can see what is queued.
 - **The wait is reported.** `queuedMs` in the setup and verify JSON, and in the recorded verification, says how long the run waited. `durationMs` still counts only the run.
-- **A slot whose holder died is taken over.** A slot is a lock directory with its owner's process ID, like the repository lock, so a crashed `ibni` never blocks the queue.
+- **A slot whose holder died is taken over.** A slot is a lock directory with its owner's process ID, like the repository lock, so a crashed `ibni` never blocks the queue. A takeover checks that what it moved aside was still the dead owner's, and a slot left with no owner for a minute is reclaimed. Waiting runs drop queue entries whose process is gone.
 - **Reusing a CI baseline takes no slot**, because nothing runs.
 
 ## Consequences

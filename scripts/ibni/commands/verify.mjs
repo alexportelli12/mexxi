@@ -86,28 +86,31 @@ export async function verifyWorkspace({ cwd = process.cwd(), sessionId }) {
   const { baseline } = metadata;
   if (baseline?.reused && baseline.sha && await treeOf(repository.root, baseline.sha) === treeSha) {
     const verification = {
-      treeSha, headSha, passed: true, exitCode: null, durationMs: 0, logPath: null, ranAt, command, commandSource,
+      treeSha, headSha, passed: true, exitCode: null, durationMs: 0, queuedMs: 0, logPath: null, ranAt, command, commandSource,
       reused: { check: baseline.check, sha: baseline.sha, url: baseline.url ?? null },
     };
     return result(verification, await recordVerification(cwd, sessionId, started, verification));
   }
 
-  // prepare found the block free, but anything can bind a port since; a test
-  // server that hits one fails half-way with a less clear EADDRINUSE.
-  const busy = await busyPorts(recordedBlock(metadata));
-  if (busy.length) {
-    throw new WorkspaceError(
-      `port ${busy.join(", ")} of this workspace's block is already in use`,
-      "Stop whatever listens there (often a dev server started in this workspace), then run ibni verify again.",
-    );
-  }
   // Sessions prepared before evidence directories existed get one on demand.
   const evidenceDir = evidenceDirectoryFor(repository.root);
   await mkdir(evidenceDir, { recursive: true });
   const logPath = path.join(evidenceDir, `verify-${treeSha.slice(0, 12)}.log`);
   const config = await workspaceConfig();
   const env = sessionRunEnvironment(metadata, config);
-  const outcome = await runLoggedInSlot(config, { sessionId, kind: "verify", worktreePath: repository.root }, { command, cwd: repository.root, logPath, env });
+  // prepare found the block free, but anything can bind a port since; a test
+  // server that hits one fails half-way with a less clear EADDRINUSE. Checked
+  // once the slot is held, since the wait for it can take minutes.
+  const portsFree = async () => {
+    const busy = await busyPorts(recordedBlock(metadata));
+    if (busy.length) {
+      throw new WorkspaceError(
+        `port ${busy.join(", ")} of this workspace's block is already in use`,
+        "Stop whatever listens there (often a dev server started in this workspace), then run ibni verify again.",
+      );
+    }
+  };
+  const outcome = await runLoggedInSlot(config, { sessionId, kind: "verify", worktreePath: repository.root }, { command, cwd: repository.root, logPath, env }, { beforeRun: portsFree });
   const verification = {
     treeSha, headSha, passed: outcome.passed, exitCode: outcome.exitCode, durationMs: outcome.durationMs, queuedMs: outcome.queuedMs, logPath, ranAt, command, commandSource,
     ...(outcome.signal ? { signal: outcome.signal } : {}),

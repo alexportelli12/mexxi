@@ -113,7 +113,7 @@ export const COMMANDS = {
       "(reused) and nothing runs. The command gets the workspace's portEnv, and ibni refuses to start it",
       "while any port of the block is bound, so a test server never fails half-way on a taken port.",
       "At most workflow.verifySlots setup and verify runs go at once on this machine, in any repository;",
-      "the rest wait their turn, listed in <worktreeRoot>/.ibni/slots/queue, and report it as queuedMs.",
+      "the rest wait for a free slot, listed in <worktreeRoot>/.ibni/slots/queue, and report it as queuedMs.",
       "The output goes to evidenceDir/verify-<tree>.log, never to stdout,",
       "and the lock is held only to check and record, so it is safe to run in the background.",
       "When the default branch has no verify command at all (no verify in .mexxi.json, no verify",

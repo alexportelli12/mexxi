@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { access, chmod, mkdir, mkdtemp, readdir, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, readdir, readFile, rename, rm, symlink, utimes, writeFile } from "node:fs/promises";
 import http from "node:http";
 import net from "node:net";
 import os from "node:os";
@@ -1365,7 +1365,9 @@ const queueDirectory = (fixture) => path.join(fixture.worktrees, ".ibni", "slots
 // third run starts while two hold the machine, or the wait goes unreported.
 test("verify runs beyond workflow.verifySlots wait in a readable queue and report queuedMs", async (t) => {
   const fixture = await createFixture(t);
-  const runs = await timedVerify(fixture, 1500);
+  // Long enough that the third run is queued before either of the first two
+  // ends, even when the machine is busy running other suites.
+  const runs = await timedVerify(fixture, 3000);
   await slotsConfig(fixture, 2);
   const prepared = [];
   for (const slug of ["slot a", "slot b", "slot c"]) prepared.push(await lifecycle(fixture, fixture.control, "prepare", { slug }));
@@ -1408,6 +1410,49 @@ test("a run slot left by a process that died is taken over", { timeout: 30_000 }
   const result = await verify(fixture, prepared);
   assert.equal(result.json.passed, true);
   assert.ok(result.json.queuedMs < 1000, `took the dead holder's slot at once (${result.json.queuedMs} ms)`);
+});
+
+// Break: a slot directory left without an owner (its process died between
+// creating it and writing the owner) fails every run on the machine.
+test("an ownerless run slot older than a minute is reclaimed", { timeout: 30_000 }, async (t) => {
+  const fixture = await createFixture(t);
+  await slotsConfig(fixture, 1);
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "ownerless slot" });
+  const slot = path.join(fixture.worktrees, ".ibni", "slots", "slot-0");
+  await mkdir(slot, { recursive: true });
+  const old = new Date(Date.now() - 2 * 60 * 1000);
+  await utimes(slot, old, old);
+  assert.equal((await verify(fixture, prepared)).json.passed, true);
+});
+
+// Break: a waiter that was killed stays in the queue for ever, so the queue
+// no longer says what is waiting.
+test("waiting runs drop queue entries whose process is gone", { timeout: 60_000 }, async (t) => {
+  const fixture = await createFixture(t);
+  await slotsConfig(fixture, 1);
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "pruned queue" });
+  const holder = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60000)"]);
+  t.after(() => holder.kill());
+  const slot = path.join(fixture.worktrees, ".ibni", "slots", "slot-0");
+  await mkdir(slot, { recursive: true });
+  await writeFile(path.join(slot, "owner.json"), JSON.stringify({ hostname: os.hostname(), pid: holder.pid, token: "live", startedAt: new Date().toISOString() }));
+  const dead = spawn(process.execPath, ["-e", "0"]);
+  await new Promise((resolve) => dead.once("close", resolve));
+  const ghost = path.join(queueDirectory(fixture), `${dead.pid}-ghost.json`);
+  await mkdir(queueDirectory(fixture), { recursive: true });
+  await writeFile(ghost, JSON.stringify({ sessionId: "gone", kind: "verify", hostname: os.hostname(), pid: dead.pid }));
+
+  const pending = verify(fixture, prepared);
+  let entries = [];
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    entries = (await readdir(queueDirectory(fixture))).filter((name) => name.endsWith(".json"));
+    if (entries.length === 1 && !entries.includes(path.basename(ghost))) break;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  assert.equal(entries.length, 1, `only the live waiter is queued (${entries.join(", ")})`);
+  assert.notEqual(entries[0], path.basename(ghost));
+  holder.kill();
+  assert.equal((await pending).json.passed, true, "the slot is taken once its holder is gone");
 });
 
 // A local stand-in for OpenRouter's Decisions API: answers each request from
