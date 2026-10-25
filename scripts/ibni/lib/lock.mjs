@@ -20,8 +20,11 @@ export function processIsAlive(pid) {
 
 // A lock is a directory holding its owner's pid, so a lock left by a process
 // that died is taken over rather than waited on. what names it in errors.
-async function acquireLock(lockPath, what) {
+// With wait false, a lock a live process holds returns null at once; about
+// is recorded with the owner, for anyone reading who holds it.
+async function acquireLock(lockPath, what, { wait = true, about = {} } = {}) {
   const owner = {
+    ...about,
     hostname: os.hostname(),
     pid: process.pid,
     token: randomUUID(),
@@ -53,6 +56,7 @@ async function acquireLock(lockPath, what) {
       }
       unreadableSince = null;
       if (existing.hostname !== os.hostname() || processIsAlive(existing.pid)) {
+        if (!wait) return null;
         if (Date.now() >= deadline) {
           throw new WorkspaceError(
             `timed out waiting for the ${what}`,
@@ -109,6 +113,42 @@ export async function withMachineLock(worktreeRoot, name, operation) {
   const lock = await acquireLock(path.join(directory, `${name}.lock`), `machine-wide ${name} lock`);
   try {
     return await operation();
+  } finally {
+    await releaseRepositoryLock(lock);
+  }
+}
+
+const SLOT_POLL_MS = 250;
+
+// At most `slots` setup or verify runs at once on this machine, whatever the
+// repository: two eduline verify runs together take 29% longer, and three make
+// its unit tests time out. A run beyond that waits, for as long as it takes,
+// in a queue file others can read, and reports how long it waited. A slot or
+// queue entry whose process died is taken over or ignored.
+export async function withRunSlot(worktreeRoot, slots, about, operation) {
+  const directory = path.join(worktreeRoot, MACHINE_STATE_DIRECTORY, "slots");
+  const queue = path.join(directory, "queue");
+  await mkdir(queue, { recursive: true });
+  const queuedAt = Date.now();
+  const waiting = path.join(queue, `${process.pid}-${randomUUID()}.json`);
+  let lock = null;
+  try {
+    while (!lock) {
+      for (let slot = 0; slot < slots && !lock; slot += 1) {
+        lock = await acquireLock(path.join(directory, `slot-${slot}`), "run slot", { wait: false, about: { ...about, queuedAt: new Date(queuedAt).toISOString() } });
+      }
+      if (lock) break;
+      await writeFile(waiting, `${JSON.stringify({ ...about, pid: process.pid, queuedAt: new Date(queuedAt).toISOString() })}\n`, { flag: "wx", mode: 0o600 }).catch((error) => {
+        if (error.code !== "EEXIST") throw error;
+      });
+      await new Promise((resolve) => setTimeout(resolve, SLOT_POLL_MS));
+    }
+  } finally {
+    await rm(waiting, { force: true });
+  }
+  const queuedMs = Date.now() - queuedAt;
+  try {
+    return { queuedMs, result: await operation() };
   } finally {
     await releaseRepositoryLock(lock);
   }

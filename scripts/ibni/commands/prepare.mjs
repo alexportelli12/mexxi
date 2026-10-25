@@ -148,7 +148,7 @@ async function setUpPrepared(repository, config, { result, allocation, plan, loc
   };
   let setup;
   try {
-    setup = await runSetup({ plan, worktreePath: result.worktreePath, evidenceDir: result.evidenceDir, lockfiles, env: sessionRunEnvironment(metadata, config) });
+    setup = await runSetup({ plan, worktreePath: result.worktreePath, evidenceDir: result.evidenceDir, lockfiles, env: sessionRunEnvironment(metadata, config), config, sessionId: result.sessionId });
   } catch (error) {
     throw await rollback(error);
   }

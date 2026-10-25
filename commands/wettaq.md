@@ -37,7 +37,9 @@ default. Wherever this command says "run the verify command", run
 worktree root on the committed tree, writes the output to a log in
 `evidenceDir` and records the result. Run it in the background where your host
 supports that, wait for it to finish rather than polling, and read only its
-final JSON (`passed`, `logPath`, and `logTail` when it failed). Never run the
+final JSON (`passed`, `logPath`, and `logTail` when it failed). It may first
+wait for one of the machine's verify slots (`queuedMs` says how long); a slow
+start is that queue, not a hang, so never stop it for that. Never run the
 full `verifyCommand` by hand: `record-evidence` and `publish` accept only a
 result `ibni verify` recorded on exactly the tree being delivered.
 

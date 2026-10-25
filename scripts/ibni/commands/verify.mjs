@@ -5,7 +5,7 @@ import { workspaceConfig } from "../lib/config.mjs";
 import { WorkspaceError } from "../lib/errors.mjs";
 import { assertClean, assertNoGitOperation, cleanOutput, git } from "../lib/git.mjs";
 import { withRepositoryLock } from "../lib/lock.mjs";
-import { logTail, runLogged } from "../lib/logged-run.mjs";
+import { logTail, runLoggedInSlot } from "../lib/logged-run.mjs";
 import { evidenceDirectoryFor, sessionVerifyCommand, updateMetadata } from "../lib/metadata.mjs";
 import { busyPorts, recordedBlock, sessionRunEnvironment } from "../lib/ports.mjs";
 import { ownedSession } from "../lib/session.mjs";
@@ -105,10 +105,11 @@ export async function verifyWorkspace({ cwd = process.cwd(), sessionId }) {
   const evidenceDir = evidenceDirectoryFor(repository.root);
   await mkdir(evidenceDir, { recursive: true });
   const logPath = path.join(evidenceDir, `verify-${treeSha.slice(0, 12)}.log`);
-  const env = sessionRunEnvironment(metadata, await workspaceConfig());
-  const outcome = await runLogged({ command, cwd: repository.root, logPath, env });
+  const config = await workspaceConfig();
+  const env = sessionRunEnvironment(metadata, config);
+  const outcome = await runLoggedInSlot(config, { sessionId, kind: "verify", worktreePath: repository.root }, { command, cwd: repository.root, logPath, env });
   const verification = {
-    treeSha, headSha, passed: outcome.passed, exitCode: outcome.exitCode, durationMs: outcome.durationMs, logPath, ranAt, command, commandSource,
+    treeSha, headSha, passed: outcome.passed, exitCode: outcome.exitCode, durationMs: outcome.durationMs, queuedMs: outcome.queuedMs, logPath, ranAt, command, commandSource,
     ...(outcome.signal ? { signal: outcome.signal } : {}),
   };
   const recorded = await recordVerification(cwd, sessionId, started, verification);

@@ -117,6 +117,7 @@
             "blockSize": { "description": "Ports in each workspace's block. ibni passes them to setup and verify as PORT (the first) and MEXXI_PORT_0 to MEXXI_PORT_<blockSize-1>, so one workspace can run a dev server and several test servers at once.", "type": "integer", "minimum": 1, "maximum": 100, "default": 10 }
           }
         },
+        "verifySlots": { "description": "How many setup and verify runs ibni lets run at once on this machine, across every repository; the rest wait in a queue and report the wait as queuedMs. Two eduline verify runs together on 8 vCPUs took 29% longer and passed; three made its unit tests time out.", "type": "integer", "minimum": 1, "maximum": 64, "default": 2 },
         "portVariables": {
           "description": "Variables a repository already reads for its ports, mapped to an offset in its workspace's block, keyed by the folder name of the repository's checkout. ibni sets each one as the block's first port plus the offset for setup and verify, so a repository's test servers move to the block without a code change. Offset 0 is PORT.",
           "type": "object",

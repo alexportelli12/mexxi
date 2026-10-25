@@ -6,7 +6,7 @@ import path from "node:path";
 import { OPT_IN_FILE } from "./baseline.mjs";
 import { WorkspaceError } from "./errors.mjs";
 import { cleanOutput, git } from "./git.mjs";
-import { logTail, runLogged } from "./logged-run.mjs";
+import { logTail, runLoggedInSlot } from "./logged-run.mjs";
 
 export const LOCKFILE_SETUP = {
   "package-lock.json": "npm ci --prefer-offline --no-audit --no-fund",
@@ -52,12 +52,13 @@ const setupNextAction = (sessionId) => `Run ibni setup --session ${sessionId} to
 
 // Runs the plan in the worktree and returns what metadata and JSON report.
 // A plan without a command reports why nothing ran.
-// env is the whole environment the command gets (sessionRunEnvironment).
-export async function runSetup({ plan, worktreePath, evidenceDir, lockfiles, env = process.env }) {
+// env is the whole environment the command gets (sessionRunEnvironment). The
+// install waits for a run slot, like verify, since it competes for the same CPU.
+export async function runSetup({ plan, worktreePath, evidenceDir, lockfiles, env = process.env, config, sessionId }) {
   if (!plan.command) return { ran: false, command: null, reason: plan.reason, lockfiles };
   const logPath = path.join(evidenceDir, SETUP_LOG);
   const ranAt = new Date().toISOString();
-  const outcome = await runLogged({ command: plan.command, cwd: worktreePath, logPath, env });
+  const outcome = await runLoggedInSlot(config, { sessionId, kind: "setup", worktreePath }, { command: plan.command, cwd: worktreePath, logPath, env });
   return {
     ran: true,
     command: plan.command,
@@ -65,6 +66,7 @@ export async function runSetup({ plan, worktreePath, evidenceDir, lockfiles, env
     passed: outcome.passed,
     exitCode: outcome.exitCode,
     durationMs: outcome.durationMs,
+    queuedMs: outcome.queuedMs,
     logPath,
     ranAt,
     lockfiles,
