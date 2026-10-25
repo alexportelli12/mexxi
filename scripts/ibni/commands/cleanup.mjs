@@ -6,6 +6,7 @@ import { cleanOutput, fetchBranch, git, isAncestor, refExists, remoteBranchSha, 
 import { withRepositoryLock } from "../lib/lock.mjs";
 import { MEDIA_BRANCH, updateMediaBranch } from "../lib/media.mjs";
 import { evidenceDirectoryFor, inspectImplementationWorktrees, workspaceSummary } from "../lib/metadata.mjs";
+import { unmanagedFolders } from "../lib/session.mjs";
 
 // The pull request's state and merge commit from its forge, or a diagnostic.
 async function pullRequestState(root, metadata, config) {
@@ -199,7 +200,8 @@ export async function cleanupWorkspaces({ cwd = process.cwd(), dryRun = true }) 
   const config = await workspaceConfig();
   return withRepositoryLock(repository.commonDirectory, async () => {
     const { gitDirectory: activeGitDirectory } = await currentInvocationWorktree();
-    return cleanupUnlocked(repository, { dryRun, activeGitDirectory, config });
+    const result = await cleanupUnlocked(repository, { dryRun, activeGitDirectory, config });
+    return { ...result, unmanaged: await unmanagedFolders(config.paths.worktreeRoot) };
   });
 }
 

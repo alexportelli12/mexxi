@@ -10,6 +10,7 @@ import MiniSearch from "minisearch";
 import { buildDocs } from "./build.mjs";
 import { buildSidebar } from "./lib/generate.mjs";
 import { checkConsistency } from "./consistency.mjs";
+import { sweepStaleFixtures } from "./lib/fixtures.mjs";
 import { parseFrontmatter } from "./lib/frontmatter.mjs";
 import { globToRegExp } from "./lib/glob.mjs";
 import { readAllowed, trackedPaths } from "./lib/source.mjs";
@@ -17,7 +18,9 @@ import { readAllowed, trackedPaths } from "./lib/source.mjs";
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const git = (cwd, ...args) => execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
 
-// Each copy is about 15 MB, so they are removed once the file's tests finish.
+// Each copy is about 15 MB, so they are removed once the file's tests finish,
+// and copies a killed run left behind are removed before any are made.
+await sweepStaleFixtures("mexxi-docs-");
 const copies = [];
 after(() => Promise.all(copies.map((directory) => rm(directory, { recursive: true, force: true }))));
 

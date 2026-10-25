@@ -37,9 +37,25 @@ export async function lockfilesAt(root, ref) {
   }));
 }
 
-export function setupPlan(settings, lockfiles) {
+// Lockfiles below the root at ref, outside node_modules. A lockfile install
+// covers only the root's, so these go uninstalled unless .mexxi.json names a
+// setup that installs them too.
+export async function nestedLockfilesAt(root, ref) {
+  const listing = (await git(root, ["ls-tree", "-r", "-z", "--name-only", ref])).stdout;
+  return listing.split("\0").filter((file) => file.includes("/") && LOCKFILES.includes(path.posix.basename(file)) && !file.split("/").includes("node_modules"));
+}
+
+export function setupPlan(settings, lockfiles, nested = []) {
   const configured = setupCommandFrom(settings);
   if (configured) return { command: configured, source: OPT_IN_FILE };
+  // Setup still runs (or not) as before; the warning says what it misses.
+  const warning = nested.length
+    ? { warning: `${nested.join(", ")} ${nested.length === 1 ? "was" : "were"} not installed and may need to be; if so, set setup in ${OPT_IN_FILE} to the command that installs every lockfile` }
+    : {};
+  return { ...lockfilePlan(lockfiles), ...warning };
+}
+
+function lockfilePlan(lockfiles) {
   const names = Object.keys(lockfiles);
   if (names.length === 0) return { command: null, reason: `no lockfile and no setup in ${OPT_IN_FILE}; nothing was installed` };
   if (names.length > 1) return { command: null, reason: `more than one lockfile (${names.join(", ")}); set setup in ${OPT_IN_FILE} to say which install runs` };
@@ -55,7 +71,8 @@ const setupNextAction = (sessionId) => `Run ibni setup --session ${sessionId} to
 // env is the whole environment the command gets (sessionRunEnvironment). The
 // install waits for a run slot, like verify, since it competes for the same CPU.
 export async function runSetup({ plan, worktreePath, evidenceDir, lockfiles, env = process.env, config, sessionId }) {
-  if (!plan.command) return { ran: false, command: null, reason: plan.reason, lockfiles };
+  const warning = plan.warning ? { warning: plan.warning } : {};
+  if (!plan.command) return { ran: false, command: null, reason: plan.reason, ...warning, lockfiles };
   const logPath = path.join(evidenceDir, SETUP_LOG);
   const ranAt = new Date().toISOString();
   const outcome = await runLoggedInSlot(config, { sessionId, kind: "setup", worktreePath }, { command: plan.command, cwd: worktreePath, logPath, env });
@@ -63,6 +80,7 @@ export async function runSetup({ plan, worktreePath, evidenceDir, lockfiles, env
     ran: true,
     command: plan.command,
     source: plan.source,
+    ...warning,
     passed: outcome.passed,
     exitCode: outcome.exitCode,
     durationMs: outcome.durationMs,

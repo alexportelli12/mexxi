@@ -1619,6 +1619,52 @@ test("warm caches skip what is over the limit, keep links as they are and never 
   assert.equal(await readlink(path.join(worktree, ".next/cache/link")), "target.txt", "the link stays relative");
 });
 
+// Break: list or cleanup misses a folder ibni did not make (so its disk is
+// never reclaimed), flags ibni's own folders, or removes anything it reports.
+test("list and cleanup report folders under the worktree root that ibni did not make, and remove none", async (t) => {
+  const fixture = await createFixture(t);
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "managed" });
+  const repositoryFolder = path.dirname(prepared.json.worktreePath);
+  const rawWorktree = path.join(fixture.worktrees, "by-hand", "p1");
+  await mkdir(path.dirname(rawWorktree), { recursive: true });
+  await git(fixture.control, "worktree", "add", "--quiet", "--detach", rawWorktree);
+  const strays = [path.join(repositoryFolder, "notes"), path.join(repositoryFolder, "gone.evidence")];
+  for (const stray of strays) await mkdir(stray, { recursive: true });
+
+  const expected = [
+    { path: path.join(fixture.worktrees, "by-hand"), reason: "not a repository folder ibni made" },
+    { path: strays[1], reason: "an evidence directory whose worktree is gone" },
+    { path: strays[0], reason: "a folder with no ibni workspace metadata" },
+  ];
+  const list = await lifecycle(fixture, fixture.control, "list");
+  assert.deepEqual(list.json.unmanaged, expected);
+  const cleanup = await lifecycle(fixture, fixture.control, "cleanup", { "dry-run": "false" });
+  assert.deepEqual(cleanup.json.unmanaged, expected);
+  for (const folder of [rawWorktree, ...strays, prepared.json.worktreePath, prepared.json.evidenceDir]) assert.ok(await pathExists(folder), `${folder} is still there`);
+});
+
+// Break: a repository whose install needs more than its root lockfile gets a
+// half-installed worktree and a setup that reports success without a word.
+test("setup warns when lockfiles below the root are left uninstalled because .mexxi.json names no setup", async (t) => {
+  const fixture = await createFixture(t);
+  const stub = await packageManagerStub(t);
+  for (const folder of ["apps/web", "tools"]) await mkdir(path.join(fixture.seed, folder), { recursive: true });
+  await commitToDefaultBranch(fixture, {
+    "package-lock.json": "{}\n",
+    "apps/web/package-lock.json": "{}\n",
+    "tools/pnpm-lock.yaml": "lockfileVersion: 9\n",
+  }, "nested lockfiles");
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "nested" }, [0], stub.env(fixture));
+  assert.equal(prepared.json.setup.passed, true);
+  assert.equal(prepared.json.setup.warning, "apps/web/package-lock.json, tools/pnpm-lock.yaml were not installed and may need to be; if so, set setup in .mexxi.json to the command that installs every lockfile");
+  const again = await lifecycle(fixture, prepared.json.worktreePath, "setup", { session: prepared.json.sessionId }, [0], stub.env(fixture));
+  assert.equal(again.json.setup.warning, prepared.json.setup.warning);
+
+  await commitToDefaultBranch(fixture, { ".mexxi.json": `${JSON.stringify({ setup: "npm ci" })}\n` }, "full setup");
+  const named = await lifecycle(fixture, fixture.control, "prepare", { slug: "named" }, [0], stub.env(fixture));
+  assert.equal(named.json.setup.warning, undefined);
+});
+
 // A local stand-in for OpenRouter's Decisions API: answers each request from
 // a queue ({status, body} or {hang: true}) and keeps what it was sent.
 async function jevStub(t, responses) {
@@ -2542,6 +2588,7 @@ test("prepare installs from the root lockfile after env provisioning and records
 test("a setup in .mexxi.json wins over the lockfile, and an invalid one stops prepare before anything is made", async (t) => {
   const fixture = await createFixture(t);
   const stub = await packageManagerStub(t);
+  for (const folder of ["apps/web", "tools"]) await mkdir(path.join(fixture.seed, folder), { recursive: true });
   await commitToDefaultBranch(fixture, {
     "package-lock.json": "{}\n",
     ".mexxi.json": `${JSON.stringify({ setup: " node -e \"console.log('custom setup ran')\" " })}\n`,
