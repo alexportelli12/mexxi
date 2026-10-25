@@ -8,6 +8,7 @@ sources:
   - docs/decisions/0012-segwi-permission-modes.md
   - docs/decisions/0013-segwi-run-browser-and-hosts.md
   - docs/decisions/0016-segwi-runs-trusted-like-own-sessions.md
+  - docs/decisions/0020-segwi-local-extensions.md
 reviewed: 2026-10-25
 ---
 
@@ -197,6 +198,21 @@ Your coding agent's command line and output can change between versions, and a b
 It writes the result to `~/.local/share/mexxi/state/segwi-canary.json`, and the health route shows it. A pass adds the agent's version to the versions segwi treats as tested, next to the reviewed list in the repository. A failure exits non-zero, names the agent's version in one line, and sends a `canary_failed` push if push is set up.
 
 The nightly run costs a few cents. Run it yourself any time with `segwi canary`. To refresh the recorded streams the contract tests replay, add `--save-stream <file>`. The file has secrets removed and your paths replaced, so you can review it and commit it in a pull request. The timer never writes into the repository, so a nightly run cannot leave your checkout dirty.
+
+## Add your own page
+
+You may want a page of your own next to the runs, such as a dashboard of this machine, without running and securing another server. An extension is a folder segwi serves at `/ext/<folder name>/`, behind the same sign-in, and links from its menu. List its folder in `config.json` and restart segwi:
+
+```json
+"segwi": { "extensions": ["~/workspace/my-dashboard"] }
+```
+
+The folder holds two things:
+
+- `server.mjs`, whose default export is an `async` function. segwi calls it once at start with `{ name, dataDir, worktreeRoot }` and expects `{ title, routes, close }` back within 10 seconds. `routes` maps `"GET /path"` or `"POST /path"` to a function that gets `{ query, body, identity }` and returns JSON. segwi serves each one at `/ext/<name>/api/path`, checks the sign-in, refuses a call from another site's page and adds a line to the audit log. A GET route must only read: anything that changes something is a POST, which also needs a JSON body from segwi's own origin. `dataDir` is a private folder for the extension's own files, and `close` runs when segwi stops.
+- `public/`, the page itself, starting with `index.html`. It gets segwi's content security policy, so scripts and styles must be files, not inline. Link `/ext/tokens.css` to use segwi's colours and type.
+
+An extension runs inside segwi as you, so list only code you trust. Its page shares segwi's address, so a script on it can do anything segwi's own app can, approvals included. Treat it like segwi's own code: build its text with `textContent`, never by writing data into HTML. One that fails to load, or takes longer than 10 seconds, is skipped with a line in segwi's log, and the rest of segwi starts as usual. [Decision 0020](decisions/0020-segwi-local-extensions.md) explains the choice.
 
 ## Adding a runner
 

@@ -10,6 +10,7 @@ import { createApprovalService } from "./approvals.mjs";
 import { assertAuthConfig, createAuthenticator } from "./auth.mjs";
 import { assertLoopbackBind, assertPortOutsideWorkflow } from "./bind.mjs";
 import { createHandler } from "./http.mjs";
+import { closeExtensions, loadExtensions } from "./extensions.mjs";
 import { createIbniLink } from "./ibni-link.mjs";
 import { createMcpHandler } from "./mcp.mjs";
 import { createPushService } from "./push.mjs";
@@ -48,7 +49,8 @@ export async function startServer({ settings, dataDir, runner, ibni = createIbni
   const push = createPushService({ store, settings, stateDir, ...pushOptions });
   runs.onStatus((status, run) => push.notify(status, run));
   runs.recover();
-  const handler = createHandler({
+  const extensions = await loadExtensions(settings.segwi.extensions ?? [], { dataDir, settings });
+  const handler = createHandler({ extensions,
     store, settings, authenticate: createAuthenticator(auth.web), runs, approvals, broker, push,
     staticRoot: staticRoot && readableDir(staticRoot) ? staticRoot : null, version, stateDir,
     mcp: createMcpHandler({ store, settings, runs, approvals, stateDir, confirmTtlMs: mcpConfirmTtlMs }),
@@ -71,6 +73,7 @@ export async function startServer({ settings, dataDir, runner, ibni = createIbni
       await runs.shutdown();
       approvals.shutdown();
       broker.close();
+      await closeExtensions(extensions);
       server.closeAllConnections();
       await new Promise((resolve) => server.close(resolve));
       store.close();

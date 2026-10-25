@@ -2,6 +2,7 @@
 // built web app (or a one-line 503 until it is built). Bodies are never logged.
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { PROXY_HEADERS, RUN_BROWSER_MARK, assertSameOriginWrite } from "./auth.mjs";
 import { isLoopbackAddress } from "./bind.mjs";
 import { audit } from "./audit.mjs";
@@ -15,9 +16,12 @@ const INTERNAL_BODY_LIMIT = 1024 * 1024;
 // No inline script or style: the web build turns Angular's critical-CSS inlining off instead of loosening this.
 const CSP = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'";
 const NOT_BUILT = "Build the web app: npm --prefix scripts/segwi/web run build\n";
+// segwi's colours and type, for extension pages (decision 0020).
+const TOKENS = fileURLToPath(new URL("../../../site/tokens.css", import.meta.url));
 const TYPES = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".json": "application/json",
   ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".webmanifest": "application/manifest+json", ".woff2": "font/woff2",
+  ".mjs": "text/javascript; charset=utf-8", ".jpg": "image/jpeg", ".webp": "image/webp", ".txt": "text/plain; charset=utf-8", ".map": "application/json",
 };
 
 function securityHeaders(res) {
@@ -89,7 +93,7 @@ async function serveStatic(res, root, pathname) {
 /**
  * @param {{ store: object, settings: object, authenticate: Function, runs: object, approvals: object, broker: object, push: object, staticRoot: string|null, version: string, mcp?: Function|null, stateDir?: string|null }} deps
  */
-export function createHandler({ store, settings, authenticate, runs, approvals, broker, push, staticRoot, version, mcp = null, stateDir = null }) {
+export function createHandler({ store, settings, authenticate, runs, approvals, broker, push, staticRoot, version, mcp = null, stateDir = null, extensions = [] }) {
   const parsers = schemasFor(settings);
   const routes = [
     ["GET", "/api/health", "none", async () => ({ ...(await runs.health(version)), canary: canaryHealth(stateDir) })],
@@ -123,6 +127,7 @@ export function createHandler({ store, settings, authenticate, runs, approvals, 
       return { status: 204 };
     }],
     ["GET", "/api/audit", "audit", async ({ query }) => ({ audit: store.listAudit(query.limit ?? 50) })],
+    ["GET", "/api/extensions", "none", async () => ({ extensions: extensions.map(({ name, title }) => ({ name, title, url: `/ext/${name}/` })) })],
   ].map(([method, template, schema, handler]) => ({
     method, template, schema, handler,
     regex: new RegExp(`^${template.replace(/:(\w+)/g, "(?<$1>[0-9a-f-]{1,64})")}$`),
@@ -193,6 +198,78 @@ export function createHandler({ store, settings, authenticate, runs, approvals, 
     }
   }
 
+  // An extension's API answers like segwi's own: the same identity, the same
+  // same-origin rule for writes, and an audit line naming the extension's route.
+  // A GET is refused when another site's page sent it, too: the identity
+  // comes with every request tailscale serve forwards, so an <img> on any
+  // page you open could otherwise call a route that changes something.
+  async function handleExtensionApi(req, res, extension, routePath, identity) {
+    const template = `${req.method} /ext/${extension.name}/api${routePath}`.slice(0, 200);
+    try {
+      if (["cross-site", "same-site"].includes(req.headers["sec-fetch-site"])) throw new HttpError(403, "Another site's page can't call an extension.");
+      const handler = extension.routes.get(`${req.method} ${routePath}`);
+      if (!handler) throw new HttpError(extension.routes.has(`${req.method === "GET" ? "POST" : "GET"} ${routePath}`) ? 405 : 404, "No such route.");
+      let body = {};
+      if (req.method === "POST") {
+        assertSameOriginWrite(req, { json: true });
+        body = await readBody(req);
+      }
+      const result = await handler({ query: Object.fromEntries(new URL(req.url ?? "/", "http://localhost").searchParams), body, identity });
+      audit(store, { actor: identity, origin: "web", action: template, outcome: "ok" });
+      sendJson(res, 200, result ?? {});
+    } catch (error) {
+      const known = error instanceof HttpError;
+      if (!known) console.error(`segwi: ${template}: ${error.stack ?? error}`);
+      audit(store, { actor: identity, origin: "web", action: template, outcome: known ? error.outcome : "error", detail: known ? `${error.status} ${error.message}` : "500 internal error" });
+      if (!res.headersSent) sendJson(res, known ? error.status : 500, { error: known ? error.message : "Something went wrong in the extension." });
+      else res.end();
+    }
+  }
+
+  async function serveExtensionFile(res, root, relative) {
+    let decoded;
+    try {
+      decoded = decodeURIComponent(relative || "index.html");
+    } catch {
+      res.writeHead(400).end();
+      return;
+    }
+    const file = path.normalize(path.join(root, decoded));
+    if (!file.startsWith(`${root}${path.sep}`)) {
+      res.writeHead(404).end();
+      return;
+    }
+    try {
+      const target = (await stat(file)).isDirectory() ? path.join(file, "index.html") : file;
+      const body = await readFile(target);
+      res.writeHead(200, { "Content-Type": TYPES[path.extname(target)] ?? "application/octet-stream", "Cache-Control": "no-cache" });
+      res.end(body);
+    } catch {
+      res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }).end("Not found.\n");
+    }
+  }
+
+  // Sign-in comes first, so nobody without it learns which extensions exist.
+  async function handleExtension(req, res, url) {
+    let identity;
+    try {
+      identity = authenticate(req);
+    } catch (error) {
+      return res.writeHead(error.status ?? 403, { "Content-Type": "text/plain; charset=utf-8" }).end(`${error.message}\n`);
+    }
+    const [, name, ...rest] = url.pathname.split("/").slice(1);
+    if (url.pathname === "/ext/tokens.css" && req.method === "GET") {
+      res.writeHead(200, { "Content-Type": TYPES[".css"], "Cache-Control": "no-cache" });
+      return res.end(await readFile(TOKENS));
+    }
+    const extension = extensions.find((candidate) => candidate.name === name);
+    if (!extension) return res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" }).end("No such extension.\n");
+    if (rest[0] === "api") return handleExtensionApi(req, res, extension, `/${rest.slice(1).join("/")}`, identity);
+    if (rest.length === 0) return res.writeHead(308, { Location: `/ext/${name}/` }).end();
+    if (req.method !== "GET" && req.method !== "HEAD") return res.writeHead(405).end();
+    return serveExtensionFile(res, extension.root, rest.join("/"));
+  }
+
   return async function handler(req, res) {
     securityHeaders(res);
     // A run's own browser must never use the app, the API or MCP, or it could approve its own calls.
@@ -205,6 +282,7 @@ export function createHandler({ store, settings, authenticate, runs, approvals, 
     if (url.pathname === "/api" || url.pathname.startsWith("/api/")) return handleApi(req, res, url);
     if (url.pathname === "/mcp") return mcp ? mcp(req, res) : res.writeHead(404).end();
     if (url.pathname === "/internal" || url.pathname.startsWith("/internal/")) return handleInternal(req, res, url);
+    if (url.pathname.startsWith("/ext/")) return handleExtension(req, res, url);
     if (req.method !== "GET" && req.method !== "HEAD") {
       res.writeHead(405).end();
       return undefined;

@@ -81,6 +81,13 @@ export interface Approval {
   status: 'pending' | 'allowed' | 'denied' | 'expired';
 }
 
+/** A local extension's page, linked from the menu. */
+export interface Extension {
+  name: string;
+  title: string;
+  url: string;
+}
+
 export interface Repo {
   name: string;
   actions: Action[];

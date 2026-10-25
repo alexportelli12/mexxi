@@ -96,6 +96,7 @@
     "runner": "claude-code",
     "model": "",
     "repositories": [],
+    "extensions": [],
     "auth": {
       "web": {
         "mode": "localhost-only",
