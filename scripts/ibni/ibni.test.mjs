@@ -2,7 +2,7 @@ import { existsSync } from "node:fs";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { access, chmod, mkdir, mkdtemp, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, mkdtemp, readdir, readFile, rename, rm, symlink, utimes, writeFile } from "node:fs/promises";
 import http from "node:http";
 import net from "node:net";
 import os from "node:os";
@@ -1342,6 +1342,119 @@ test("a workspace recorded with one port keeps it as a block of one", async (t) 
   assert.ok(next.json.ports.first > metadata.port || next.json.ports.last < metadata.port, "the new block leaves the old port alone");
 });
 
+// A verify command that logs when it starts and ends in each worktree and
+// takes holdMs, so a test can see which runs overlapped.
+async function timedVerify(fixture, holdMs) {
+  const script = path.join(fixture.root, "timed-verify.mjs");
+  const log = path.join(fixture.root, "runs.log");
+  await writeFile(script, `import { appendFileSync } from "node:fs";
+appendFileSync(${JSON.stringify(log)}, \`start \${process.cwd()} \${Date.now()}\\n\`);
+setTimeout(() => appendFileSync(${JSON.stringify(log)}, \`end \${process.cwd()} \${Date.now()}\\n\`), ${holdMs});
+`);
+  await commitToDefaultBranch(fixture, { ".mexxi.json": `${JSON.stringify({ verify: `node ${JSON.stringify(script)}` })}\n` }, "timed verify");
+  return async () => (await readFile(log, "utf8")).trim().split("\n").map((line) => {
+    const [event, cwd, at] = line.split(" ");
+    return { event, cwd, at: Number(at) };
+  });
+}
+
+const slotsConfig = (fixture, verifySlots) => writeFile(fixture.config, JSON.stringify({ paths: { worktreeRoot: fixture.worktrees }, workflow: { verifySlots } }));
+const queueDirectory = (fixture) => path.join(fixture.worktrees, ".ibni", "slots", "queue");
+
+// Break: verify ignores workflow.verifySlots (or counts it off by one), so a
+// third run starts while two hold the machine, or the wait goes unreported.
+test("verify runs beyond workflow.verifySlots wait in a readable queue and report queuedMs", async (t) => {
+  const fixture = await createFixture(t);
+  // Long enough that the third run is queued before either of the first two
+  // ends, even when the machine is busy running other suites.
+  const runs = await timedVerify(fixture, 3000);
+  await slotsConfig(fixture, 2);
+  const prepared = [];
+  for (const slug of ["slot a", "slot b", "slot c"]) prepared.push(await lifecycle(fixture, fixture.control, "prepare", { slug }));
+
+  const pending = prepared.map((workspace) => verify(fixture, workspace));
+  let queued = [];
+  for (let attempt = 0; attempt < 100 && !queued.length; attempt += 1) {
+    queued = (await readdir(queueDirectory(fixture)).catch(() => [])).filter((name) => name.endsWith(".json"));
+    if (!queued.length) await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  assert.equal(queued.length, 1, "the third run waits in the queue");
+  const waiting = JSON.parse(await readFile(path.join(queueDirectory(fixture), queued[0]), "utf8"));
+  assert.equal(waiting.kind, "verify");
+  assert.ok(prepared.some((workspace) => workspace.json.sessionId === waiting.sessionId));
+  const results = await Promise.all(pending);
+  assert.ok(results.every((result) => result.json.passed && result.json.recorded));
+
+  const log = await runs();
+  const starts = log.filter((entry) => entry.event === "start").map((entry) => entry.at).sort((a, b) => a - b);
+  const ends = log.filter((entry) => entry.event === "end").map((entry) => entry.at).sort((a, b) => a - b);
+  assert.ok(starts[1] < ends[0], "two runs overlap");
+  assert.ok(starts[2] >= ends[0], "the third starts only after one has ended");
+  const waits = results.map((result) => result.json.queuedMs).sort((a, b) => a - b);
+  assert.ok(waits[2] >= 1000, `the queued run reports its wait (${waits.join(", ")} ms)`);
+  assert.equal(JSON.parse(await metadataFile(results[0].json.logPath.replace(/\.evidence\/.*$/, ""))).verification.queuedMs, results[0].json.queuedMs);
+  assert.deepEqual((await readdir(queueDirectory(fixture))).filter((name) => name.endsWith(".json")), [], "the queue is empty afterwards");
+});
+
+// Break: a slot whose holder died is waited on for ever.
+test("a run slot left by a process that died is taken over", { timeout: 30_000 }, async (t) => {
+  const fixture = await createFixture(t);
+  await slotsConfig(fixture, 1);
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "stale slot" });
+  const dead = spawn(process.execPath, ["-e", "0"]);
+  await new Promise((resolve) => dead.once("close", resolve));
+  const slot = path.join(fixture.worktrees, ".ibni", "slots", "slot-0");
+  await mkdir(slot, { recursive: true });
+  await writeFile(path.join(slot, "owner.json"), JSON.stringify({ hostname: os.hostname(), pid: dead.pid, token: "gone", startedAt: new Date().toISOString() }));
+
+  const result = await verify(fixture, prepared);
+  assert.equal(result.json.passed, true);
+  assert.ok(result.json.queuedMs < 1000, `took the dead holder's slot at once (${result.json.queuedMs} ms)`);
+});
+
+// Break: a slot directory left without an owner (its process died between
+// creating it and writing the owner) fails every run on the machine.
+test("an ownerless run slot older than a minute is reclaimed", { timeout: 30_000 }, async (t) => {
+  const fixture = await createFixture(t);
+  await slotsConfig(fixture, 1);
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "ownerless slot" });
+  const slot = path.join(fixture.worktrees, ".ibni", "slots", "slot-0");
+  await mkdir(slot, { recursive: true });
+  const old = new Date(Date.now() - 2 * 60 * 1000);
+  await utimes(slot, old, old);
+  assert.equal((await verify(fixture, prepared)).json.passed, true);
+});
+
+// Break: a waiter that was killed stays in the queue for ever, so the queue
+// no longer says what is waiting.
+test("waiting runs drop queue entries whose process is gone", { timeout: 60_000 }, async (t) => {
+  const fixture = await createFixture(t);
+  await slotsConfig(fixture, 1);
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "pruned queue" });
+  const holder = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60000)"]);
+  t.after(() => holder.kill());
+  const slot = path.join(fixture.worktrees, ".ibni", "slots", "slot-0");
+  await mkdir(slot, { recursive: true });
+  await writeFile(path.join(slot, "owner.json"), JSON.stringify({ hostname: os.hostname(), pid: holder.pid, token: "live", startedAt: new Date().toISOString() }));
+  const dead = spawn(process.execPath, ["-e", "0"]);
+  await new Promise((resolve) => dead.once("close", resolve));
+  const ghost = path.join(queueDirectory(fixture), `${dead.pid}-ghost.json`);
+  await mkdir(queueDirectory(fixture), { recursive: true });
+  await writeFile(ghost, JSON.stringify({ sessionId: "gone", kind: "verify", hostname: os.hostname(), pid: dead.pid }));
+
+  const pending = verify(fixture, prepared);
+  let entries = [];
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    entries = (await readdir(queueDirectory(fixture))).filter((name) => name.endsWith(".json"));
+    if (entries.length === 1 && !entries.includes(path.basename(ghost))) break;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  assert.equal(entries.length, 1, `only the live waiter is queued (${entries.join(", ")})`);
+  assert.notEqual(entries[0], path.basename(ghost));
+  holder.kill();
+  assert.equal((await pending).json.passed, true, "the slot is taken once its holder is gone");
+});
+
 // A local stand-in for OpenRouter's Decisions API: answers each request from
 // a queue ({status, body} or {hang: true}) and keeps what it was sent.
 async function jevStub(t, responses) {
@@ -2238,8 +2351,8 @@ test("prepare installs from the root lockfile after env provisioning and records
   const { setup, worktreePath, evidenceDir } = prepared.json;
   assert.deepEqual(prepared.json.provisionedEnv, [".env"]);
   assert.deepEqual(
-    { ...setup, durationMs: typeof setup.durationMs, ranAt: typeof setup.ranAt },
-    { ran: true, command: "npm ci --prefer-offline --no-audit --no-fund", source: "package-lock.json", passed: true, exitCode: 0, durationMs: "number", logPath: path.join(evidenceDir, "setup.log"), ranAt: "string" },
+    { ...setup, durationMs: typeof setup.durationMs, queuedMs: typeof setup.queuedMs, ranAt: typeof setup.ranAt },
+    { ran: true, command: "npm ci --prefer-offline --no-audit --no-fund", source: "package-lock.json", passed: true, exitCode: 0, durationMs: "number", queuedMs: "number", logPath: path.join(evidenceDir, "setup.log"), ranAt: "string" },
   );
   assert.deepEqual(await stub.calls(), [`npm ci --prefer-offline --no-audit --no-fund in ${worktreePath}`]);
   assert.match(await readFile(setup.logPath, "utf8"), /npm installing/);
@@ -2363,10 +2476,10 @@ test("ibni verify runs the verify command on the committed tree and gates record
   const failed = await verify(fixture, prepared, [1]);
   const treeSha = (await git(worktreePath, "rev-parse", "HEAD^{tree}")).stdout.trim();
   assert.deepEqual(
-    { ...failed.json, durationMs: typeof failed.json.durationMs, ranAt: typeof failed.json.ranAt, logTail: typeof failed.json.logTail },
+    { ...failed.json, durationMs: typeof failed.json.durationMs, queuedMs: typeof failed.json.queuedMs, ranAt: typeof failed.json.ranAt, logTail: typeof failed.json.logTail },
     {
       operation: "verify", sessionId, baseline: false, treeSha, headSha: (await git(worktreePath, "rev-parse", "HEAD")).stdout.trim(),
-      passed: false, exitCode: 1, durationMs: "number", logPath: path.join(evidenceDir, `verify-${treeSha.slice(0, 12)}.log`), ranAt: "string",
+      passed: false, exitCode: 1, durationMs: "number", queuedMs: "number", logPath: path.join(evidenceDir, `verify-${treeSha.slice(0, 12)}.log`), ranAt: "string",
       command: "npm run verify", commandSource: "default-branch", recorded: true, logTail: "string",
     },
   );

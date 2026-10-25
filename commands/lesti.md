@@ -83,7 +83,8 @@ for a one-way door.
 From a clean install of the repository's dependencies in the worktree, the
 chosen verify command passes on the branch. Commit, run
 `ibni setup --session "<sessionId>"` so the install comes from the branch's
-own lockfile, then run `ibni verify --session "<sessionId>"`. That is what
+own lockfile, then run `ibni verify --session "<sessionId>"`; either may first
+wait for one of the machine's run slots, so never stop it for a slow start. That is what
 `ibni prepare` followed by `/wettaq`'s preflight would run once this pull
 request is merged, so it is the proof they would succeed. `prepare` read
 `.mexxi.json` from the default branch, so its `verifyCommand` does not yet show

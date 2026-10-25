@@ -4,7 +4,8 @@
 // That test also checks these keys still match what ibni prints, so the pane
 // is tested against its real input. setup and verification were added by hand,
 // in that scenario's shape, when ibni began running setup and verify itself;
-// ports and portEnv likewise when workspaces got port blocks.
+// ports and portEnv likewise when workspaces got port blocks, and
+// verification.queuedMs when runs began waiting for a slot.
 export const info = {
   "operation": "info",
   "sessionId": "2c026ea35efd82bef78e30b9",
@@ -30,6 +31,7 @@ export const info = {
     "passed": true,
     "exitCode": 0,
     "durationMs": 204,
+    "queuedMs": 0,
     "logPath": "/tmp/implementation-workspace-test-CEZwIv/worktrees/control-d7a4ed7796/timed.evidence/verify-cc76f2831b4e.log",
     "ranAt": "2026-10-21T02:30:34.880Z",
     "command": "npm run verify",
@@ -168,6 +170,7 @@ export const stats = {
     "passed": true,
     "exitCode": 0,
     "durationMs": 204,
+    "queuedMs": 0,
     "logPath": "/tmp/implementation-workspace-test-CEZwIv/worktrees/control-d7a4ed7796/timed.evidence/verify-cc76f2831b4e.log",
     "ranAt": "2026-10-21T02:30:34.880Z",
     "command": "npm run verify",
