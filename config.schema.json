@@ -117,6 +117,7 @@
             "blockSize": { "description": "Ports in each workspace's block. ibni passes them to setup and verify as PORT (the first) and MEXXI_PORT_0 to MEXXI_PORT_<blockSize-1>, so one workspace can run a dev server and several test servers at once.", "type": "integer", "minimum": 1, "maximum": 100, "default": 10 }
           }
         },
+        "warmCaches": { "description": "Copy build, type-check, lint and test caches (.next/cache, *.tsbuildinfo, .eslintcache, node_modules/.vite/vitest) that the control checkout has into each new worktree after setup, up to 1 GB each, so its first verify run is not a cold one. Each tool checks its cache against the sources, so a stale copy only costs a rebuild.", "type": "boolean", "default": true },
         "verifySlots": { "description": "How many setup and verify runs ibni lets run at once on this machine, across every repository; the rest wait in a queue and report the wait as queuedMs. Two eduline verify runs together on 8 vCPUs took 29% longer and passed; three made its unit tests time out.", "type": "integer", "minimum": 1, "maximum": 64, "default": 2 },
         "scope": {
           "description": "The systemd user scope ibni runs setup and verify in, where systemd-run --user works; elsewhere they run as plain child processes.",
