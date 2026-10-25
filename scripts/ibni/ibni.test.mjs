@@ -1221,28 +1221,125 @@ async function listen(port, host = "127.0.0.1") {
   return server;
 }
 
-test("prepare assigns each workspace a free port, skipping recorded and bound ones", async (t) => {
+const portsConfig = (fixture, ports, extra = {}) => writeFile(fixture.config, JSON.stringify({ paths: { worktreeRoot: fixture.worktrees }, workflow: { ports, ...extra } }));
+
+// Break: a block overlapping a bound port or another workspace's block is
+// handed out, so two workspaces' test servers collide.
+test("prepare gives each workspace a free block of ports, skipping recorded and bound ones", async (t) => {
   const fixture = await createFixture(t);
   const bound = await listen(0);
   t.after(() => bound.close());
   const busy = bound.address().port;
-  await writeFile(fixture.config, JSON.stringify({ paths: { worktreeRoot: fixture.worktrees }, workflow: { ports: { first: busy, last: busy + 20 } } }));
+  await portsConfig(fixture, { first: busy, last: busy + 29, blockSize: 10 });
 
   const first = await lifecycle(fixture, fixture.control, "prepare", { slug: "port one" });
   const second = await lifecycle(fixture, fixture.control, "prepare", { slug: "port two" });
-  for (const prepared of [first, second]) {
-    assert.ok(prepared.json.port > busy && prepared.json.port <= busy + 20, `${prepared.json.port} is in range and not the bound port`);
-  }
-  assert.notEqual(first.json.port, second.json.port);
+  // The first block holds the bound port, so the workspaces get the next two.
+  assert.deepEqual([first.json.ports, second.json.ports], [
+    { first: busy + 10, size: 10, last: busy + 19 },
+    { first: busy + 20, size: 10, last: busy + 29 },
+  ]);
+  assert.equal(first.json.port, busy + 10);
+  assert.equal(first.json.portEnv.PORT, String(busy + 10));
+  assert.equal(first.json.portEnv.MEXXI_PORT_9, String(busy + 19));
   const info = await lifecycle(fixture, fixture.control, "info", { session: second.json.sessionId });
-  assert.equal(info.json.port, second.json.port);
+  assert.deepEqual([info.json.port, info.json.ports], [second.json.port, second.json.ports]);
   const list = await lifecycle(fixture, fixture.control, "list");
-  assert.deepEqual(list.json.workspaces.map((workspace) => workspace.port).sort(), [first.json.port, second.json.port].sort());
+  assert.deepEqual(list.json.workspaces.map((workspace) => workspace.ports.first).sort(), [busy + 10, busy + 20]);
 
-  await writeFile(fixture.config, JSON.stringify({ paths: { worktreeRoot: fixture.worktrees }, workflow: { ports: { first: busy, last: busy } } }));
   const exhausted = await lifecycle(fixture, fixture.control, "prepare", { slug: "port none" }, [2]);
-  assert.match(exhausted.stderr, /no free port between/);
+  assert.match(exhausted.stderr, /no free block of 10 ports between/);
   assert.equal((await git(fixture.control, "worktree", "list", "--porcelain")).stdout.match(/^worktree /gm).length, 3);
+});
+
+// Break: blocks are chosen under only the repository lock, so prepares in two
+// repositories at once both take the first free block.
+test("prepares in different repositories at once never share a block", async (t) => {
+  const fixtures = await Promise.all([createFixture(t), createFixture(t), createFixture(t)]);
+  const probe = await listen(0);
+  const first = probe.address().port + 1;
+  probe.close();
+  const shared = { paths: { worktreeRoot: fixtures[0].worktrees }, workflow: { ports: { first, last: first + 59, blockSize: 10 } } };
+  for (const fixture of fixtures) await writeFile(fixture.config, JSON.stringify(shared));
+  const prepared = await Promise.all(fixtures.map((fixture, index) => lifecycle(fixture, fixture.control, "prepare", { slug: `race ${index}` })));
+  const blocks = prepared.map((result) => result.json.ports.first);
+  assert.equal(new Set(blocks).size, 3, `blocks ${blocks.join(", ")} are distinct`);
+});
+
+async function envDumper(fixture) {
+  const script = path.join(fixture.root, "dump-env.mjs");
+  await writeFile(script, "import { writeFileSync } from 'node:fs';\nconst keys = Object.keys(process.env).filter((key) => /PORT/.test(key));\nwriteFileSync(process.argv[2], JSON.stringify(Object.fromEntries(keys.map((key) => [key, process.env[key]]))));\n");
+  return (name) => `node ${JSON.stringify(script)} ${JSON.stringify(path.join(fixture.root, `${name}.json`))}`;
+}
+const readDump = async (fixture, name) => JSON.parse(await readFile(path.join(fixture.root, `${name}.json`), "utf8"));
+
+// Break: setup or verify runs with ibni's own environment only (as before
+// blocks), so a repository's test servers fall back to fixed ports; or a port
+// variable ibni inherited, such as another workspace's, leaks into the run.
+test("setup and verify see the block as PORT, MEXXI_PORT_<n> and the repository's mapped variables", async (t) => {
+  const fixture = await createFixture(t);
+  const dump = await envDumper(fixture);
+  const probe = await listen(0);
+  const first = probe.address().port + 1;
+  probe.close();
+  // portVariables is keyed by the checkout's folder name, here "control".
+  await portsConfig(fixture, { first, last: first + 9, blockSize: 4 }, { portVariables: { control: { E2E_PORT: 1, MCP_PORT: 3 }, other: { OTHER_PORT: 2 } } });
+  await commitToDefaultBranch(fixture, { ".mexxi.json": `${JSON.stringify({ setup: dump("setup"), verify: dump("verify") })}\n` }, "dump env");
+
+  // As if another workspace's portEnv were exported in the agent's shell.
+  const leaked = { PORT: "1", MEXXI_PORT_3: "1", MEXXI_PORT_9: "1", E2E_PORT: "1", MCP_PORT: "1", OTHER_PORT: "7" };
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "port env" }, [0], leaked);
+  const expected = {
+    PORT: String(first), MEXXI_PORT_0: String(first), MEXXI_PORT_1: String(first + 1), MEXXI_PORT_2: String(first + 2), MEXXI_PORT_3: String(first + 3),
+    E2E_PORT: String(first + 1), MCP_PORT: String(first + 3),
+    // Not mapped for this repository, so ibni leaves it alone.
+    OTHER_PORT: "7",
+  };
+  assert.deepEqual(await readDump(fixture, "setup"), expected);
+  const { OTHER_PORT: _other, ...portEnv } = expected;
+  assert.deepEqual(prepared.json.portEnv, portEnv);
+  const verified = await lifecycle(fixture, prepared.json.worktreePath, "verify", { session: prepared.json.sessionId }, [0], leaked);
+  assert.equal(verified.json.passed, true);
+  assert.deepEqual(await readDump(fixture, "verify"), expected);
+  await rm(path.join(fixture.root, "setup.json"));
+  await lifecycle(fixture, prepared.json.worktreePath, "setup", { session: prepared.json.sessionId }, [0], leaked);
+  assert.deepEqual(await readDump(fixture, "setup"), expected);
+});
+
+// Break: verify starts with a block port taken and the repository's test
+// server fails half-way with EADDRINUSE, or a failure is recorded for the tree.
+test("verify refuses to run while a port of the workspace's block is bound, recording nothing", async (t) => {
+  const fixture = await createFixture(t);
+  const probe = await listen(0);
+  const first = probe.address().port + 1;
+  probe.close();
+  await portsConfig(fixture, { first, last: first + 9, blockSize: 5 });
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "port taken" });
+  const squatter = await listen(prepared.json.ports.first + 2);
+  t.after(() => squatter.close());
+
+  const refused = await verify(fixture, prepared, [2]);
+  assert.match(refused.stderr, new RegExp(`port ${first + 2} of this workspace's block is already in use`));
+  assert.equal(JSON.parse(await metadataFile(prepared.json.worktreePath)).verification, null);
+  squatter.close();
+  assert.equal((await verify(fixture, prepared)).json.passed, true);
+});
+
+// Break: a workspace from before blocks loses its port, or verify refuses it.
+test("a workspace recorded with one port keeps it as a block of one", async (t) => {
+  const fixture = await createFixture(t);
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "one port" });
+  const { worktreePath, sessionId } = prepared.json;
+  const gitDirectory = (await git(worktreePath, "rev-parse", "--absolute-git-dir")).stdout.trim();
+  const metadata = JSON.parse(await metadataFile(worktreePath));
+  delete metadata.ports;
+  await writeFile(path.join(gitDirectory, "implementation-workspace.json"), JSON.stringify(metadata));
+
+  const info = await lifecycle(fixture, fixture.control, "info", { session: sessionId });
+  assert.deepEqual(info.json.ports, { first: metadata.port, size: 1, last: metadata.port });
+  assert.deepEqual(info.json.portEnv, { PORT: String(metadata.port), MEXXI_PORT_0: String(metadata.port) });
+  const next = await lifecycle(fixture, fixture.control, "prepare", { slug: "after one port" });
+  assert.ok(next.json.ports.first > metadata.port || next.json.ports.last < metadata.port, "the new block leaves the old port alone");
 });
 
 // A local stand-in for OpenRouter's Decisions API: answers each request from

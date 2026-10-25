@@ -117,7 +117,19 @@ test("Jev's endpoint, which receives the API key, must be HTTPS unless it is on 
 test("workflow.ports must not be empty, counting the defaults", async () => {
   await assert.rejects(resolveConfig({ workflow: { ports: { first: 5000, last: 4000 } } }, { home }), /config\.workflow\.ports: first \(5000\) is above last \(4000\)/);
   await assert.rejects(resolveConfig({ workflow: { ports: { first: 5000 } } }, { home }), /first \(5000\) is above last \(4999\)/);
-  assert.deepEqual((await resolveConfig({ workflow: { ports: { first: 4000, last: 4000 } } }, { home })).workflow.ports, { first: 4000, last: 4000 });
+  assert.deepEqual((await resolveConfig({ workflow: { ports: { first: 4000, last: 4000, blockSize: 1 } } }, { home })).workflow.ports, { first: 4000, last: 4000, blockSize: 1 });
+});
+
+// Break: a range smaller than one block, or a mapped offset past the block,
+// loads, and prepare or verify fails later with a less clear message.
+test("workflow.ports must hold one block, and every portVariables offset must fall inside it", async () => {
+  await assert.rejects(resolveConfig({ workflow: { ports: { first: 4000, last: 4008 } } }, { home }), /4000 to 4008 cannot hold one block of 10/);
+  await assert.rejects(
+    resolveConfig({ workflow: { portVariables: { shop: { E2E_PORT: 10 } } } }, { home }),
+    /config\.workflow\.portVariables\.shop\.E2E_PORT: offset 10 is outside a block of 10/,
+  );
+  const variables = { shop: { E2E_PORT: 1, MCP_PORT: 9 } };
+  assert.deepEqual((await resolveConfig({ workflow: { portVariables: variables } }, { home })).workflow.portVariables, variables);
 });
 
 test("forge.hosts maps any hostname to github or gitlab, and nothing else", async () => {

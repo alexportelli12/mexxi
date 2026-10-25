@@ -29,7 +29,7 @@ Use `--prefix` only when an already-known repository instruction requires a
 different branch prefix. `prepare` checks the launch checkout, sweeps merged
 workspaces and creates the feature branch in a dedicated locked worktree. Record
 its JSON result in session context, especially `worktreePath`, `sessionId`,
-`branch`, `defaultBranch`, `baseSha`, `evidenceDir`, `port`, `verifyCommand`,
+`branch`, `defaultBranch`, `baseSha`, `evidenceDir`, `port`, `portEnv`, `verifyCommand`,
 `baseline`, `setup` and `cleanup`. `verifyCommand` is the repository's verify
 command: the `verify` its committed `.mexxi.json` names, or `npm run verify` by
 default. Wherever this command says "run the verify command", run
@@ -45,9 +45,15 @@ From this point on, run every repository inspection, command, delegated task,
 edit, verification, render, review, remediation, and delivery operation against
 `worktreePath`, never the control checkout. Pass the exact `sessionId` to later
 lifecycle operations (`ibni <command> --help` documents each). Write transient
-evidence to `evidenceDir`. Whenever this run starts the app, serve it on `port`
-through the repository's own port setting (such as `PORT` or the dev server's
-port flag), so parallel worktrees never collide. If preparation fails, report
+evidence to `evidenceDir`. `port` is the first of the workspace's block of
+ports, and `portEnv` names them all (`PORT`, `MEXXI_PORT_<n>` and any variable
+the repository reads that config maps to the block); `ibni` gives them to setup
+and verify itself. Whenever this run starts a server by hand, export `portEnv`
+and serve the app on `port` through the repository's own port setting (such
+as `PORT` or the dev server's port flag), and put any further server on another
+port of the block, so parallel worktrees never collide. Stop those servers
+before `ibni verify`, which refuses to start while any port of the block is
+bound. If preparation fails, report
 its diagnostic and stop; do not switch branches, improvise another worktree or
 attempt more aggressive Git recovery.
 

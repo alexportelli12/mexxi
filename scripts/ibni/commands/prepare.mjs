@@ -21,9 +21,9 @@ import {
   remoteDefault,
   repositoryAt,
 } from "../lib/git.mjs";
-import { withRepositoryLock } from "../lib/lock.mjs";
+import { withMachineLock, withRepositoryLock } from "../lib/lock.mjs";
 import { evidenceDirectoryFor, inspectImplementationWorktrees, readMetadata, summarizeSetup, writeMetadata } from "../lib/metadata.mjs";
-import { allocatePort } from "../lib/ports.mjs";
+import { allocatePortBlock, recordedBlock, sessionPortEnvironment, sessionRunEnvironment } from "../lib/ports.mjs";
 import { workspaceCandidates } from "../lib/session.mjs";
 import { lockfilesAt, runSetup, setupPlan } from "../lib/setup.mjs";
 import { sweepConsumedWorkspaces } from "./cleanup.mjs";
@@ -120,13 +120,13 @@ export async function prepareWorkspace({ cwd = process.cwd(), slug, prefix }) {
   if (repository.gitDirectory !== repository.commonDirectory) {
     throw new WorkspaceError("ibni prepare must run from the repository's primary control worktree");
   }
-  return setUpPrepared(repository, await prepareLocked({ repository, config, slug, branchPrefix }));
+  return setUpPrepared(repository, config, await prepareLocked({ repository, config, slug, branchPrefix }));
 }
 
 // Setup runs after the repository lock is released: an install can take
 // minutes, and other sessions' ibni commands give up on the lock after 30
 // seconds. A failed setup takes the lock again to roll the allocation back.
-async function setUpPrepared(repository, { result, allocation, plan, lockfiles, gitDirectory }) {
+async function setUpPrepared(repository, config, { result, allocation, plan, lockfiles, gitDirectory, metadata }) {
   // A rollback that fails (the lock timing out, say) never hides why setup
   // failed; its own error is added to the details. The workspace it leaves
   // behind says "setup did not finish", so nothing later mistakes it for ready.
@@ -148,7 +148,7 @@ async function setUpPrepared(repository, { result, allocation, plan, lockfiles, 
   };
   let setup;
   try {
-    setup = await runSetup({ plan, worktreePath: result.worktreePath, evidenceDir: result.evidenceDir, lockfiles });
+    setup = await runSetup({ plan, worktreePath: result.worktreePath, evidenceDir: result.evidenceDir, lockfiles, env: sessionRunEnvironment(metadata, config) });
   } catch (error) {
     throw await rollback(error);
   }
@@ -240,82 +240,90 @@ function prepareLocked({ repository, config, slug, branchPrefix }) {
       branchPrefix,
       config,
     );
-    // Retained workspaces of every repository share this machine's ports.
-    const recordedPorts = [
-      ...(await inspectImplementationWorktrees(repository.commonDirectory)).map((entry) => entry.metadata?.port),
-      ...(await workspaceCandidates(repository.root)).map((candidate) => candidate.metadata.port),
-    ].filter(Number.isInteger);
-    const port = await allocatePort(config.workflow.ports, recordedPorts);
-    try {
-      await git(repository.root, [
-        "worktree",
-        "add",
-        "--quiet",
-        "--lock",
-        "--reason",
-        `Coding agent implementation ${allocation.sessionId}`,
-        "-b",
-        allocation.branch,
-        allocation.worktreePath,
-        baseSha,
-      ]);
-      const implementationRepository = await repositoryAt(allocation.worktreePath);
-      const evidenceDir = evidenceDirectoryFor(implementationRepository.root);
-      await mkdir(evidenceDir);
-      const provisionedEnv = await provisionEnvFiles(repository.root, allocation.worktreePath);
-      const now = new Date().toISOString();
-      const metadata = {
-        version: 1,
-        sessionId: allocation.sessionId,
-        state: "active",
-        branch: allocation.branch,
-        worktreePath: implementationRepository.root,
-        controlWorktreePath: repository.root,
-        commonDirectory: repository.commonDirectory,
-        remote,
-        fetchUrl,
-        pushUrl,
-        defaultBranch,
-        initialBaseSha: baseSha,
-        baseSha,
-        publishedSha: null,
-        prUrl: null,
-        port,
-        verifyCommand,
-        baseline,
-        // Replaced once setup ends; left as is, it says setup never finished.
-        setup: plan.command
-          ? { ran: false, command: plan.command, source: plan.source, reason: "setup did not finish", lockfiles }
-          : { ran: false, command: null, reason: plan.reason, lockfiles },
-        verification: null,
-        evidenceTreeSha: null,
-        evidenceRecordedAt: null,
-        pendingOperation: null,
-        createdAt: now,
-        updatedAt: now,
-      };
-      await writeMetadata(implementationRepository.gitDirectory, metadata);
-      const result = {
-        operation: "prepare",
-        sessionId: metadata.sessionId,
-        worktreePath: metadata.worktreePath,
-        branch: metadata.branch,
-        remote: metadata.remote,
-        defaultBranch: metadata.defaultBranch,
-        baseSha: metadata.baseSha,
-        forge: forge.name,
-        forgeReason: forge.name ? null : forge.reason,
-        evidenceDir,
-        port,
-        verifyCommand,
-        baseline,
-        provisionedEnv,
-        cleanup,
-      };
-      return { result, allocation, plan, lockfiles, gitDirectory: implementationRepository.gitDirectory };
-    } catch (error) {
-      await rollbackAllocatedWorkspace(repository.root, allocation, baseSha);
-      throw error;
-    }
-  }, { env: {} });
+    // Retained workspaces of every repository share this machine's ports, so
+    // the block is chosen, and the metadata that claims it written, under one
+    // machine-wide lock.
+    return withMachineLock(config.paths.worktreeRoot, "ports", async () => {
+      const recordedBlocks = [
+        ...(await inspectImplementationWorktrees(repository.commonDirectory)).map((entry) => recordedBlock(entry.metadata)),
+        ...(await workspaceCandidates(repository.root)).map((candidate) => recordedBlock(candidate.metadata)),
+      ].filter(Boolean);
+      const ports = await allocatePortBlock(config.workflow.ports, recordedBlocks);
+      const port = ports.first;
+      try {
+        await git(repository.root, [
+          "worktree",
+          "add",
+          "--quiet",
+          "--lock",
+          "--reason",
+          `Coding agent implementation ${allocation.sessionId}`,
+          "-b",
+          allocation.branch,
+          allocation.worktreePath,
+          baseSha,
+        ]);
+        const implementationRepository = await repositoryAt(allocation.worktreePath);
+        const evidenceDir = evidenceDirectoryFor(implementationRepository.root);
+        await mkdir(evidenceDir);
+        const provisionedEnv = await provisionEnvFiles(repository.root, allocation.worktreePath);
+        const now = new Date().toISOString();
+        const metadata = {
+          version: 1,
+          sessionId: allocation.sessionId,
+          state: "active",
+          branch: allocation.branch,
+          worktreePath: implementationRepository.root,
+          controlWorktreePath: repository.root,
+          commonDirectory: repository.commonDirectory,
+          remote,
+          fetchUrl,
+          pushUrl,
+          defaultBranch,
+          initialBaseSha: baseSha,
+          baseSha,
+          publishedSha: null,
+          prUrl: null,
+          port,
+          ports,
+          verifyCommand,
+          baseline,
+          // Replaced once setup ends; left as is, it says setup never finished.
+          setup: plan.command
+            ? { ran: false, command: plan.command, source: plan.source, reason: "setup did not finish", lockfiles }
+            : { ran: false, command: null, reason: plan.reason, lockfiles },
+          verification: null,
+          evidenceTreeSha: null,
+          evidenceRecordedAt: null,
+          pendingOperation: null,
+          createdAt: now,
+          updatedAt: now,
+        };
+        await writeMetadata(implementationRepository.gitDirectory, metadata);
+        const result = {
+          operation: "prepare",
+          sessionId: metadata.sessionId,
+          worktreePath: metadata.worktreePath,
+          branch: metadata.branch,
+          remote: metadata.remote,
+          defaultBranch: metadata.defaultBranch,
+          baseSha: metadata.baseSha,
+          forge: forge.name,
+          forgeReason: forge.name ? null : forge.reason,
+          evidenceDir,
+          port,
+          ports: { ...ports, last: ports.first + ports.size - 1 },
+          portEnv: sessionPortEnvironment(metadata, config),
+          verifyCommand,
+          baseline,
+          provisionedEnv,
+          cleanup,
+        };
+        return { result, allocation, plan, lockfiles, gitDirectory: implementationRepository.gitDirectory, metadata };
+      } catch (error) {
+        await rollbackAllocatedWorkspace(repository.root, allocation, baseSha);
+        throw error;
+      }
+    });
+  });
 }

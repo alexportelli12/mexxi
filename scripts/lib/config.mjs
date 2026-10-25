@@ -129,6 +129,13 @@ export async function resolveConfig(input, { home = os.homedir(), source = "conf
   // they describe an empty range.
   const { first, last } = config.workflow.ports;
   if (first > last) throw new ConfigError(`${source} is invalid:\nconfig.workflow.ports: first (${first}) is above last (${last})`);
+  const { blockSize } = config.workflow.ports;
+  if (last - first + 1 < blockSize) throw new ConfigError(`${source} is invalid:\nconfig.workflow.ports: ${first} to ${last} cannot hold one block of ${blockSize}`);
+  for (const [repository, variables] of Object.entries(config.workflow.portVariables)) {
+    for (const [name, offset] of Object.entries(variables)) {
+      if (offset >= blockSize) throw new ConfigError(`${source} is invalid:\nconfig.workflow.portVariables.${repository}.${name}: offset ${offset} is outside a block of ${blockSize}`);
+    }
+  }
   config.paths.checkout = path.resolve(expandHome(config.paths.checkout, home));
   config.paths.worktreeRoot = path.resolve(expandHome(config.paths.worktreeRoot, home));
   config.retro.output = path.resolve(config.paths.checkout, expandHome(config.retro.output, home));

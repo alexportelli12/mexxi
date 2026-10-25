@@ -87,6 +87,7 @@ its architecture, and follow them:
 - [0010 Each repository names its verify command](docs/decisions/0010-repository-names-its-verify-command.md) (superseded by 0014)
 - [0014 ibni installs dependencies and runs the verify command](docs/decisions/0014-ibni-runs-setup-and-verify.md)
 - [0015 Every test names the break it catches](docs/decisions/0015-tests-name-the-break-they-catch.md)
+- [0017 Each workspace gets a block of ports, and ibni hands it to setup and verify](docs/decisions/0017-workspace-port-blocks.md)
 
 To change a decision, add a new record that supersedes it and change only the
 old record's status; never rewrite its reasoning.

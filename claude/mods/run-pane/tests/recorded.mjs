@@ -3,7 +3,8 @@
 // recorded from the real CLI by scripts/ibni/ibni.test.mjs's stats scenario.
 // That test also checks these keys still match what ibni prints, so the pane
 // is tested against its real input. setup and verification were added by hand,
-// in that scenario's shape, when ibni began running setup and verify itself.
+// in that scenario's shape, when ibni began running setup and verify itself;
+// ports and portEnv likewise when workspaces got port blocks.
 export const info = {
   "operation": "info",
   "sessionId": "2c026ea35efd82bef78e30b9",
@@ -13,6 +14,7 @@ export const info = {
   "state": "pr-open",
   "prUrl": "https://github.com/alexportelli12/example/pull/42",
   "port": 4300,
+  "ports": { "first": 4300, "size": 10, "last": 4309 },
   "verifyCommand": "npm run verify",
   "defaultBranch": "trunk",
   "baseSha": "0f0d0cb4d62a1627b2939e8705f0d8958b7959b9",
@@ -37,6 +39,19 @@ export const info = {
   "evidenceRecordedAt": "2026-10-21T02:30:35.087Z",
   "createdAt": "2026-10-21T02:30:32.257Z",
   "updatedAt": "2026-10-21T02:30:36.105Z",
+  "portEnv": {
+    "PORT": "4300",
+    "MEXXI_PORT_0": "4300",
+    "MEXXI_PORT_1": "4301",
+    "MEXXI_PORT_2": "4302",
+    "MEXXI_PORT_3": "4303",
+    "MEXXI_PORT_4": "4304",
+    "MEXXI_PORT_5": "4305",
+    "MEXXI_PORT_6": "4306",
+    "MEXXI_PORT_7": "4307",
+    "MEXXI_PORT_8": "4308",
+    "MEXXI_PORT_9": "4309"
+  },
   "forge": "github",
   "forgeReason": null,
   "reviewTool": "ocr"

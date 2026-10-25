@@ -8,7 +8,7 @@ sources:
   - docs/decisions/0012-segwi-permission-modes.md
   - docs/decisions/0013-segwi-run-browser-and-hosts.md
   - docs/decisions/0016-segwi-runs-trusted-like-own-sessions.md
-reviewed: 2026-10-24
+reviewed: 2026-10-25
 ---
 
 # segwi
