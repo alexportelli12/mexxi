@@ -1547,6 +1547,78 @@ test("where no scope can start, setup and verify run as plain children and say w
   assert.deepEqual([disabled.json.passed, disabled.json.scopeReason], [true, "workflow.scope.enabled is false"]);
 });
 
+// Break: caches are copied before setup (so an install that replaces
+// node_modules drops the Vitest cache), copied over what the worktree has,
+// or taken from outside the known cache paths.
+test("prepare copies the control checkout's known caches after setup, never over existing paths", async (t) => {
+  const fixture = await createFixture(t);
+  await commitToDefaultBranch(fixture, {
+    ".gitignore": ".next/\n*.tsbuildinfo\n.eslintcache\nnode_modules/\nbuild/\n",
+    // Like npm ci: replaces node_modules, and leaves a tsbuildinfo of its own.
+    ".mexxi.json": `${JSON.stringify({ setup: "rm -rf node_modules && mkdir node_modules && echo fresh > app.tsbuildinfo" })}\n`,
+  }, "caches");
+  await git(fixture.control, "pull", "--quiet", "--ff-only");
+  const files = {
+    ".next/cache/webpack/chunk": "cached build\n",
+    ".next/server/page.js": "build output, not a cache\n",
+    "app.tsbuildinfo": "control tsbuildinfo\n",
+    ".eslintcache": "lint cache\n",
+    "node_modules/.vite/vitest/results.json": "{}\n",
+    "node_modules/left-pad/index.js": "a dependency, not a cache\n",
+    "build/cache.tsbuildinfo": "inside an ignored folder that is not a cache\n",
+  };
+  for (const [name, content] of Object.entries(files)) {
+    await mkdir(path.dirname(path.join(fixture.control, name)), { recursive: true });
+    await writeFile(path.join(fixture.control, name), content);
+  }
+
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "warm" });
+  const { worktreePath, warmCaches } = prepared.json;
+  assert.deepEqual(warmCaches.copied.sort(), [".eslintcache", ".next/cache", "node_modules/.vite/vitest"]);
+  assert.ok(warmCaches.bytes > 0);
+  const read = (name) => readFile(path.join(worktreePath, name), "utf8").catch(() => null);
+  assert.equal(await read(".next/cache/webpack/chunk"), "cached build\n");
+  assert.equal(await read("node_modules/.vite/vitest/results.json"), "{}\n", "copied after the install replaced node_modules");
+  assert.equal(await read("app.tsbuildinfo"), "fresh\n", "what setup wrote stays");
+  for (const name of [".next/server/page.js", "node_modules/left-pad/index.js", "build/cache.tsbuildinfo"]) assert.equal(await read(name), null, `${name} is not copied`);
+  assert.equal((await git(worktreePath, "status", "--porcelain")).stdout, "", "the worktree stays clean");
+
+  await writeFile(fixture.config, JSON.stringify({ paths: { worktreeRoot: fixture.worktrees }, workflow: { warmCaches: false } }));
+  const cold = await lifecycle(fixture, fixture.control, "prepare", { slug: "cold" });
+  assert.deepEqual([cold.json.warmCaches.copied, cold.json.warmCaches.reason], [[], "workflow.warmCaches is false"]);
+});
+
+// Break: a huge cache slows every prepare, a relative link in a cache comes
+// out pointing into the control checkout, or a worktree with no install gets
+// a node_modules holding only the Vitest cache.
+test("warm caches skip what is over the limit, keep links as they are and never invent node_modules", async (t) => {
+  const { copyWarmCaches } = await import("./lib/caches.mjs");
+  const fixture = await createFixture(t);
+  await commitToDefaultBranch(fixture, { ".gitignore": ".next/\n.eslintcache\nnode_modules/\n" }, "ignore caches");
+  await git(fixture.control, "pull", "--quiet", "--ff-only");
+  await mkdir(path.join(fixture.control, ".next/cache/images"), { recursive: true });
+  await writeFile(path.join(fixture.control, ".next/cache/images/big.bin"), Buffer.alloc(4096));
+  await writeFile(path.join(fixture.control, ".next/cache/target.txt"), "target\n");
+  await symlink("target.txt", path.join(fixture.control, ".next/cache/link"));
+  await writeFile(path.join(fixture.control, ".eslintcache"), "lint\n");
+  await mkdir(path.join(fixture.control, "node_modules/.vite/vitest"), { recursive: true });
+  await writeFile(path.join(fixture.control, "node_modules/.vite/vitest/results.json"), "{}\n");
+  const worktree = path.join(fixture.root, "fresh-worktree");
+  await mkdir(worktree);
+
+  const small = await copyWarmCaches(fixture.control, worktree, { limit: 1024 });
+  assert.deepEqual(small.copied, [".eslintcache"]);
+  assert.deepEqual(small.skipped, [{ cache: ".next/cache", reason: "larger than 0 MB" }]);
+  assert.equal(await pathExists(path.join(worktree, "node_modules")), false, "no install, so no node_modules");
+
+  await rm(path.join(worktree, ".eslintcache"));
+  await mkdir(path.join(worktree, "node_modules"));
+  const all = await copyWarmCaches(fixture.control, worktree);
+  assert.deepEqual(all.copied.sort(), [".eslintcache", ".next/cache", "node_modules/.vite/vitest"]);
+  const { readlink } = await import("node:fs/promises");
+  assert.equal(await readlink(path.join(worktree, ".next/cache/link")), "target.txt", "the link stays relative");
+});
+
 // A local stand-in for OpenRouter's Decisions API: answers each request from
 // a queue ({status, body} or {hang: true}) and keeps what it was sent.
 async function jevStub(t, responses) {

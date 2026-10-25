@@ -27,6 +27,7 @@ import { allocatePortBlock, recordedBlock, sessionPortEnvironment, sessionRunEnv
 import { workspaceCandidates } from "../lib/session.mjs";
 import { lockfilesAt, runSetup, setupPlan } from "../lib/setup.mjs";
 import { sweepConsumedWorkspaces } from "./cleanup.mjs";
+import { copyWarmCaches } from "../lib/caches.mjs";
 
 const ENV_FILE_PREFIX = ".env";
 
@@ -158,12 +159,16 @@ async function setUpPrepared(repository, config, { result, allocation, plan, loc
       `${setup.logTail}\n\nFix the setup on the default branch (or "setup" in .mexxi.json), then prepare again.`,
     ));
   }
+  // A cache that cannot be copied only makes the first run a cold one.
+  const warmCaches = config.workflow.warmCaches
+    ? await copyWarmCaches(repository.root, result.worktreePath).catch((error) => ({ copied: [], skipped: [], bytes: 0, reason: error.message }))
+    : { copied: [], skipped: [], bytes: 0, reason: "workflow.warmCaches is false" };
   await withRepositoryLock(repository.commonDirectory, async () => {
     const metadata = await readMetadata(gitDirectory);
     if (metadata?.sessionId !== result.sessionId) throw new WorkspaceError("the new workspace changed owner while its setup ran");
     await writeMetadata(gitDirectory, { ...metadata, setup, updatedAt: new Date().toISOString() });
   });
-  return { ...result, setup: summarizeSetup(setup) };
+  return { ...result, setup: summarizeSetup(setup), warmCaches };
 }
 
 function prepareLocked({ repository, config, slug, branchPrefix }) {
