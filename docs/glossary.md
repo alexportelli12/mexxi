@@ -7,7 +7,11 @@ sources:
   - docs/decisions/0011-segwi.md
   - docs/decisions/0016-segwi-runs-trusted-like-own-sessions.md
   - docs/decisions/0015-tests-name-the-break-they-catch.md
-reviewed: 2026-10-24
+  - docs/decisions/0017-workspace-port-blocks.md
+  - docs/decisions/0018-machine-wide-run-slots.md
+  - docs/decisions/0019-runs-in-a-systemd-scope.md
+  - docs/decisions/0020-segwi-local-extensions.md
+reviewed: 2026-10-25
 ---
 
 # Glossary
@@ -49,6 +53,10 @@ The branch pull requests target, usually `main`. mexxi never pushes to it.
 ## evidence directory
 
 The folder where a run keeps screenshots, recordings and notes, outside the repository so nothing is committed by accident. `ibni prepare` reports it as `evidenceDir`.
+
+## extension
+
+A folder of your own that segwi serves as an extra page, such as a dashboard of your machine, behind its own sign-in. It saves running and securing a second server. See [segwi](segwi.md#add-your-own-page).
 
 ## forge
 
@@ -98,6 +106,10 @@ The AI models from one maker, such as the Claude models or the GPT models. A rev
 
 A tool for driving a real browser from code. Through Playwright MCP, the agent opens your app, clicks through it and takes screenshots at several screen sizes.
 
+## port block
+
+The run of consecutive ports a workspace gets, 10 by default. `ibni` hands them to the install and the checks as `PORT` and `MEXXI_PORT_<n>`, so two tasks' development and test servers never fight over a port. [Decision 0017](decisions/0017-workspace-port-blocks.md).
+
 ## pull request
 
 What a run delivers: a branch with the change, and a description that explains it. On GitLab it is called a merge request.
@@ -105,6 +117,14 @@ What a run delivers: a branch with the change, and a description that explains i
 ## rendered QA
 
 Driving the running UI in a real browser and capturing evidence: several screen sizes, motion, keyboard use and console errors. It catches the page that is broken even though the tests pass. It is a gate for user-facing changes.
+
+## run slot
+
+One of the few places, two by default, for an install or a check to run at once on the machine, across every repository. Others wait in a queue, so parallel tasks slow each other a little instead of making each other's tests time out. [Decision 0018](decisions/0018-machine-wide-run-slots.md).
+
+## scope
+
+The systemd group an install or a check runs in on Linux. It gives the run a lower CPU priority than your sessions and a memory limit, and stopping it ends every server or browser the run started. [Decision 0019](decisions/0019-runs-in-a-systemd-scope.md).
 
 ## segwi
 
@@ -128,7 +148,7 @@ The repository's own pass/fail command for "does it work?": `npm run verify`, or
 
 ## workspace
 
-A retained worktree together with its record: branch, block of ports, evidence directory and pull request. Keeping it lets a later session pick up follow-up changes. `ibni list` lists them.
+A retained worktree together with its record: branch, [port block](#port-block), evidence directory and pull request. Keeping it lets a later session pick up follow-up changes. `ibni list` lists them.
 
 ## worktree
 

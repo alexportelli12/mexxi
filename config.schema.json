@@ -112,13 +112,13 @@
           "additionalProperties": false,
           "default": {},
           "properties": {
-            "first": { "description": "Lowest port ibni assigns. Each task gets its own port from this range, so two tasks can run their development servers at once.", "type": "integer", "minimum": 1024, "maximum": 65535, "default": 4300 },
+            "first": { "description": "Lowest port ibni assigns. Each workspace gets its own block of ports from this range, so two tasks can run their servers and checks at once.", "type": "integer", "minimum": 1024, "maximum": 65535, "default": 4300 },
             "last": { "description": "Highest port ibni assigns; at least first.", "type": "integer", "minimum": 1024, "maximum": 65535, "default": 4999 },
             "blockSize": { "description": "Ports in each workspace's block. ibni passes them to setup and verify as PORT (the first) and MEXXI_PORT_0 to MEXXI_PORT_<blockSize-1>, so one workspace can run a dev server and several test servers at once.", "type": "integer", "minimum": 1, "maximum": 100, "default": 10 }
           }
         },
         "warmCaches": { "description": "Copy build, type-check, lint and test caches (.next/cache, *.tsbuildinfo, .eslintcache, node_modules/.vite/vitest) that the control checkout has into each new worktree after setup, up to 1 GB each, so its first verify run is not a cold one. Each tool checks its cache against the sources, so a stale copy only costs a rebuild.", "type": "boolean", "default": true },
-        "verifySlots": { "description": "How many setup and verify runs ibni lets run at once on this machine, across every repository; the rest wait in a queue and report the wait as queuedMs. Two eduline verify runs together on 8 vCPUs took 29% longer and passed; three made its unit tests time out.", "type": "integer", "minimum": 1, "maximum": 64, "default": 2 },
+        "verifySlots": { "description": "How many setup and verify runs ibni lets run at once on this machine, across every repository; the rest wait in a queue and report the wait as queuedMs. Two suits a machine with 8 cores: raise it if runs rarely wait, and lower it if checks start to time out under load.", "type": "integer", "minimum": 1, "maximum": 64, "default": 2 },
         "scope": {
           "description": "The systemd user scope ibni runs setup and verify in, where systemd-run --user works; elsewhere they run as plain child processes.",
           "type": "object",

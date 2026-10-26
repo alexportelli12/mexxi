@@ -28,7 +28,9 @@ An agent working in your checkout trips over your own unfinished work. It switch
 
 Before any work starts, `ibni`, the command-line tool the agent runs, makes a [worktree](glossary.md#worktree): a separate copy of the repository on a new branch. It gets its own block of free ports, which its install, its checks and its servers all use. Every later step happens there.
 
-Your checkout stays exactly as you left it, and you can run several tasks side by side, checks included. [Decision 0004](decisions/0004-isolated-worktree-per-task.md) and [decision 0017](decisions/0017-workspace-port-blocks.md)
+Several tasks checking their work at once can also starve one machine. So installs and checks wait for one of a few machine-wide [run slots](glossary.md#run-slot). Each runs in a [scope](glossary.md#scope), with a lower CPU priority than your sessions and a memory limit.
+
+Your checkout stays exactly as you left it, and you can run several tasks side by side, checks included. [Decision 0004](decisions/0004-isolated-worktree-per-task.md), [decision 0017](decisions/0017-workspace-port-blocks.md), [decision 0018](decisions/0018-machine-wide-run-slots.md) and [decision 0019](decisions/0019-runs-in-a-systemd-scope.md)
 
 ## A pass/fail command defines "done"
 

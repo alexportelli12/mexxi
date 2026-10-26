@@ -337,7 +337,10 @@ export const COMMANDS = {
     usage: "ibni stats --session <id>",
     summary: "Print the session's step timings, setup, verify attempts, finding counts and Jev triage as JSON.",
     why: "You need to see where a run spent its time and how often its checks failed.",
-    details: [SESSION_LOOKUP],
+    details: [
+      SESSION_LOOKUP,
+      "verify.history lists each verify run with its outcome, durationMs and queuedMs (the wait for a run slot), and, where the run had a scope, memoryPeakBytes and cpuMs, so you can see whether runs wait too long or need more memory.",
+    ],
     options: { session: "The sessionId from prepare or adopt." },
     run: (options) => workspaceStats({ sessionId: options.session }),
   },

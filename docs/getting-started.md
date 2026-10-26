@@ -8,6 +8,8 @@ sources:
   - prompts.json
   - scripts/ibni/**
   - skills/rendered-qa/SKILL.md
+  - scripts/lib/browser.mjs
+  - scripts/ibni/lib/scope.mjs
 reviewed: 2026-10-25
 ---
 
@@ -24,11 +26,12 @@ mexxi runs inside the coding agent you already use, so it needs one of Claude Co
 - **The forge's CLI, signed in**: [`gh`](https://cli.github.com/) for GitHub or [`glab`](https://gitlab.com/gitlab-org/cli) for GitLab. The agent uses it to open the pull request and to see when it has merged, so finished worktrees can be cleaned up. A self-hosted forge also needs its host name in `forge.hosts` ([Configuration](configuration/index.md)).
 - **`~/.local/bin` on your `PATH`**, so the agent can run [`ibni`](cli/index.md), the command-line tool it uses for each task's worktree.
 
-Three more are optional or host-specific:
+Four more are optional or host-specific:
 
 - the [Playwright MCP](https://github.com/microsoft/playwright-mcp) server, which lets the agent drive a real browser to check UI changes. MCP is the standard way to give an agent extra tools. Without this one, the agent cannot click through the app itself, and the pull request's evidence says what did not run;
-- the [`ocr`](https://github.com/alibaba/open-code-review) CLI, which picks the files and rules the independent reviewer looks at. With `review.tool` set to `none`, the reviewer reads the whole diff itself instead; and
-- `ffmpeg`, which turns recordings of motion into GIFs for the pull request.
+- the [`ocr`](https://github.com/alibaba/open-code-review) CLI, which picks the files and rules the independent reviewer looks at. With `review.tool` set to `none`, the reviewer reads the whole diff itself instead;
+- `ffmpeg`, which turns recordings of motion into GIFs for the pull request; and
+- on Linux, `systemd-run --user`, which most distributions have. With it, each install and check runs with a lower CPU priority and a memory limit, so several tasks at once cannot freeze the machine. Without it, they run without those limits. [Configuration](configuration/index.md#run-several-tasks-at-once-on-one-machine) has the settings.
 
 ## Set up by pasting a prompt
 
@@ -73,6 +76,7 @@ Claude Code, Codex and OpenCode each expect their commands, agents, skills and h
 It renders the host files from `config.json` into `~/.local/share/mexxi/generated/`, then links them and the shared files into each host's home. [Configuration](configuration/index.md) lists every link. It never overwrites existing configuration: on a conflict it stops and lists the paths. It also:
 
 - puts `ibni` in `~/.local/bin`;
+- installs the pinned Playwright MCP server under `~/.local/share/mexxi/playwright-mcp`, so each agent session starts it with `node` rather than `npx`, which saves about 100 MiB per session;
 - adds a `post-merge` hook, so a later `git pull` on `main` reinstalls automatically; and
 - preserves your personal Codex `config.toml`.
 

@@ -7,6 +7,10 @@ sources:
   - scripts/lib/config.mjs
   - scripts/ibni/lib/baseline.mjs
   - scripts/ibni/lib/forge.mjs
+  - scripts/ibni/lib/ports.mjs
+  - scripts/ibni/lib/lock.mjs
+  - scripts/ibni/lib/scope.mjs
+  - scripts/ibni/lib/caches.mjs
 reviewed: 2026-10-25
 ---
 
@@ -82,3 +86,31 @@ In the repository's `.mexxi.json`:
 ```json
 { "verify": "make check", "ciCheck": "verify" }
 ```
+
+### Run several tasks at once on one machine
+
+Two tasks that check their work at the same moment can fight over ports and starve each other of CPU. The defaults already handle most of it, and these keys tune it.
+
+Each workspace gets a block of ports, and `ibni` hands it to setup and verify as `PORT` and `MEXXI_PORT_0` to `MEXXI_PORT_9`. A repository whose test servers read their own variables, with a fixed fallback port, can have those variables mapped to the block in `config.json`, so it needs no change. Key the mapping by the folder name of the repository's checkout, with each variable's offset in the block (offset 0 is `PORT`):
+
+```json
+{
+  "workflow": {
+    "ports": { "first": 4300, "last": 4999, "blockSize": 10 },
+    "portVariables": {
+      "my-web-app": { "E2E_PORT": 1, "E2E_MOCK_API_PORT": 2, "STORYBOOK_PORT": 3 }
+    }
+  }
+}
+```
+
+Two more settings keep parallel checks from overloading the machine:
+
+- **`verifySlots`** is how many setup and verify runs go at once, across every repository. The rest wait in a queue, and the result reports the wait as `queuedMs`. Two suits a machine with 8 cores. Raise it if runs rarely wait; lower it if checks start to time out under load.
+- **`scope`** runs each setup and verify in a systemd user scope, where `systemd-run --user` works (most Linux machines). A lower `cpuWeight` lets your interactive sessions stay responsive while checks run. `memoryMax` makes the kernel stop a runaway check rather than an agent session. When the run ends, the scope also stops any server or browser the command left behind. Elsewhere, such as on macOS, runs are plain child processes without these limits.
+
+```json
+{ "workflow": { "verifySlots": 2, "scope": { "enabled": true, "cpuWeight": 50, "memoryMax": "50%" } } }
+```
+
+`warmCaches`, on by default, copies your checkout's build and test caches into each new worktree, so its first check does not start cold. Set it to `false` if a tool in your repository misbehaves with a copied cache.
