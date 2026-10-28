@@ -30,7 +30,7 @@ Before writing, every output passes a leak scan (`scanForLeaks`). It runs mexxi'
 
 ## Matching sessions to repositories
 
-A session belongs to the repository its working directory is in. That covers checkouts under `~/workspace/<name>` and worktrees under mexxi's, OpenCode's and coding-agent's worktree roots, with the `-<10 hex>` suffix removed. A few renamed checkouts map by name (`mexxi-upgrade` to mexxi, `eduline-wt` to eduline-ai-shop). Sessions in the home directory or in host config directories are labelled `home` and `global-config`.
+A session belongs to the repository its working directory is in. That covers checkouts under `~/workspace/<name>` and worktrees under mexxi's, OpenCode's and coding-agent's worktree roots, with the `-<10 hex>` suffix removed. A second checkout named `<repo>-<suffix>`, such as `mexxi-upgrade`, maps to `<repo>`. Any other name maps to `unknown` (10 sessions): the code holds no table of private names, and the deleted checkouts behind these sessions can no longer be looked up. Sessions in the home directory or in host config directories are labelled `home` and `global-config`.
 
 ## Milestones
 
@@ -94,7 +94,7 @@ These use the patterns in `scripts/retro/session_retro.py`, copied into `lib/pat
 | globAborts | Bash outputs matching the zsh pitfall pattern (`(eval):N: no matches found` and similar), whether or not the call failed. Per 100 tool calls. OpenCode runs bash, so it never shows them. |
 | hiddenExitCodes | Bash calls whose command matches the retro's check pattern (npm test, vitest, tsc, eslint, verify...) and exited 0, but whose output shows failure (`FAIL`, `N failed`, `error TS`). Per 100 tool calls. |
 | bashFailureRate | Failed Bash calls ÷ Bash calls. A call fails when the tool reports an error or its output starts with `Exit code N` (Claude Code), when OpenCode's exit code is non-zero, or when it is a hidden exit code. |
-| timeouts | Failed Bash calls whose cause lines match the timeout pattern, plus calls that ran 595 seconds or more (the Bash cap). Per 100 tool calls. |
+| timeouts | Failed Bash calls whose cause lines match the timeout pattern or that ran 595 seconds or more (the Bash cap), counted once per call. Per 100 tool calls. `bashCapHits` separately counts every call that ran that long, failed or not. |
 | missingPackages, commandNotFound | Failed Bash calls whose cause lines match the retro's patterns. Cause lines are the first 4 and last 6 lines that read like an error. |
 | compactionsPerSession | Claude Code `compact_boundary` entries and OpenCode `compaction` parts, per session. |
 | correctionsPerSession | Prompts under 1,500 characters matching the retro's correction pattern ("no", "wrong", "I said", "still broken"), unless they are follow-ups. |

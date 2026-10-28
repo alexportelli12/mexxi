@@ -73,7 +73,7 @@ export function summarize(rows, concurrencyByDay = {}, days = []) {
       bashFailureRate: round(ratio(sum("bashFailures"), sum("bashCalls")), 3),
       globAborts: per100(sum("globAborts"), toolCalls),
       hiddenExitCodes: per100(sum("hiddenExitCodes"), toolCalls),
-      timeouts: per100(sum("timeouts") + sum("bashCapHits"), toolCalls),
+      timeouts: per100(sum("timeouts"), toolCalls),
       bashCapHits: sum("bashCapHits"),
       portClashes: per100(sum("portClashes"), toolCalls),
       missingPackages: per100(sum("missingPackages"), toolCalls),

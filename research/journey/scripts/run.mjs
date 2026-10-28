@@ -293,7 +293,7 @@ const h1 = [
 const hypotheses = [];
 hypotheses.push({
   id: "H1-backpack",
-  verdict: h1.every((c) => c.reading === "improved") ? "supported" : h1.some((c) => c.reading === "improved") ? "mixed" : h1.every((c) => c.reading === "insufficient data") ? "insufficient data" : "not supported",
+  verdict: verdict(h1),
   headline: `Always-loaded rules across repositories: peak ${h1[0].peak} (${h1[0].peakDate}), now ${h1[0].latest}. Workflow prose in project repositories: peak ${h1[1].peak} rules (${h1[1].peakDate}), now ${h1[1].latest}. mexxi's own workflow prose: peak ${h1[2].peak} (${h1[2].peakDate}), now ${h1[2].latest}. Tool-enforced concerns across repositories: ${backpackTotals[0]?.movedToTools ?? 0} at the first snapshot, ${latestTotals?.movedToTools ?? 0} now.`,
   evidence: { comparisons: h1, concerns },
   caveats: ["Counts directive lines (always, never, must, prefer...) in AGENTS.md, CLAUDE.md and rule files, and separately in commands and agent definitions; it does not weigh how long or how often a rule is read.", "Global instructions live in mexxi's own AGENTS.md since August 2026; earlier global files in the hosts' own config directories were not in Git and have no history.", "New repositories joining raise the total without any one backpack growing."],
@@ -306,7 +306,7 @@ hypotheses.push({
   verdict: verdict(h2, { forceInsufficient: true }),
   headline: `Claims that checks pass with no passing check after the last edit: ${pct(verifySplit.before.metrics.unverifiedDoneRate)} of ${verifySplit.before.metrics.doneClaims} claims (${verifySplit.before.sessions} sessions) before each repository added its verify script, ${pct(verifySplit.after.metrics.unverifiedDoneRate)} of ${verifySplit.after.metrics.doneClaims} claims (${verifySplit.after.sessions} sessions) after. The detector's precision was 28-48% on a hand-checked sample, so this cannot carry a verdict.`,
   evidence: { comparisons: h2 },
-  caveats: ["Session logs start on " + firstDay + ", after the first verify script; the 'before' side is the few sessions in repositories that added theirs later.", "A hand-checked sample of 25 flagged claims found 7 clearly unverified, 5 ambiguous and 13 false positives (METHOD.md).", "Checks run by delegated subagents are invisible to the parent session and read as unverified."],
+  caveats: [`Session logs start on ${firstDay}; the first verify script is dated ${date("first-verify-command")}. The 'before' side is the few sessions in repositories that added theirs later.`, "A hand-checked sample of 25 flagged claims found 7 clearly unverified, 5 ambiguous and 13 false positives (METHOD.md).", "Checks run by delegated subagents are invisible to the parent session and read as unverified."],
 });
 
 const lintSplit = splitByRepoDate("strictLint");
@@ -314,7 +314,7 @@ const h3 = [compare(lintSplit.before, lintSplit.after, "correctionsPerSession", 
 hypotheses.push({
   id: "H3-lint",
   verdict: verdict(h3),
-  headline: `Only ${lintSplit.repositories} repository's history dates a lint tightening in words, and it predates the session logs, so its sessions number ${lintSplit.before.sessions} before and ${lintSplit.after.sessions} after: there is no before to compare.`,
+  headline: `Only ${lintSplit.repositories} repository's history dates a lint tightening in words (${date("strict-lint")}). That repository has ${lintSplit.before.sessions} sessions before the date and ${lintSplit.after.sessions} after, so there is no before to compare.`,
   evidence: { comparisons: h3, lintErrorRulesNow: backpackRows.filter((row) => row.date === today).map((row) => ({ source: label(row.source), lintErrorRules: row.lintErrorRules })) },
   caveats: ["Corrections are counted with the retro's CORRECTION_RE; it does not know which pattern a correction is about, so 'the same pattern' cannot be tested from transcripts.", "Lint strictness over time is shown as the number of rules set to error in each ESLint config (backpack rows, lintErrorRules)."],
 });
@@ -364,7 +364,7 @@ hypotheses.push({
   verdict: verdict(h6),
   headline: `Mean daily peak of concurrent sessions: ${ibniSplit.before.metrics.meanDailyMaxConcurrent} before ibni, ${ibniSplit.after.metrics.meanDailyMaxConcurrent} after. Port clashes per 100 tool calls: ${portSplit.before.metrics.portClashes} before port blocks, ${portSplit.after.metrics.portClashes} after; timeouts ${portSplit.before.metrics.timeouts} to ${portSplit.after.metrics.timeouts}.`,
   evidence: { comparisons: h6 },
-  caveats: [`The port-block 'after' side covers ${daysBetween(date("port-blocks"), today).length} days.`, "Concurrency counts sessions with activity within 30 minutes of each other; an idle open session does not count."],
+  caveats: [`The port-block 'after' side covers ${daysBetween(date("port-blocks"), today).length} days (${date("port-blocks")} to ${today}).`, "Concurrency counts sessions with activity within 30 minutes of each other; an idle open session does not count."],
 });
 
 function pct(value) {
@@ -384,7 +384,7 @@ if (!options.offline) {
   pullRequests = {
     total: summarizeGroup(inWindow),
     byEra: eras.map((era) => ({ id: era.id, ...summarizeGroup(inWindow.filter((pr) => pr.createdAt.slice(0, 10) >= era.from && pr.createdAt.slice(0, 10) <= era.to)) })),
-    byRepository: [...new Set(inWindow.map((pr) => pr.repo))].sort().map((name) => ({ repository: label(name), ...summarizeGroup(inWindow.filter((pr) => pr.repo === name)) })),
+    byRepository: [...new Set(inWindow.map((pr) => pr.repo))].map((name) => ({ repository: label(name), ...summarizeGroup(inWindow.filter((pr) => pr.repo === name)) })).sort((a, b) => a.repository.localeCompare(b.repository)),
     firstAgentPullRequest: inWindow.map((pr) => pr.createdAt).sort()[0]?.slice(0, 10) ?? null,
   };
 } else {
@@ -407,7 +407,8 @@ const data = {
   generatedBy: "research/journey/scripts/run.mjs",
   coverage: {
     sessions: Object.fromEntries(Object.entries(coverage).map(([source, c]) => [source, { from: c.from, to: c.to, sessions: c.sessions, analysed: c.analysed, toolCalls: c.toolCalls, excluded: c.excluded }])),
-    git: repos.map((repo) => ({ repository: label(repo.name), from: repo.firstCommit, to: today, commits: null })),
+    // Sorted by label: the real names' order would hint at the private ones.
+    git: repos.map((repo) => ({ repository: label(repo.name), from: repo.firstCommit, to: today, commits: null })).sort((a, b) => a.repository.localeCompare(b.repository)),
     sessionMetricsFrom: firstDay,
     until: today,
   },
@@ -418,7 +419,7 @@ const data = {
   eras: eraRows,
   erasBySource,
   weekly,
-  sessionsByRepository: [...new Set(rows.map((r) => r.repo))].sort().map((repo) => ({ repository: label(repo), sessions: rows.filter((r) => r.repo === repo).length })),
+  sessionsByRepository: [...new Set(rows.map((r) => r.repo))].map((repo) => ({ repository: label(repo), sessions: rows.filter((r) => r.repo === repo).length })).sort((a, b) => a.repository.localeCompare(b.repository)),
   sessionsBySource: Object.fromEntries(["claude", "opencode"].map((source) => [source, eras.map((era) => rows.filter((r) => r.source === source && eraOf(r.start) === era.id).length)])),
   concurrencyByDay: concurrency,
   hypotheses,

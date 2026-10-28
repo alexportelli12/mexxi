@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-28T06:23:38.615Z",
+  "generatedAt": "2026-10-28T06:31:36.713Z",
   "generatedBy": "research/journey/scripts/run.mjs",
   "coverage": {
     "sessions": {
@@ -45,34 +45,16 @@
     },
     "git": [
       {
-        "repository": "private repo A",
-        "from": "2020-06-27",
+        "repository": "constitution-explained",
+        "from": "2025-07-20",
         "to": "2026-10-27",
-        "commits": 53
-      },
-      {
-        "repository": "private repo G",
-        "from": "2026-10-25",
-        "to": "2026-10-27",
-        "commits": 6
+        "commits": 67
       },
       {
         "repository": "eduline-ai-shop",
         "from": "2026-05-10",
         "to": "2026-10-27",
         "commits": 652
-      },
-      {
-        "repository": "private repo C",
-        "from": "2024-08-26",
-        "to": "2026-10-27",
-        "commits": 290
-      },
-      {
-        "repository": "private repo F",
-        "from": "2026-09-05",
-        "to": "2026-10-27",
-        "commits": 43
       },
       {
         "repository": "mexxi",
@@ -87,10 +69,22 @@
         "commits": 1
       },
       {
+        "repository": "private repo A",
+        "from": "2020-06-27",
+        "to": "2026-10-27",
+        "commits": 53
+      },
+      {
         "repository": "private repo B",
         "from": "2023-05-01",
         "to": "2026-10-27",
         "commits": 527
+      },
+      {
+        "repository": "private repo C",
+        "from": "2024-08-26",
+        "to": "2026-10-27",
+        "commits": 290
       },
       {
         "repository": "private repo D",
@@ -99,22 +93,28 @@
         "commits": 795
       },
       {
-        "repository": "verifika",
-        "from": "2026-10-12",
-        "to": "2026-10-27",
-        "commits": 46
-      },
-      {
         "repository": "private repo E",
         "from": "2026-02-27",
         "to": "2026-10-27",
         "commits": 84
       },
       {
-        "repository": "constitution-explained",
-        "from": "2025-07-20",
+        "repository": "private repo F",
+        "from": "2026-09-05",
         "to": "2026-10-27",
-        "commits": 67
+        "commits": 43
+      },
+      {
+        "repository": "private repo G",
+        "from": "2026-10-25",
+        "to": "2026-10-27",
+        "commits": 6
+      },
+      {
+        "repository": "verifika",
+        "from": "2026-10-12",
+        "to": "2026-10-27",
+        "commits": 46
       }
     ],
     "sessionMetricsFrom": "2026-08-20",
@@ -2527,7 +2527,7 @@
         "bashFailureRate": 0.09,
         "globAborts": 0.73,
         "hiddenExitCodes": 0.78,
-        "timeouts": 0.05,
+        "timeouts": 0.01,
         "bashCapHits": 14,
         "portClashes": 0.07,
         "missingPackages": 0.05,
@@ -2559,7 +2559,7 @@
         "bashFailureRate": 0.045,
         "globAborts": 2.64,
         "hiddenExitCodes": 1.69,
-        "timeouts": 0.43,
+        "timeouts": 0.09,
         "bashCapHits": 20,
         "portClashes": 0.16,
         "missingPackages": 0.14,
@@ -2591,7 +2591,7 @@
         "bashFailureRate": 0.113,
         "globAborts": 0.11,
         "hiddenExitCodes": 0.97,
-        "timeouts": 0.36,
+        "timeouts": 0.17,
         "bashCapHits": 11,
         "portClashes": 0.09,
         "missingPackages": 0.04,
@@ -2623,7 +2623,7 @@
         "bashFailureRate": 0.098,
         "globAborts": 0,
         "hiddenExitCodes": 0.33,
-        "timeouts": 0.03,
+        "timeouts": 0,
         "bashCapHits": 1,
         "portClashes": 0.14,
         "missingPackages": 0.11,
@@ -2685,7 +2685,7 @@
         "bashFailureRate": 0.135,
         "globAborts": 0,
         "hiddenExitCodes": 0.44,
-        "timeouts": 0.04,
+        "timeouts": 0,
         "bashCapHits": 7,
         "portClashes": 0.09,
         "missingPackages": 0.04,
@@ -2715,7 +2715,7 @@
         "bashFailureRate": 0.045,
         "globAborts": 2.53,
         "hiddenExitCodes": 1.62,
-        "timeouts": 0.1,
+        "timeouts": 0.02,
         "bashCapHits": 7,
         "portClashes": 0.01,
         "missingPackages": 0.09,
@@ -2745,7 +2745,7 @@
         "bashFailureRate": 0.045,
         "globAborts": 2.64,
         "hiddenExitCodes": 1.69,
-        "timeouts": 0.43,
+        "timeouts": 0.09,
         "bashCapHits": 20,
         "portClashes": 0.16,
         "missingPackages": 0.14,
@@ -2775,7 +2775,7 @@
         "bashFailureRate": 0.113,
         "globAborts": 0.11,
         "hiddenExitCodes": 0.97,
-        "timeouts": 0.36,
+        "timeouts": 0.17,
         "bashCapHits": 11,
         "portClashes": 0.09,
         "missingPackages": 0.04,
@@ -2805,7 +2805,7 @@
         "bashFailureRate": 0.098,
         "globAborts": 0,
         "hiddenExitCodes": 0.33,
-        "timeouts": 0.03,
+        "timeouts": 0,
         "bashCapHits": 1,
         "portClashes": 0.14,
         "missingPackages": 0.11,
@@ -2952,7 +2952,7 @@
         "bashFailureRate": 0.126,
         "globAborts": 0,
         "hiddenExitCodes": 0.83,
-        "timeouts": 0.06,
+        "timeouts": 0,
         "bashCapHits": 5,
         "portClashes": 0.05,
         "missingPackages": 0.06,
@@ -2981,7 +2981,7 @@
         "bashFailureRate": 0.115,
         "globAborts": 0.2,
         "hiddenExitCodes": 0.39,
-        "timeouts": 0.02,
+        "timeouts": 0.01,
         "bashCapHits": 2,
         "portClashes": 0.1,
         "missingPackages": 0.02,
@@ -3010,7 +3010,7 @@
         "bashFailureRate": 0.06,
         "globAborts": 1.88,
         "hiddenExitCodes": 1.41,
-        "timeouts": 0.08,
+        "timeouts": 0,
         "bashCapHits": 4,
         "portClashes": 0.02,
         "missingPackages": 0.1,
@@ -3039,7 +3039,7 @@
         "bashFailureRate": 0.037,
         "globAborts": 2.64,
         "hiddenExitCodes": 0.99,
-        "timeouts": 0.08,
+        "timeouts": 0,
         "bashCapHits": 3,
         "portClashes": 0,
         "missingPackages": 0.06,
@@ -3068,7 +3068,7 @@
         "bashFailureRate": 0.05,
         "globAborts": 2.58,
         "hiddenExitCodes": 1.85,
-        "timeouts": 0.41,
+        "timeouts": 0.08,
         "bashCapHits": 20,
         "portClashes": 0.15,
         "missingPackages": 0.13,
@@ -3097,7 +3097,7 @@
         "bashFailureRate": 0.102,
         "globAborts": 0.24,
         "hiddenExitCodes": 0.81,
-        "timeouts": 0.27,
+        "timeouts": 0.13,
         "bashCapHits": 12,
         "portClashes": 0.13,
         "missingPackages": 0.05,
@@ -3148,20 +3148,8 @@
   ],
   "sessionsByRepository": [
     {
-      "repository": "private repo A",
-      "sessions": 4
-    },
-    {
-      "repository": "private repo G",
-      "sessions": 1
-    },
-    {
       "repository": "eduline-ai-shop",
       "sessions": 134
-    },
-    {
-      "repository": "private repo C",
-      "sessions": 69
     },
     {
       "repository": "global-config",
@@ -3172,20 +3160,32 @@
       "sessions": 2
     },
     {
-      "repository": "private repo F",
-      "sessions": 7
-    },
-    {
       "repository": "mexxi",
       "sessions": 21
+    },
+    {
+      "repository": "private repo A",
+      "sessions": 4
     },
     {
       "repository": "private repo B",
       "sessions": 1
     },
     {
+      "repository": "private repo C",
+      "sessions": 69
+    },
+    {
       "repository": "private repo D",
       "sessions": 78
+    },
+    {
+      "repository": "private repo F",
+      "sessions": 7
+    },
+    {
+      "repository": "private repo G",
+      "sessions": 1
     },
     {
       "repository": "unknown",
@@ -3393,7 +3393,7 @@
         ]
       },
       "caveats": [
-        "Session logs start on 2026-08-20, after the first verify script; the 'before' side is the few sessions in repositories that added theirs later.",
+        "Session logs start on 2026-08-20; the first verify script is dated 2026-08-24. The 'before' side is the few sessions in repositories that added theirs later.",
         "A hand-checked sample of 25 flagged claims found 7 clearly unverified, 5 ambiguous and 13 false positives (METHOD.md).",
         "Checks run by delegated subagents are invisible to the parent session and read as unverified."
       ]
@@ -3401,7 +3401,7 @@
     {
       "id": "H3-lint",
       "verdict": "insufficient data",
-      "headline": "Only 1 repository's history dates a lint tightening in words, and it predates the session logs, so its sessions number 0 before and 78 after: there is no before to compare.",
+      "headline": "Only 1 repository's history dates a lint tightening in words (2026-08-23). That repository has 0 sessions before the date and 78 after, so there is no before to compare.",
       "evidence": {
         "comparisons": [
           {
@@ -3540,7 +3540,7 @@
     {
       "id": "H6-parallel",
       "verdict": "mixed",
-      "headline": "Mean daily peak of concurrent sessions: 1.63 before ibni, 2.14 after. Port clashes per 100 tool calls: 0.08 before port blocks, 0.14 after; timeouts 0.12 to 0.03.",
+      "headline": "Mean daily peak of concurrent sessions: 1.63 before ibni, 2.14 after. Port clashes per 100 tool calls: 0.08 before port blocks, 0.14 after; timeouts 0.03 to 0.",
       "evidence": {
         "comparisons": [
           {
@@ -3563,9 +3563,9 @@
           },
           {
             "metric": "timeouts per 100 tool calls",
-            "before": 0.12,
-            "after": 0.03,
-            "change": -0.75,
+            "before": 0.03,
+            "after": 0,
+            "change": -1,
             "beforeSessions": 337,
             "afterSessions": 21,
             "reading": "improved"
@@ -3581,9 +3581,9 @@
           },
           {
             "metric": "timeouts per 100 tool calls, Claude Code only",
-            "before": 0.26,
-            "after": 0.03,
-            "change": -0.885,
+            "before": 0.08,
+            "after": 0,
+            "change": -1,
             "beforeSessions": 121,
             "afterSessions": 21,
             "reading": "improved"
@@ -3591,7 +3591,7 @@
         ]
       },
       "caveats": [
-        "The port-block 'after' side covers 3 days.",
+        "The port-block 'after' side covers 3 days (2026-10-25 to 2026-10-27).",
         "Concurrency counts sessions with activity within 30 minutes of each other; an idle open session does not count."
       ]
     }
@@ -3654,46 +3654,10 @@
     ],
     "byRepository": [
       {
-        "repository": "private repo A",
-        "pullRequests": 1,
-        "merged": 1,
-        "medianHoursToMerge": 155.2,
-        "medianCommits": 1,
-        "medianReviews": 0,
-        "withCommitsAfterFirstReview": 0
-      },
-      {
-        "repository": "private repo G",
-        "pullRequests": 2,
-        "merged": 2,
-        "medianHoursToMerge": 0.2,
-        "medianCommits": 1,
-        "medianReviews": 0,
-        "withCommitsAfterFirstReview": 0
-      },
-      {
         "repository": "eduline-ai-shop",
         "pullRequests": 117,
         "merged": 111,
         "medianHoursToMerge": 0.5,
-        "medianCommits": 1,
-        "medianReviews": 0,
-        "withCommitsAfterFirstReview": 0
-      },
-      {
-        "repository": "private repo C",
-        "pullRequests": 48,
-        "merged": 46,
-        "medianHoursToMerge": 0.4,
-        "medianCommits": 1,
-        "medianReviews": 0,
-        "withCommitsAfterFirstReview": 0
-      },
-      {
-        "repository": "private repo F",
-        "pullRequests": 1,
-        "merged": 1,
-        "medianHoursToMerge": 155.1,
         "medianCommits": 1,
         "medianReviews": 0,
         "withCommitsAfterFirstReview": 0
@@ -3717,10 +3681,46 @@
         "withCommitsAfterFirstReview": 0
       },
       {
+        "repository": "private repo A",
+        "pullRequests": 1,
+        "merged": 1,
+        "medianHoursToMerge": 155.2,
+        "medianCommits": 1,
+        "medianReviews": 0,
+        "withCommitsAfterFirstReview": 0
+      },
+      {
+        "repository": "private repo C",
+        "pullRequests": 48,
+        "merged": 46,
+        "medianHoursToMerge": 0.4,
+        "medianCommits": 1,
+        "medianReviews": 0,
+        "withCommitsAfterFirstReview": 0
+      },
+      {
         "repository": "private repo D",
         "pullRequests": 26,
         "merged": 23,
         "medianHoursToMerge": 4.9,
+        "medianCommits": 1,
+        "medianReviews": 0,
+        "withCommitsAfterFirstReview": 0
+      },
+      {
+        "repository": "private repo F",
+        "pullRequests": 1,
+        "merged": 1,
+        "medianHoursToMerge": 155.1,
+        "medianCommits": 1,
+        "medianReviews": 0,
+        "withCommitsAfterFirstReview": 0
+      },
+      {
+        "repository": "private repo G",
+        "pullRequests": 2,
+        "merged": 2,
+        "medianHoursToMerge": 0.2,
         "medianCommits": 1,
         "medianReviews": 0,
         "withCommitsAfterFirstReview": 0

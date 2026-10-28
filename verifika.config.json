@@ -79,7 +79,7 @@
     },
     "journey": {
       "command": "node --test research/journey/scripts/journey.test.mjs",
-      "paths": ["research/journey/scripts/**", "scripts/retro/session_retro.py", "scripts/lib/redact.mjs", "scripts/lib/secret-patterns.json"]
+      "paths": ["research/journey/scripts/**", "research/journey/journey-data.json", "research/journey/REPORT.md", "scripts/retro/session_retro.py", "scripts/lib/redact.mjs", "scripts/lib/secret-patterns.json"]
     },
     "integration": {
       "command": "node --test scripts/integration.test.mjs",

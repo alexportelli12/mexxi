@@ -8,7 +8,8 @@ import { percentile } from "./aggregate.mjs";
 const run = promisify(execFile);
 
 // Branch prefixes the workflow's sessions push: ibni and its predecessor use
-// agent/, early OpenCode runs used opencode/.
+// agent/, early OpenCode runs used opencode/, and claude/ and codex/ are the
+// hosts' own defaults.
 export const AGENT_BRANCH = /^(?:agent|opencode|claude|codex)\//;
 
 const QUERY = `query($owner: String!, $name: String!, $endCursor: String) {

@@ -1,7 +1,7 @@
 // Text patterns behind every metric. The ones marked "retro" are copied from
 // scripts/retro/session_retro.py, which /irrifletti and
 // docs/where-the-problems-come-from.md use, so the numbers stay comparable;
-// patterns.test.mjs fails if a copy drifts from the Python source. The rest are
+// journey.test.mjs fails if a copy drifts from the Python source. The rest are
 // new to this research and are defined in METHOD.md.
 
 // retro: ZSH_PITFALL_RE

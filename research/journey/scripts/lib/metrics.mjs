@@ -114,7 +114,8 @@ export function sessionMetrics(session) {
         const timeout = CATEGORY.timeout.test(causes) || (event.durationMs ?? 0) >= BASH_CAP_MS;
         const missing = CATEGORY.missingPackage.test(causes);
         const notFound = CATEGORY.commandNotFound.test(causes);
-        if (CATEGORY.timeout.test(causes)) m.timeouts += 1;
+        // Once per failed call, whether the text or the cap gave it away.
+        if (timeout) m.timeouts += 1;
         if (missing) m.missingPackages += 1;
         if (notFound) m.commandNotFound += 1;
         // A failure the environment caused rather than the work: the shell, the

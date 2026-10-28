@@ -221,8 +221,9 @@ test("environmental failures are told apart from failing work", () => {
 
 test("a call that ran into the Bash cap counts as a timeout", () => {
   // Break: the 10-minute cap, a known cause of lost verify runs, is missed.
-  const m = metrics(bash("npm run verify", "Exit code 143", { failed: true, durationMs: 600_000 }));
-  assert.deepEqual([m.bashCapHits, m.environmentalFailures], [1, 1]);
+  const m = metrics(bash("npm run verify", "Exit code 143\nCommand timed out", { failed: true, durationMs: 600_000 }));
+  // One failed call that both says it timed out and hit the cap is one timeout.
+  assert.deepEqual([m.bashCapHits, m.timeouts, m.environmentalFailures], [1, 1, 1]);
 });
 
 test("editing a file the session never read counts once per edit", () => {
@@ -277,6 +278,9 @@ test("group rates come from totals, not averages of session rates", () => {
   // 500-call session.
   const row = (toolCalls, globAborts) => ({ metrics: { ...metrics(), toolCalls, globAborts, checkRunBytes: [] } });
   assert.equal(summarize([row(1, 1), row(99, 0)]).metrics.globAborts, 1);
+  // Break: a call that hit the cap and said it timed out counts twice.
+  const capped = { metrics: { ...metrics(), toolCalls: 100, timeouts: 1, bashCapHits: 1, checkRunBytes: [] } };
+  assert.equal(summarize([capped]).metrics.timeouts, 1);
 });
 
 test("a comparison needs 20 sessions a side, and verdicts follow the stated thresholds", () => {
@@ -294,6 +298,16 @@ test("a comparison needs 20 sessions a side, and verdicts follow the stated thre
   assert.equal(verdict([{ reading: "worse" }, { reading: "no change" }]), "not supported");
   assert.equal(verdict([{ reading: "insufficient data" }]), "insufficient data");
   assert.equal(verdict([{ reading: "improved" }], { forceInsufficient: true }), "insufficient data");
+});
+
+test("the committed outputs carry no paths, addresses or secrets", async () => {
+  // Break: a hand edit to REPORT.md or journey-data.json after the last run
+  // publishes something the write-time scan would have stopped. Private
+  // repository names are not known here, so only the generic patterns run.
+  for (const file of ["../journey-data.json", "../REPORT.md", "quotes.json"]) {
+    const text = await readFile(new URL(file, import.meta.url), "utf8");
+    assert.deepEqual(scanForLeaks(text), [], file);
+  }
 });
 
 test("ISO weeks start on Monday and the year turns with its first Thursday", () => {
