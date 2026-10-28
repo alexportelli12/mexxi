@@ -1,0 +1,3771 @@
+{
+  "generatedAt": "2026-10-28T06:23:38.615Z",
+  "generatedBy": "research/journey/scripts/run.mjs",
+  "coverage": {
+    "sessions": {
+      "claude": {
+        "from": "2026-09-26",
+        "to": "2026-10-27",
+        "sessions": 465,
+        "analysed": 142,
+        "toolCalls": 23889,
+        "excluded": {
+          "scratch": 37,
+          "undated": 1,
+          "afterUntil": 2,
+          "empty": 283
+        }
+      },
+      "opencode": {
+        "from": "2026-08-20",
+        "to": "2026-10-12",
+        "sessions": 222,
+        "analysed": 216,
+        "toolCalls": 31923,
+        "excluded": {
+          "scratch": 1,
+          "undated": 0,
+          "afterUntil": 0,
+          "empty": 5
+        }
+      },
+      "codex": {
+        "from": "2026-10-02",
+        "to": "2026-10-10",
+        "sessions": 5,
+        "analysed": 5,
+        "toolCalls": 181,
+        "excluded": {
+          "scratch": 0,
+          "undated": 0,
+          "afterUntil": 0,
+          "empty": 0
+        }
+      }
+    },
+    "git": [
+      {
+        "repository": "private repo A",
+        "from": "2020-06-27",
+        "to": "2026-10-27",
+        "commits": 53
+      },
+      {
+        "repository": "private repo G",
+        "from": "2026-10-25",
+        "to": "2026-10-27",
+        "commits": 6
+      },
+      {
+        "repository": "eduline-ai-shop",
+        "from": "2026-05-10",
+        "to": "2026-10-27",
+        "commits": 652
+      },
+      {
+        "repository": "private repo C",
+        "from": "2024-08-26",
+        "to": "2026-10-27",
+        "commits": 290
+      },
+      {
+        "repository": "private repo F",
+        "from": "2026-09-05",
+        "to": "2026-10-27",
+        "commits": 43
+      },
+      {
+        "repository": "mexxi",
+        "from": "2026-08-20",
+        "to": "2026-10-27",
+        "commits": 262
+      },
+      {
+        "repository": "mexxi-demo",
+        "from": "2026-10-22",
+        "to": "2026-10-27",
+        "commits": 1
+      },
+      {
+        "repository": "private repo B",
+        "from": "2023-05-01",
+        "to": "2026-10-27",
+        "commits": 527
+      },
+      {
+        "repository": "private repo D",
+        "from": "2025-09-30",
+        "to": "2026-10-27",
+        "commits": 795
+      },
+      {
+        "repository": "verifika",
+        "from": "2026-10-12",
+        "to": "2026-10-27",
+        "commits": 46
+      },
+      {
+        "repository": "private repo E",
+        "from": "2026-02-27",
+        "to": "2026-10-27",
+        "commits": 84
+      },
+      {
+        "repository": "constitution-explained",
+        "from": "2025-07-20",
+        "to": "2026-10-27",
+        "commits": 67
+      }
+    ],
+    "sessionMetricsFrom": "2026-08-20",
+    "until": "2026-10-27"
+  },
+  "milestones": [
+    {
+      "id": "first-agent-commit",
+      "date": "2025-07-19",
+      "repo": "private repo C",
+      "commit": "921500f",
+      "note": "Earliest commit carrying a Claude Code, OpenCode or Codex attribution trailer. Unattributed agent commits before it cannot be told apart."
+    },
+    {
+      "id": "first-instructions-file",
+      "date": "2025-07-18",
+      "repo": "private repo B",
+      "commit": "73dab84",
+      "note": "First AGENTS.md or CLAUDE.md added to any repository."
+    },
+    {
+      "id": "first-skill",
+      "date": "2026-01-30",
+      "repo": "private repo D",
+      "commit": "506f0b0",
+      "note": "First SKILL.md added to any repository."
+    },
+    {
+      "id": "first-verify-command",
+      "date": "2026-08-24",
+      "repo": "private repo D",
+      "commit": "6e01461",
+      "note": "First package.json gaining a single \"verify\" script."
+    },
+    {
+      "id": "strict-lint",
+      "date": "2026-08-23",
+      "repo": "private repo D",
+      "commit": "1062fa8",
+      "note": "First ESLint config commit whose message says it hardens or tightens lint. Only one repository's history says so in words."
+    },
+    {
+      "id": "verifika-adoption",
+      "date": "2026-10-13",
+      "repo": "eduline-ai-shop",
+      "commit": "438d96f",
+      "note": "First verifika.config.json outside verifika itself."
+    },
+    {
+      "id": "worktree-cli",
+      "date": "2026-09-10",
+      "repo": "mexxi",
+      "commit": "b1bc0c0",
+      "note": "ibni's predecessor, the implementation-workspace CLI, first committed."
+    },
+    {
+      "id": "ibni-first-use",
+      "date": "2026-10-21",
+      "repo": "mexxi",
+      "commit": "38384e7",
+      "note": "The worktree CLI renamed ibni and split into commands.",
+      "firstSessionUse": "2026-10-21"
+    },
+    {
+      "id": "port-blocks",
+      "date": "2026-10-25",
+      "repo": "mexxi",
+      "commit": "37be64b",
+      "note": "Each workspace gets a block of ports."
+    },
+    {
+      "id": "run-slots",
+      "date": "2026-10-25",
+      "repo": "mexxi",
+      "commit": "2ac58e0",
+      "note": "Setup and verify wait for a machine-wide run slot."
+    },
+    {
+      "id": "mexxi-public",
+      "date": "2026-10-21",
+      "repo": "mexxi",
+      "commit": "a809607",
+      "note": "Renamed to mexxi with a docs site and one-paste setup; GitHub Pages first deployed the same day. The MIT licence followed on 2026-10-23. GitHub does not record when the repository's visibility changed."
+    }
+  ],
+  "backpack": [
+    {
+      "date": "2025-07-18",
+      "instructions": 9,
+      "projectWorkflowRules": 11,
+      "instructionLines": 71,
+      "workflowRules": 11,
+      "workflowLines": 119,
+      "skillDescriptionWords": 0,
+      "skills": 0,
+      "movedToTools": 1,
+      "repositories": 1,
+      "source": "all repositories"
+    },
+    {
+      "date": "2025-07-19",
+      "instructions": 16,
+      "projectWorkflowRules": 25,
+      "instructionLines": 158,
+      "workflowRules": 25,
+      "workflowLines": 257,
+      "skillDescriptionWords": 0,
+      "skills": 0,
+      "movedToTools": 2,
+      "repositories": 2,
+      "source": "all repositories"
+    },
+    {
+      "date": "2025-07-31",
+      "instructions": 36,
+      "projectWorkflowRules": 37,
+      "instructionLines": 283,
+      "workflowRules": 37,
+      "workflowLines": 393,
+      "skillDescriptionWords": 0,
+      "skills": 0,
+      "movedToTools": 6,
+      "repositories": 3,
+      "source": "all repositories"
+    },
+    {
+      "date": "2025-08-31",
+      "instructions": 39,
+      "projectWorkflowRules": 37,
+      "instructionLines": 438,
+      "workflowRules": 37,
+      "workflowLines": 393,
+      "skillDescriptionWords": 0,
+      "skills": 0,
+      "movedToTools": 6,
+      "repositories": 3,
+      "source": "all repositories"
+    },
+    {
+      "date": "2025-09-30",
+      "instructions": 39,
+      "projectWorkflowRules": 37,
+      "instructionLines": 438,
+      "workflowRules": 37,
+      "workflowLines": 393,
+      "skillDescriptionWords": 0,
+      "skills": 0,
+      "movedToTools": 6,
+      "repositories": 3,
+      "source": "all repositories"
+    },
+    {
+      "date": "2025-10-31",
+      "instructions": 39,
+      "projectWorkflowRules": 37,
+      "instructionLines": 438,
+      "workflowRules": 37,
+      "workflowLines": 393,
+      "skillDescriptionWords": 0,
+      "skills": 0,
+      "movedToTools": 6,
+      "repositories": 3,
+      "source": "all repositories"
+    },
+    {
+      "date": "2025-11-30",
+      "instructions": 50,
+      "projectWorkflowRules": 37,
+      "instructionLines": 473,
+      "workflowRules": 37,
+      "workflowLines": 393,
+      "skillDescriptionWords": 0,
+      "skills": 0,
+      "movedToTools": 7,
+      "repositories": 4,
+      "source": "all repositories"
+    },
+    {
+      "date": "2025-12-31",
+      "instructions": 64,
+      "projectWorkflowRules": 67,
+      "instructionLines": 630,
+      "workflowRules": 67,
+      "workflowLines": 1319,
+      "skillDescriptionWords": 0,
+      "skills": 0,
+      "movedToTools": 7,
+      "repositories": 4,
+      "source": "all repositories"
+    },
+    {
+      "date": "2026-01-30",
+      "instructions": 55,
+      "projectWorkflowRules": 91,
+      "instructionLines": 533,
+      "workflowRules": 91,
+      "workflowLines": 1165,
+      "skillDescriptionWords": 406,
+      "skills": 10,
+      "movedToTools": 7,
+      "repositories": 4,
+      "source": "all repositories"
+    },
+    {
+      "date": "2026-01-31",
+      "instructions": 55,
+      "projectWorkflowRules": 91,
+      "instructionLines": 533,
+      "workflowRules": 91,
+      "workflowLines": 1165,
+      "skillDescriptionWords": 406,
+      "skills": 10,
+      "movedToTools": 7,
+      "repositories": 4,
+      "source": "all repositories"
+    },
+    {
+      "date": "2026-02-28",
+      "instructions": 54,
+      "projectWorkflowRules": 28,
+      "instructionLines": 493,
+      "workflowRules": 28,
+      "workflowLines": 338,
+      "skillDescriptionWords": 406,
+      "skills": 10,
+      "movedToTools": 7,
+      "repositories": 4,
+      "source": "all repositories"
+    },
+    {
+      "date": "2026-03-31",
+      "instructions": 54,
+      "projectWorkflowRules": 28,
+      "instructionLines": 493,
+      "workflowRules": 28,
+      "workflowLines": 338,
+      "skillDescriptionWords": 461,
+      "skills": 11,
+      "movedToTools": 8,
+      "repositories": 4,
+      "source": "all repositories"
+    },
+    {
+      "date": "2026-04-30",
+      "instructions": 54,
+      "projectWorkflowRules": 28,
+      "instructionLines": 493,
+      "workflowRules": 28,
+      "workflowLines": 338,
+      "skillDescriptionWords": 461,
+      "skills": 11,
+      "movedToTools": 8,
+      "repositories": 4,
+      "source": "all repositories"
+    },
+    {
+      "date": "2026-05-31",
+      "instructions": 54,
+      "projectWorkflowRules": 95,
+      "instructionLines": 493,
+      "workflowRules": 95,
+      "workflowLines": 568,
+      "skillDescriptionWords": 78,
+      "skills": 2,
+      "movedToTools": 8,
+      "repositories": 4,
+      "source": "all repositories"
+    },
+    {
+      "date": "2026-06-30",
+      "instructions": 54,
+      "projectWorkflowRules": 95,
+      "instructionLines": 487,
+      "workflowRules": 95,
+      "workflowLines": 568,
+      "skillDescriptionWords": 78,
+      "skills": 2,
+      "movedToTools": 8,
+      "repositories": 4,
+      "source": "all repositories"
+    },
+    {
+      "date": "2026-07-31",
+      "instructions": 54,
+      "projectWorkflowRules": 95,
+      "instructionLines": 487,
+      "workflowRules": 95,
+      "workflowLines": 568,
+      "skillDescriptionWords": 160,
+      "skills": 3,
+      "movedToTools": 8,
+      "repositories": 4,
+      "source": "all repositories"
+    },
+    {
+      "date": "2026-08-23",
+      "instructions": 72,
+      "projectWorkflowRules": 118,
+      "instructionLines": 487,
+      "workflowRules": 210,
+      "workflowLines": 1100,
+      "skillDescriptionWords": 490,
+      "skills": 11,
+      "movedToTools": 5,
+      "repositories": 4,
+      "source": "all repositories"
+    },
+    {
+      "date": "2026-08-24",
+      "instructions": 69,
+      "projectWorkflowRules": 46,
+      "instructionLines": 475,
+      "workflowRules": 139,
+      "workflowLines": 790,
+      "skillDescriptionWords": 490,
+      "skills": 11,
+      "movedToTools": 6,
+      "repositories": 4,
+      "source": "all repositories"
+    },
+    {
+      "date": "2026-08-31",
+      "instructions": 69,
+      "projectWorkflowRules": 46,
+      "instructionLines": 475,
+      "workflowRules": 139,
+      "workflowLines": 790,
+      "skillDescriptionWords": 490,
+      "skills": 11,
+      "movedToTools": 6,
+      "repositories": 4,
+      "source": "all repositories"
+    },
+    {
+      "date": "2026-09-10",
+      "instructions": 70,
+      "projectWorkflowRules": 46,
+      "instructionLines": 480,
+      "workflowRules": 145,
+      "workflowLines": 827,
+      "skillDescriptionWords": 1095,
+      "skills": 25,
+      "movedToTools": 10,
+      "repositories": 5,
+      "source": "all repositories"
+    },
+    {
+      "date": "2026-09-30",
+      "instructions": 70,
+      "projectWorkflowRules": 46,
+      "instructionLines": 480,
+      "workflowRules": 152,
+      "workflowLines": 856,
+      "skillDescriptionWords": 1190,
+      "skills": 26,
+      "movedToTools": 15,
+      "repositories": 6,
+      "source": "all repositories"
+    },
+    {
+      "date": "2026-10-13",
+      "instructions": 72,
+      "projectWorkflowRules": 46,
+      "instructionLines": 489,
+      "workflowRules": 119,
+      "workflowLines": 741,
+      "skillDescriptionWords": 1478,
+      "skills": 35,
+      "movedToTools": 22,
+      "repositories": 8,
+      "source": "all repositories"
+    },
+    {
+      "date": "2026-10-21",
+      "instructions": 87,
+      "projectWorkflowRules": 46,
+      "instructionLines": 607,
+      "workflowRules": 122,
+      "workflowLines": 842,
+      "skillDescriptionWords": 1496,
+      "skills": 33,
+      "movedToTools": 23,
+      "repositories": 8,
+      "source": "all repositories"
+    },
+    {
+      "date": "2026-10-25",
+      "instructions": 96,
+      "projectWorkflowRules": 46,
+      "instructionLines": 647,
+      "workflowRules": 143,
+      "workflowLines": 956,
+      "skillDescriptionWords": 1591,
+      "skills": 34,
+      "movedToTools": 25,
+      "repositories": 8,
+      "source": "all repositories"
+    },
+    {
+      "date": "2026-10-27",
+      "instructions": 96,
+      "projectWorkflowRules": 23,
+      "instructionLines": 647,
+      "workflowRules": 120,
+      "workflowLines": 886,
+      "skillDescriptionWords": 1591,
+      "skills": 34,
+      "movedToTools": 25,
+      "repositories": 8,
+      "source": "all repositories"
+    }
+  ],
+  "backpackBySource": [
+    {
+      "date": "2026-09-30",
+      "source": "eduline-ai-shop",
+      "commit": "99ac95d",
+      "instructions": 0,
+      "instructionLines": 0,
+      "workflowRules": 0,
+      "workflowLines": 0,
+      "skills": 1,
+      "skillDescriptionWords": 95,
+      "lintErrorRules": 6,
+      "movedToTools": 4,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "formatting",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2026-10-13",
+      "source": "eduline-ai-shop",
+      "commit": "438d96f",
+      "instructions": 0,
+      "instructionLines": 0,
+      "workflowRules": 0,
+      "workflowLines": 0,
+      "skills": 2,
+      "skillDescriptionWords": 141,
+      "lintErrorRules": 15,
+      "movedToTools": 4,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "formatting",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2026-10-21",
+      "source": "eduline-ai-shop",
+      "commit": "2391a81",
+      "instructions": 4,
+      "instructionLines": 40,
+      "workflowRules": 0,
+      "workflowLines": 0,
+      "skills": 1,
+      "skillDescriptionWords": 46,
+      "lintErrorRules": 9,
+      "movedToTools": 4,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "formatting",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2026-10-25",
+      "source": "eduline-ai-shop",
+      "commit": "a183be8",
+      "instructions": 9,
+      "instructionLines": 60,
+      "workflowRules": 0,
+      "workflowLines": 0,
+      "skills": 1,
+      "skillDescriptionWords": 46,
+      "lintErrorRules": 9,
+      "movedToTools": 4,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "formatting",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2026-10-27",
+      "source": "eduline-ai-shop",
+      "commit": "905b4a6",
+      "instructions": 9,
+      "instructionLines": 60,
+      "workflowRules": 0,
+      "workflowLines": 0,
+      "skills": 1,
+      "skillDescriptionWords": 46,
+      "lintErrorRules": 9,
+      "movedToTools": 4,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "formatting",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2025-07-19",
+      "source": "private repo C",
+      "commit": null,
+      "instructions": 7,
+      "instructionLines": 87,
+      "workflowRules": 14,
+      "workflowLines": 138,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 0,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2025-07-31",
+      "source": "private repo C",
+      "commit": null,
+      "instructions": 13,
+      "instructionLines": 99,
+      "workflowRules": 14,
+      "workflowLines": 138,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 2,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2025-08-31",
+      "source": "private repo C",
+      "commit": null,
+      "instructions": 16,
+      "instructionLines": 254,
+      "workflowRules": 14,
+      "workflowLines": 138,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 2,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2025-09-30",
+      "source": "private repo C",
+      "commit": null,
+      "instructions": 16,
+      "instructionLines": 254,
+      "workflowRules": 14,
+      "workflowLines": 138,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 2,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2025-10-31",
+      "source": "private repo C",
+      "commit": null,
+      "instructions": 16,
+      "instructionLines": 254,
+      "workflowRules": 14,
+      "workflowLines": 138,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 2,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2025-11-30",
+      "source": "private repo C",
+      "commit": null,
+      "instructions": 16,
+      "instructionLines": 254,
+      "workflowRules": 14,
+      "workflowLines": 138,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 2,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2025-12-31",
+      "source": "private repo C",
+      "commit": null,
+      "instructions": 16,
+      "instructionLines": 254,
+      "workflowRules": 14,
+      "workflowLines": 138,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 2,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2026-01-30",
+      "source": "private repo C",
+      "commit": null,
+      "instructions": 2,
+      "instructionLines": 47,
+      "workflowRules": 23,
+      "workflowLines": 194,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 2,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2026-01-31",
+      "source": "private repo C",
+      "commit": null,
+      "instructions": 2,
+      "instructionLines": 47,
+      "workflowRules": 23,
+      "workflowLines": 194,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 2,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2026-02-28",
+      "source": "private repo C",
+      "commit": null,
+      "instructions": 2,
+      "instructionLines": 47,
+      "workflowRules": 0,
+      "workflowLines": 0,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 2,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2026-03-31",
+      "source": "private repo C",
+      "commit": null,
+      "instructions": 2,
+      "instructionLines": 47,
+      "workflowRules": 0,
+      "workflowLines": 0,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 2,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2026-04-30",
+      "source": "private repo C",
+      "commit": null,
+      "instructions": 2,
+      "instructionLines": 47,
+      "workflowRules": 0,
+      "workflowLines": 0,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 2,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2026-05-31",
+      "source": "private repo C",
+      "commit": null,
+      "instructions": 2,
+      "instructionLines": 47,
+      "workflowRules": 0,
+      "workflowLines": 0,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 2,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2026-06-30",
+      "source": "private repo C",
+      "commit": null,
+      "instructions": 2,
+      "instructionLines": 47,
+      "workflowRules": 0,
+      "workflowLines": 0,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 2,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2026-07-31",
+      "source": "private repo C",
+      "commit": null,
+      "instructions": 2,
+      "instructionLines": 47,
+      "workflowRules": 0,
+      "workflowLines": 0,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 2,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2026-10-13",
+      "source": "private repo C",
+      "commit": null,
+      "instructions": 0,
+      "instructionLines": 0,
+      "workflowRules": 0,
+      "workflowLines": 0,
+      "skills": 1,
+      "skillDescriptionWords": 50,
+      "lintErrorRules": 2,
+      "movedToTools": 4,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "formatting",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2026-10-21",
+      "source": "private repo C",
+      "commit": null,
+      "instructions": 2,
+      "instructionLines": 35,
+      "workflowRules": 0,
+      "workflowLines": 0,
+      "skills": 1,
+      "skillDescriptionWords": 50,
+      "lintErrorRules": 2,
+      "movedToTools": 4,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "formatting",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2026-10-25",
+      "source": "private repo C",
+      "commit": null,
+      "instructions": 3,
+      "instructionLines": 39,
+      "workflowRules": 0,
+      "workflowLines": 0,
+      "skills": 1,
+      "skillDescriptionWords": 50,
+      "lintErrorRules": 2,
+      "movedToTools": 4,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "formatting",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2026-10-27",
+      "source": "private repo C",
+      "commit": null,
+      "instructions": 3,
+      "instructionLines": 39,
+      "workflowRules": 0,
+      "workflowLines": 0,
+      "skills": 1,
+      "skillDescriptionWords": 50,
+      "lintErrorRules": 2,
+      "movedToTools": 4,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "formatting",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2026-09-10",
+      "source": "private repo F",
+      "commit": null,
+      "instructions": 0,
+      "instructionLines": 0,
+      "workflowRules": 0,
+      "workflowLines": 0,
+      "skills": 13,
+      "skillDescriptionWords": 562,
+      "lintErrorRules": 2,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2026-09-30",
+      "source": "private repo F",
+      "commit": null,
+      "instructions": 0,
+      "instructionLines": 0,
+      "workflowRules": 0,
+      "workflowLines": 0,
+      "skills": 13,
+      "skillDescriptionWords": 562,
+      "lintErrorRules": 2,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2026-10-13",
+      "source": "private repo F",
+      "commit": null,
+      "instructions": 0,
+      "instructionLines": 0,
+      "workflowRules": 0,
+      "workflowLines": 0,
+      "skills": 13,
+      "skillDescriptionWords": 562,
+      "lintErrorRules": 2,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2026-10-21",
+      "source": "private repo F",
+      "commit": null,
+      "instructions": 0,
+      "instructionLines": 0,
+      "workflowRules": 0,
+      "workflowLines": 0,
+      "skills": 13,
+      "skillDescriptionWords": 562,
+      "lintErrorRules": 2,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2026-10-25",
+      "source": "private repo F",
+      "commit": null,
+      "instructions": 0,
+      "instructionLines": 0,
+      "workflowRules": 0,
+      "workflowLines": 0,
+      "skills": 13,
+      "skillDescriptionWords": 562,
+      "lintErrorRules": 2,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2026-10-27",
+      "source": "private repo F",
+      "commit": null,
+      "instructions": 0,
+      "instructionLines": 0,
+      "workflowRules": 0,
+      "workflowLines": 0,
+      "skills": 13,
+      "skillDescriptionWords": 562,
+      "lintErrorRules": 2,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2026-08-23",
+      "source": "mexxi",
+      "commit": "245274b",
+      "instructions": 13,
+      "instructionLines": 36,
+      "workflowRules": 92,
+      "workflowLines": 462,
+      "skills": 8,
+      "skillDescriptionWords": 330,
+      "lintErrorRules": 0,
+      "movedToTools": 0,
+      "toolConcerns": []
+    },
+    {
+      "date": "2026-08-24",
+      "source": "mexxi",
+      "commit": "d6a49ed",
+      "instructions": 13,
+      "instructionLines": 36,
+      "workflowRules": 93,
+      "workflowLines": 465,
+      "skills": 8,
+      "skillDescriptionWords": 330,
+      "lintErrorRules": 0,
+      "movedToTools": 0,
+      "toolConcerns": []
+    },
+    {
+      "date": "2026-08-31",
+      "source": "mexxi",
+      "commit": "aa39db2",
+      "instructions": 13,
+      "instructionLines": 36,
+      "workflowRules": 93,
+      "workflowLines": 465,
+      "skills": 8,
+      "skillDescriptionWords": 330,
+      "lintErrorRules": 0,
+      "movedToTools": 0,
+      "toolConcerns": []
+    },
+    {
+      "date": "2026-09-10",
+      "source": "mexxi",
+      "commit": "b1bc0c0",
+      "instructions": 14,
+      "instructionLines": 41,
+      "workflowRules": 99,
+      "workflowLines": 502,
+      "skills": 9,
+      "skillDescriptionWords": 373,
+      "lintErrorRules": 0,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "isolated-workspace"
+      ]
+    },
+    {
+      "date": "2026-09-30",
+      "source": "mexxi",
+      "commit": "82b64bc",
+      "instructions": 14,
+      "instructionLines": 41,
+      "workflowRules": 106,
+      "workflowLines": 531,
+      "skills": 9,
+      "skillDescriptionWords": 373,
+      "lintErrorRules": 0,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "isolated-workspace",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2026-10-13",
+      "source": "mexxi",
+      "commit": "6a5b9b7",
+      "instructions": 15,
+      "instructionLines": 48,
+      "workflowRules": 73,
+      "workflowLines": 416,
+      "skills": 14,
+      "skillDescriptionWords": 473,
+      "lintErrorRules": 0,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "isolated-workspace",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2026-10-21",
+      "source": "mexxi",
+      "commit": "9bf4a3e",
+      "instructions": 21,
+      "instructionLines": 66,
+      "workflowRules": 76,
+      "workflowLines": 517,
+      "skills": 13,
+      "skillDescriptionWords": 586,
+      "lintErrorRules": 0,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "isolated-workspace",
+        "run-checks-before-done",
+        "shell-quoting-and-exit-codes"
+      ]
+    },
+    {
+      "date": "2026-10-25",
+      "source": "mexxi",
+      "commit": "8bd0d88",
+      "instructions": 24,
+      "instructionLines": 82,
+      "workflowRules": 97,
+      "workflowLines": 631,
+      "skills": 14,
+      "skillDescriptionWords": 681,
+      "lintErrorRules": 0,
+      "movedToTools": 5,
+      "toolConcerns": [
+        "isolated-workspace",
+        "long-runs-and-waits",
+        "ports",
+        "run-checks-before-done",
+        "shell-quoting-and-exit-codes"
+      ]
+    },
+    {
+      "date": "2026-10-27",
+      "source": "mexxi",
+      "commit": "3c5596e",
+      "instructions": 24,
+      "instructionLines": 82,
+      "workflowRules": 97,
+      "workflowLines": 631,
+      "skills": 14,
+      "skillDescriptionWords": 681,
+      "lintErrorRules": 0,
+      "movedToTools": 5,
+      "toolConcerns": [
+        "isolated-workspace",
+        "long-runs-and-waits",
+        "ports",
+        "run-checks-before-done",
+        "shell-quoting-and-exit-codes"
+      ]
+    },
+    {
+      "date": "2025-07-18",
+      "source": "private repo B",
+      "commit": null,
+      "instructions": 9,
+      "instructionLines": 71,
+      "workflowRules": 11,
+      "workflowLines": 119,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 0,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2025-07-19",
+      "source": "private repo B",
+      "commit": null,
+      "instructions": 9,
+      "instructionLines": 71,
+      "workflowRules": 11,
+      "workflowLines": 119,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 0,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2025-07-31",
+      "source": "private repo B",
+      "commit": null,
+      "instructions": 9,
+      "instructionLines": 71,
+      "workflowRules": 11,
+      "workflowLines": 119,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 0,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2025-08-31",
+      "source": "private repo B",
+      "commit": null,
+      "instructions": 9,
+      "instructionLines": 71,
+      "workflowRules": 11,
+      "workflowLines": 119,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 0,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2025-09-30",
+      "source": "private repo B",
+      "commit": null,
+      "instructions": 9,
+      "instructionLines": 71,
+      "workflowRules": 11,
+      "workflowLines": 119,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 0,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2025-10-31",
+      "source": "private repo B",
+      "commit": null,
+      "instructions": 9,
+      "instructionLines": 71,
+      "workflowRules": 11,
+      "workflowLines": 119,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 0,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2025-11-30",
+      "source": "private repo B",
+      "commit": null,
+      "instructions": 9,
+      "instructionLines": 71,
+      "workflowRules": 11,
+      "workflowLines": 119,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 0,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2025-12-31",
+      "source": "private repo B",
+      "commit": null,
+      "instructions": 9,
+      "instructionLines": 71,
+      "workflowRules": 11,
+      "workflowLines": 119,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 0,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2026-01-30",
+      "source": "private repo B",
+      "commit": null,
+      "instructions": 9,
+      "instructionLines": 71,
+      "workflowRules": 11,
+      "workflowLines": 119,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 0,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2026-01-31",
+      "source": "private repo B",
+      "commit": null,
+      "instructions": 9,
+      "instructionLines": 71,
+      "workflowRules": 11,
+      "workflowLines": 119,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 0,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2026-02-28",
+      "source": "private repo B",
+      "commit": null,
+      "instructions": 9,
+      "instructionLines": 71,
+      "workflowRules": 11,
+      "workflowLines": 119,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 0,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2026-03-31",
+      "source": "private repo B",
+      "commit": null,
+      "instructions": 9,
+      "instructionLines": 71,
+      "workflowRules": 11,
+      "workflowLines": 119,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 0,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2026-04-30",
+      "source": "private repo B",
+      "commit": null,
+      "instructions": 9,
+      "instructionLines": 71,
+      "workflowRules": 11,
+      "workflowLines": 119,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 0,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2026-05-31",
+      "source": "private repo B",
+      "commit": null,
+      "instructions": 9,
+      "instructionLines": 71,
+      "workflowRules": 11,
+      "workflowLines": 119,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 0,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2026-06-30",
+      "source": "private repo B",
+      "commit": null,
+      "instructions": 9,
+      "instructionLines": 71,
+      "workflowRules": 11,
+      "workflowLines": 119,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 0,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2026-07-31",
+      "source": "private repo B",
+      "commit": null,
+      "instructions": 9,
+      "instructionLines": 71,
+      "workflowRules": 11,
+      "workflowLines": 119,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 0,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2026-08-23",
+      "source": "private repo B",
+      "commit": null,
+      "instructions": 9,
+      "instructionLines": 71,
+      "workflowRules": 11,
+      "workflowLines": 119,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 0,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2026-08-24",
+      "source": "private repo B",
+      "commit": null,
+      "instructions": 9,
+      "instructionLines": 71,
+      "workflowRules": 11,
+      "workflowLines": 119,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 0,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2026-08-31",
+      "source": "private repo B",
+      "commit": null,
+      "instructions": 9,
+      "instructionLines": 71,
+      "workflowRules": 11,
+      "workflowLines": 119,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 0,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2026-09-10",
+      "source": "private repo B",
+      "commit": null,
+      "instructions": 9,
+      "instructionLines": 71,
+      "workflowRules": 11,
+      "workflowLines": 119,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 0,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2026-09-30",
+      "source": "private repo B",
+      "commit": null,
+      "instructions": 9,
+      "instructionLines": 71,
+      "workflowRules": 11,
+      "workflowLines": 119,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 0,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2026-10-13",
+      "source": "private repo B",
+      "commit": null,
+      "instructions": 9,
+      "instructionLines": 71,
+      "workflowRules": 11,
+      "workflowLines": 119,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 0,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2026-10-21",
+      "source": "private repo B",
+      "commit": null,
+      "instructions": 9,
+      "instructionLines": 71,
+      "workflowRules": 11,
+      "workflowLines": 119,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 0,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2026-10-25",
+      "source": "private repo B",
+      "commit": null,
+      "instructions": 9,
+      "instructionLines": 71,
+      "workflowRules": 11,
+      "workflowLines": 119,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 0,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2026-10-27",
+      "source": "private repo B",
+      "commit": null,
+      "instructions": 9,
+      "instructionLines": 71,
+      "workflowRules": 11,
+      "workflowLines": 119,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 0,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2025-11-30",
+      "source": "private repo D",
+      "commit": null,
+      "instructions": 11,
+      "instructionLines": 35,
+      "workflowRules": 0,
+      "workflowLines": 0,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 5,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "code-patterns"
+      ]
+    },
+    {
+      "date": "2025-12-31",
+      "source": "private repo D",
+      "commit": null,
+      "instructions": 25,
+      "instructionLines": 192,
+      "workflowRules": 30,
+      "workflowLines": 926,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 5,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "code-patterns"
+      ]
+    },
+    {
+      "date": "2026-01-30",
+      "source": "private repo D",
+      "commit": null,
+      "instructions": 30,
+      "instructionLines": 302,
+      "workflowRules": 45,
+      "workflowLines": 716,
+      "skills": 10,
+      "skillDescriptionWords": 406,
+      "lintErrorRules": 7,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "code-patterns"
+      ]
+    },
+    {
+      "date": "2026-01-31",
+      "source": "private repo D",
+      "commit": null,
+      "instructions": 30,
+      "instructionLines": 302,
+      "workflowRules": 45,
+      "workflowLines": 716,
+      "skills": 10,
+      "skillDescriptionWords": 406,
+      "lintErrorRules": 7,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "code-patterns"
+      ]
+    },
+    {
+      "date": "2026-02-28",
+      "source": "private repo D",
+      "commit": null,
+      "instructions": 29,
+      "instructionLines": 262,
+      "workflowRules": 5,
+      "workflowLines": 83,
+      "skills": 10,
+      "skillDescriptionWords": 406,
+      "lintErrorRules": 6,
+      "movedToTools": 1,
+      "toolConcerns": [
+        "code-patterns"
+      ]
+    },
+    {
+      "date": "2026-03-31",
+      "source": "private repo D",
+      "commit": null,
+      "instructions": 29,
+      "instructionLines": 262,
+      "workflowRules": 5,
+      "workflowLines": 83,
+      "skills": 11,
+      "skillDescriptionWords": 461,
+      "lintErrorRules": 6,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2026-04-30",
+      "source": "private repo D",
+      "commit": null,
+      "instructions": 29,
+      "instructionLines": 262,
+      "workflowRules": 5,
+      "workflowLines": 83,
+      "skills": 11,
+      "skillDescriptionWords": 461,
+      "lintErrorRules": 6,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2026-05-31",
+      "source": "private repo D",
+      "commit": null,
+      "instructions": 29,
+      "instructionLines": 262,
+      "workflowRules": 72,
+      "workflowLines": 313,
+      "skills": 2,
+      "skillDescriptionWords": 78,
+      "lintErrorRules": 6,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2026-06-30",
+      "source": "private repo D",
+      "commit": null,
+      "instructions": 29,
+      "instructionLines": 256,
+      "workflowRules": 72,
+      "workflowLines": 313,
+      "skills": 2,
+      "skillDescriptionWords": 78,
+      "lintErrorRules": 6,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2026-07-31",
+      "source": "private repo D",
+      "commit": null,
+      "instructions": 29,
+      "instructionLines": 256,
+      "workflowRules": 72,
+      "workflowLines": 313,
+      "skills": 3,
+      "skillDescriptionWords": 160,
+      "lintErrorRules": 10,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2026-08-23",
+      "source": "private repo D",
+      "commit": null,
+      "instructions": 36,
+      "instructionLines": 267,
+      "workflowRules": 95,
+      "workflowLines": 383,
+      "skills": 3,
+      "skillDescriptionWords": 160,
+      "lintErrorRules": 29,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage"
+      ]
+    },
+    {
+      "date": "2026-08-24",
+      "source": "private repo D",
+      "commit": null,
+      "instructions": 33,
+      "instructionLines": 255,
+      "workflowRules": 23,
+      "workflowLines": 70,
+      "skills": 3,
+      "skillDescriptionWords": 160,
+      "lintErrorRules": 29,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2026-08-31",
+      "source": "private repo D",
+      "commit": null,
+      "instructions": 33,
+      "instructionLines": 255,
+      "workflowRules": 23,
+      "workflowLines": 70,
+      "skills": 3,
+      "skillDescriptionWords": 160,
+      "lintErrorRules": 29,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2026-09-10",
+      "source": "private repo D",
+      "commit": null,
+      "instructions": 33,
+      "instructionLines": 255,
+      "workflowRules": 23,
+      "workflowLines": 70,
+      "skills": 3,
+      "skillDescriptionWords": 160,
+      "lintErrorRules": 29,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2026-09-30",
+      "source": "private repo D",
+      "commit": null,
+      "instructions": 33,
+      "instructionLines": 255,
+      "workflowRules": 23,
+      "workflowLines": 70,
+      "skills": 3,
+      "skillDescriptionWords": 160,
+      "lintErrorRules": 29,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2026-10-13",
+      "source": "private repo D",
+      "commit": null,
+      "instructions": 34,
+      "instructionLines": 257,
+      "workflowRules": 23,
+      "workflowLines": 70,
+      "skills": 4,
+      "skillDescriptionWords": 206,
+      "lintErrorRules": 29,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2026-10-21",
+      "source": "private repo D",
+      "commit": null,
+      "instructions": 35,
+      "instructionLines": 268,
+      "workflowRules": 23,
+      "workflowLines": 70,
+      "skills": 4,
+      "skillDescriptionWords": 206,
+      "lintErrorRules": 29,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2026-10-25",
+      "source": "private repo D",
+      "commit": null,
+      "instructions": 35,
+      "instructionLines": 268,
+      "workflowRules": 23,
+      "workflowLines": 70,
+      "skills": 4,
+      "skillDescriptionWords": 206,
+      "lintErrorRules": 29,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2026-10-27",
+      "source": "private repo D",
+      "commit": null,
+      "instructions": 35,
+      "instructionLines": 268,
+      "workflowRules": 0,
+      "workflowLines": 0,
+      "skills": 4,
+      "skillDescriptionWords": 206,
+      "lintErrorRules": 29,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "complexity-coverage",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2026-10-13",
+      "source": "verifika",
+      "commit": "53e2290",
+      "instructions": 0,
+      "instructionLines": 0,
+      "workflowRules": 0,
+      "workflowLines": 0,
+      "skills": 1,
+      "skillDescriptionWords": 46,
+      "lintErrorRules": 1,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2026-10-21",
+      "source": "verifika",
+      "commit": "d9ef388",
+      "instructions": 2,
+      "instructionLines": 14,
+      "workflowRules": 0,
+      "workflowLines": 0,
+      "skills": 1,
+      "skillDescriptionWords": 46,
+      "lintErrorRules": 1,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2026-10-25",
+      "source": "verifika",
+      "commit": "17614b1",
+      "instructions": 2,
+      "instructionLines": 14,
+      "workflowRules": 0,
+      "workflowLines": 0,
+      "skills": 1,
+      "skillDescriptionWords": 46,
+      "lintErrorRules": 1,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2026-10-27",
+      "source": "verifika",
+      "commit": "17614b1",
+      "instructions": 2,
+      "instructionLines": 14,
+      "workflowRules": 0,
+      "workflowLines": 0,
+      "skills": 1,
+      "skillDescriptionWords": 46,
+      "lintErrorRules": 1,
+      "movedToTools": 3,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting",
+        "run-checks-before-done"
+      ]
+    },
+    {
+      "date": "2025-07-31",
+      "source": "constitution-explained",
+      "commit": "526c97a",
+      "instructions": 14,
+      "instructionLines": 113,
+      "workflowRules": 12,
+      "workflowLines": 136,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 1,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2025-08-31",
+      "source": "constitution-explained",
+      "commit": "526c97a",
+      "instructions": 14,
+      "instructionLines": 113,
+      "workflowRules": 12,
+      "workflowLines": 136,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 1,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2025-09-30",
+      "source": "constitution-explained",
+      "commit": "526c97a",
+      "instructions": 14,
+      "instructionLines": 113,
+      "workflowRules": 12,
+      "workflowLines": 136,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 1,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2025-10-31",
+      "source": "constitution-explained",
+      "commit": "526c97a",
+      "instructions": 14,
+      "instructionLines": 113,
+      "workflowRules": 12,
+      "workflowLines": 136,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 1,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2025-11-30",
+      "source": "constitution-explained",
+      "commit": "526c97a",
+      "instructions": 14,
+      "instructionLines": 113,
+      "workflowRules": 12,
+      "workflowLines": 136,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 1,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2025-12-31",
+      "source": "constitution-explained",
+      "commit": "526c97a",
+      "instructions": 14,
+      "instructionLines": 113,
+      "workflowRules": 12,
+      "workflowLines": 136,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 1,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2026-01-30",
+      "source": "constitution-explained",
+      "commit": "526c97a",
+      "instructions": 14,
+      "instructionLines": 113,
+      "workflowRules": 12,
+      "workflowLines": 136,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 1,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2026-01-31",
+      "source": "constitution-explained",
+      "commit": "526c97a",
+      "instructions": 14,
+      "instructionLines": 113,
+      "workflowRules": 12,
+      "workflowLines": 136,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 1,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2026-02-28",
+      "source": "constitution-explained",
+      "commit": "526c97a",
+      "instructions": 14,
+      "instructionLines": 113,
+      "workflowRules": 12,
+      "workflowLines": 136,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 1,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2026-03-31",
+      "source": "constitution-explained",
+      "commit": "526c97a",
+      "instructions": 14,
+      "instructionLines": 113,
+      "workflowRules": 12,
+      "workflowLines": 136,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 1,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2026-04-30",
+      "source": "constitution-explained",
+      "commit": "526c97a",
+      "instructions": 14,
+      "instructionLines": 113,
+      "workflowRules": 12,
+      "workflowLines": 136,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 1,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2026-05-31",
+      "source": "constitution-explained",
+      "commit": "526c97a",
+      "instructions": 14,
+      "instructionLines": 113,
+      "workflowRules": 12,
+      "workflowLines": 136,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 1,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2026-06-30",
+      "source": "constitution-explained",
+      "commit": "526c97a",
+      "instructions": 14,
+      "instructionLines": 113,
+      "workflowRules": 12,
+      "workflowLines": 136,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 1,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2026-07-31",
+      "source": "constitution-explained",
+      "commit": "526c97a",
+      "instructions": 14,
+      "instructionLines": 113,
+      "workflowRules": 12,
+      "workflowLines": 136,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 1,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2026-08-23",
+      "source": "constitution-explained",
+      "commit": "526c97a",
+      "instructions": 14,
+      "instructionLines": 113,
+      "workflowRules": 12,
+      "workflowLines": 136,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 1,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2026-08-24",
+      "source": "constitution-explained",
+      "commit": "526c97a",
+      "instructions": 14,
+      "instructionLines": 113,
+      "workflowRules": 12,
+      "workflowLines": 136,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 1,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2026-08-31",
+      "source": "constitution-explained",
+      "commit": "526c97a",
+      "instructions": 14,
+      "instructionLines": 113,
+      "workflowRules": 12,
+      "workflowLines": 136,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 1,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2026-09-10",
+      "source": "constitution-explained",
+      "commit": "526c97a",
+      "instructions": 14,
+      "instructionLines": 113,
+      "workflowRules": 12,
+      "workflowLines": 136,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 1,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2026-09-30",
+      "source": "constitution-explained",
+      "commit": "526c97a",
+      "instructions": 14,
+      "instructionLines": 113,
+      "workflowRules": 12,
+      "workflowLines": 136,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 1,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2026-10-13",
+      "source": "constitution-explained",
+      "commit": "526c97a",
+      "instructions": 14,
+      "instructionLines": 113,
+      "workflowRules": 12,
+      "workflowLines": 136,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 1,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2026-10-21",
+      "source": "constitution-explained",
+      "commit": "526c97a",
+      "instructions": 14,
+      "instructionLines": 113,
+      "workflowRules": 12,
+      "workflowLines": 136,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 1,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2026-10-25",
+      "source": "constitution-explained",
+      "commit": "526c97a",
+      "instructions": 14,
+      "instructionLines": 113,
+      "workflowRules": 12,
+      "workflowLines": 136,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 1,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting"
+      ]
+    },
+    {
+      "date": "2026-10-27",
+      "source": "constitution-explained",
+      "commit": "526c97a",
+      "instructions": 14,
+      "instructionLines": 113,
+      "workflowRules": 12,
+      "workflowLines": 136,
+      "skills": 0,
+      "skillDescriptionWords": 0,
+      "lintErrorRules": 1,
+      "movedToTools": 2,
+      "toolConcerns": [
+        "code-patterns",
+        "formatting"
+      ]
+    }
+  ],
+  "concerns": [
+    {
+      "id": "run-checks-before-done",
+      "tool": "verify script",
+      "firstInProse": "2025-07-18",
+      "firstInTool": "2026-08-24",
+      "repositoriesWithProseNow": 7,
+      "repositoriesWithToolNow": 6
+    },
+    {
+      "id": "formatting",
+      "tool": "format check in verify",
+      "firstInProse": "2025-07-18",
+      "firstInTool": "2025-07-31",
+      "repositoriesWithProseNow": 2,
+      "repositoriesWithToolNow": 5
+    },
+    {
+      "id": "code-patterns",
+      "tool": "lint rule",
+      "firstInProse": "2025-07-19",
+      "firstInTool": "2025-07-31",
+      "repositoriesWithProseNow": 2,
+      "repositoriesWithToolNow": 6
+    },
+    {
+      "id": "complexity-coverage",
+      "tool": "coverage or CRAP gate",
+      "firstInProse": "2025-07-18",
+      "firstInTool": "2025-07-18",
+      "repositoriesWithProseNow": 5,
+      "repositoriesWithToolNow": 4
+    },
+    {
+      "id": "isolated-workspace",
+      "tool": "ibni prepare",
+      "firstInProse": "2026-08-23",
+      "firstInTool": "2026-09-10",
+      "repositoriesWithProseNow": 2,
+      "repositoriesWithToolNow": 1
+    },
+    {
+      "id": "ports",
+      "tool": "ibni port blocks",
+      "firstInProse": "2026-10-21",
+      "firstInTool": "2026-10-25",
+      "repositoriesWithProseNow": 5,
+      "repositoriesWithToolNow": 1
+    },
+    {
+      "id": "long-runs-and-waits",
+      "tool": "run slots and Monitor rule",
+      "firstInProse": "2026-10-25",
+      "firstInTool": "2026-10-25",
+      "repositoriesWithProseNow": 1,
+      "repositoriesWithToolNow": 1
+    },
+    {
+      "id": "shell-quoting-and-exit-codes",
+      "tool": "command fixer",
+      "firstInProse": null,
+      "firstInTool": "2026-10-21",
+      "repositoriesWithProseNow": 0,
+      "repositoriesWithToolNow": 1
+    }
+  ],
+  "eras": [
+    {
+      "id": "prose-and-scripts",
+      "from": "2026-08-20",
+      "to": "2026-09-09",
+      "note": "Instructions in prose; per-repository verify scripts appear.",
+      "sessions": 80,
+      "toolCalls": 9431,
+      "metrics": {
+        "unverifiedDoneRate": 0.121,
+        "doneClaims": 182,
+        "bashFailureRate": 0.174,
+        "globAborts": 0,
+        "hiddenExitCodes": 0.14,
+        "timeouts": 0,
+        "bashCapHits": 0,
+        "portClashes": 0.1,
+        "missingPackages": 0.02,
+        "commandNotFound": 0.2,
+        "failingRetries": 0.45,
+        "editBeforeRead": 2.35,
+        "compactionsPerSession": 0.14,
+        "medianToolOutputBytes": 352719,
+        "p90ToolOutputBytes": 853135,
+        "medianCheckRunBytes": 703,
+        "p90CheckRunBytes": 15151,
+        "checkRuns": 1105,
+        "reworkPromptsPerSession": 0.13,
+        "correctionsPerSession": 0.04,
+        "maxConcurrentSessions": 2,
+        "meanDailyMaxConcurrent": 1.55
+      }
+    },
+    {
+      "id": "worktree-cli",
+      "from": "2026-09-10",
+      "to": "2026-10-12",
+      "note": "Isolated worktrees through implementation-workspace.",
+      "sessions": 194,
+      "toolCalls": 31711,
+      "metrics": {
+        "unverifiedDoneRate": 0.081,
+        "doneClaims": 766,
+        "bashFailureRate": 0.09,
+        "globAborts": 0.73,
+        "hiddenExitCodes": 0.78,
+        "timeouts": 0.05,
+        "bashCapHits": 14,
+        "portClashes": 0.07,
+        "missingPackages": 0.05,
+        "commandNotFound": 0.08,
+        "failingRetries": 0.32,
+        "editBeforeRead": 0.53,
+        "compactionsPerSession": 0.14,
+        "medianToolOutputBytes": 380382,
+        "p90ToolOutputBytes": 917175,
+        "medianCheckRunBytes": 507,
+        "p90CheckRunBytes": 4393,
+        "checkRuns": 3844,
+        "reworkPromptsPerSession": 0.18,
+        "correctionsPerSession": 0.02,
+        "maxConcurrentSessions": 3,
+        "meanDailyMaxConcurrent": 1.7
+      }
+    },
+    {
+      "id": "verifika",
+      "from": "2026-10-13",
+      "to": "2026-10-20",
+      "note": "Verify runs through verifika, which keeps check output out of the agent's context.",
+      "sessions": 25,
+      "toolCalls": 5800,
+      "metrics": {
+        "unverifiedDoneRate": 0.059,
+        "doneClaims": 220,
+        "bashFailureRate": 0.045,
+        "globAborts": 2.64,
+        "hiddenExitCodes": 1.69,
+        "timeouts": 0.43,
+        "bashCapHits": 20,
+        "portClashes": 0.16,
+        "missingPackages": 0.14,
+        "commandNotFound": 0.07,
+        "failingRetries": 0,
+        "editBeforeRead": 0.47,
+        "compactionsPerSession": 0.88,
+        "medianToolOutputBytes": 550976,
+        "p90ToolOutputBytes": 1020365,
+        "medianCheckRunBytes": 425,
+        "p90CheckRunBytes": 2045,
+        "checkRuns": 1041,
+        "reworkPromptsPerSession": 0.4,
+        "correctionsPerSession": 0,
+        "maxConcurrentSessions": 2,
+        "meanDailyMaxConcurrent": 1.5
+      }
+    },
+    {
+      "id": "ibni-mexxi",
+      "from": "2026-10-21",
+      "to": "2026-10-24",
+      "note": "ibni, one config file, mexxi public.",
+      "sessions": 38,
+      "toolCalls": 5276,
+      "metrics": {
+        "unverifiedDoneRate": 0.126,
+        "doneClaims": 198,
+        "bashFailureRate": 0.113,
+        "globAborts": 0.11,
+        "hiddenExitCodes": 0.97,
+        "timeouts": 0.36,
+        "bashCapHits": 11,
+        "portClashes": 0.09,
+        "missingPackages": 0.04,
+        "commandNotFound": 0.08,
+        "failingRetries": 0,
+        "editBeforeRead": 0.49,
+        "compactionsPerSession": 0.32,
+        "medianToolOutputBytes": 195899,
+        "p90ToolOutputBytes": 556007,
+        "medianCheckRunBytes": 351,
+        "p90CheckRunBytes": 1574,
+        "checkRuns": 733,
+        "reworkPromptsPerSession": 0.24,
+        "correctionsPerSession": 0.03,
+        "maxConcurrentSessions": 4,
+        "meanDailyMaxConcurrent": 2.25
+      }
+    },
+    {
+      "id": "port-blocks-run-slots",
+      "from": "2026-10-25",
+      "to": "2026-10-27",
+      "note": "Port blocks, run slots and systemd scopes.",
+      "sessions": 21,
+      "toolCalls": 3594,
+      "metrics": {
+        "unverifiedDoneRate": 0.118,
+        "doneClaims": 110,
+        "bashFailureRate": 0.098,
+        "globAborts": 0,
+        "hiddenExitCodes": 0.33,
+        "timeouts": 0.03,
+        "bashCapHits": 1,
+        "portClashes": 0.14,
+        "missingPackages": 0.11,
+        "commandNotFound": 0.06,
+        "failingRetries": 0,
+        "editBeforeRead": 0.39,
+        "compactionsPerSession": 0.14,
+        "medianToolOutputBytes": 247552,
+        "p90ToolOutputBytes": 603126,
+        "medianCheckRunBytes": 300,
+        "p90CheckRunBytes": 1708,
+        "checkRuns": 476,
+        "reworkPromptsPerSession": 0.14,
+        "correctionsPerSession": 0,
+        "maxConcurrentSessions": 2,
+        "meanDailyMaxConcurrent": 2
+      }
+    }
+  ],
+  "erasBySource": [
+    {
+      "era": "prose-and-scripts",
+      "source": "opencode",
+      "sessions": 80,
+      "toolCalls": 9431,
+      "metrics": {
+        "unverifiedDoneRate": 0.121,
+        "doneClaims": 182,
+        "bashFailureRate": 0.174,
+        "globAborts": 0,
+        "hiddenExitCodes": 0.14,
+        "timeouts": 0,
+        "bashCapHits": 0,
+        "portClashes": 0.1,
+        "missingPackages": 0.02,
+        "commandNotFound": 0.2,
+        "failingRetries": 0.45,
+        "editBeforeRead": 2.35,
+        "compactionsPerSession": 0.14,
+        "medianToolOutputBytes": 352719,
+        "p90ToolOutputBytes": 853135,
+        "medianCheckRunBytes": 703,
+        "p90CheckRunBytes": 15151,
+        "checkRuns": 1105,
+        "reworkPromptsPerSession": 0.13,
+        "correctionsPerSession": 0.04,
+        "maxConcurrentSessions": null,
+        "meanDailyMaxConcurrent": null
+      }
+    },
+    {
+      "era": "worktree-cli",
+      "source": "opencode",
+      "sessions": 136,
+      "toolCalls": 22492,
+      "metrics": {
+        "unverifiedDoneRate": 0.103,
+        "doneClaims": 358,
+        "bashFailureRate": 0.135,
+        "globAborts": 0,
+        "hiddenExitCodes": 0.44,
+        "timeouts": 0.04,
+        "bashCapHits": 7,
+        "portClashes": 0.09,
+        "missingPackages": 0.04,
+        "commandNotFound": 0.1,
+        "failingRetries": 0.44,
+        "editBeforeRead": 0.64,
+        "compactionsPerSession": 0.15,
+        "medianToolOutputBytes": 419537,
+        "p90ToolOutputBytes": 1041367,
+        "medianCheckRunBytes": 581,
+        "p90CheckRunBytes": 7476,
+        "checkRuns": 2187,
+        "reworkPromptsPerSession": 0.18,
+        "correctionsPerSession": 0.02,
+        "maxConcurrentSessions": null,
+        "meanDailyMaxConcurrent": null
+      }
+    },
+    {
+      "era": "worktree-cli",
+      "source": "claude",
+      "sessions": 58,
+      "toolCalls": 9219,
+      "metrics": {
+        "unverifiedDoneRate": 0.061,
+        "doneClaims": 408,
+        "bashFailureRate": 0.045,
+        "globAborts": 2.53,
+        "hiddenExitCodes": 1.62,
+        "timeouts": 0.1,
+        "bashCapHits": 7,
+        "portClashes": 0.01,
+        "missingPackages": 0.09,
+        "commandNotFound": 0.03,
+        "failingRetries": 0.02,
+        "editBeforeRead": 0.26,
+        "compactionsPerSession": 0.1,
+        "medianToolOutputBytes": 298857,
+        "p90ToolOutputBytes": 716130,
+        "medianCheckRunBytes": 386,
+        "p90CheckRunBytes": 2192,
+        "checkRuns": 1657,
+        "reworkPromptsPerSession": 0.16,
+        "correctionsPerSession": 0,
+        "maxConcurrentSessions": null,
+        "meanDailyMaxConcurrent": null
+      }
+    },
+    {
+      "era": "verifika",
+      "source": "claude",
+      "sessions": 25,
+      "toolCalls": 5800,
+      "metrics": {
+        "unverifiedDoneRate": 0.059,
+        "doneClaims": 220,
+        "bashFailureRate": 0.045,
+        "globAborts": 2.64,
+        "hiddenExitCodes": 1.69,
+        "timeouts": 0.43,
+        "bashCapHits": 20,
+        "portClashes": 0.16,
+        "missingPackages": 0.14,
+        "commandNotFound": 0.07,
+        "failingRetries": 0,
+        "editBeforeRead": 0.47,
+        "compactionsPerSession": 0.88,
+        "medianToolOutputBytes": 550976,
+        "p90ToolOutputBytes": 1020365,
+        "medianCheckRunBytes": 425,
+        "p90CheckRunBytes": 2045,
+        "checkRuns": 1041,
+        "reworkPromptsPerSession": 0.4,
+        "correctionsPerSession": 0,
+        "maxConcurrentSessions": null,
+        "meanDailyMaxConcurrent": null
+      }
+    },
+    {
+      "era": "ibni-mexxi",
+      "source": "claude",
+      "sessions": 38,
+      "toolCalls": 5276,
+      "metrics": {
+        "unverifiedDoneRate": 0.126,
+        "doneClaims": 198,
+        "bashFailureRate": 0.113,
+        "globAborts": 0.11,
+        "hiddenExitCodes": 0.97,
+        "timeouts": 0.36,
+        "bashCapHits": 11,
+        "portClashes": 0.09,
+        "missingPackages": 0.04,
+        "commandNotFound": 0.08,
+        "failingRetries": 0,
+        "editBeforeRead": 0.49,
+        "compactionsPerSession": 0.32,
+        "medianToolOutputBytes": 195899,
+        "p90ToolOutputBytes": 556007,
+        "medianCheckRunBytes": 351,
+        "p90CheckRunBytes": 1574,
+        "checkRuns": 733,
+        "reworkPromptsPerSession": 0.24,
+        "correctionsPerSession": 0.03,
+        "maxConcurrentSessions": null,
+        "meanDailyMaxConcurrent": null
+      }
+    },
+    {
+      "era": "port-blocks-run-slots",
+      "source": "claude",
+      "sessions": 21,
+      "toolCalls": 3594,
+      "metrics": {
+        "unverifiedDoneRate": 0.118,
+        "doneClaims": 110,
+        "bashFailureRate": 0.098,
+        "globAborts": 0,
+        "hiddenExitCodes": 0.33,
+        "timeouts": 0.03,
+        "bashCapHits": 1,
+        "portClashes": 0.14,
+        "missingPackages": 0.11,
+        "commandNotFound": 0.06,
+        "failingRetries": 0,
+        "editBeforeRead": 0.39,
+        "compactionsPerSession": 0.14,
+        "medianToolOutputBytes": 247552,
+        "p90ToolOutputBytes": 603126,
+        "medianCheckRunBytes": 300,
+        "p90CheckRunBytes": 1708,
+        "checkRuns": 476,
+        "reworkPromptsPerSession": 0.14,
+        "correctionsPerSession": 0,
+        "maxConcurrentSessions": null,
+        "meanDailyMaxConcurrent": null
+      }
+    }
+  ],
+  "weekly": [
+    {
+      "week": "2026-W34",
+      "sessions": 18,
+      "toolCalls": 1862,
+      "metrics": {
+        "unverifiedDoneRate": 0.083,
+        "doneClaims": 24,
+        "bashFailureRate": 0.149,
+        "globAborts": 0,
+        "hiddenExitCodes": 0.21,
+        "timeouts": 0,
+        "bashCapHits": 0,
+        "portClashes": 0.05,
+        "missingPackages": 0,
+        "commandNotFound": 0.11,
+        "failingRetries": 0.32,
+        "editBeforeRead": 1.45,
+        "compactionsPerSession": 0.17,
+        "medianToolOutputBytes": 352719,
+        "p90ToolOutputBytes": 970699,
+        "medianCheckRunBytes": 494,
+        "p90CheckRunBytes": 27889,
+        "checkRuns": 196,
+        "reworkPromptsPerSession": 0.33,
+        "correctionsPerSession": 0.06,
+        "maxConcurrentSessions": 1,
+        "meanDailyMaxConcurrent": 1
+      }
+    },
+    {
+      "week": "2026-W35",
+      "sessions": 47,
+      "toolCalls": 5041,
+      "metrics": {
+        "unverifiedDoneRate": 0.14,
+        "doneClaims": 100,
+        "bashFailureRate": 0.205,
+        "globAborts": 0,
+        "hiddenExitCodes": 0.18,
+        "timeouts": 0,
+        "bashCapHits": 0,
+        "portClashes": 0.1,
+        "missingPackages": 0.02,
+        "commandNotFound": 0.3,
+        "failingRetries": 0.58,
+        "editBeforeRead": 3.45,
+        "compactionsPerSession": 0.11,
+        "medianToolOutputBytes": 330911,
+        "p90ToolOutputBytes": 810324,
+        "medianCheckRunBytes": 1042,
+        "p90CheckRunBytes": 19116,
+        "checkRuns": 607,
+        "reworkPromptsPerSession": 0.04,
+        "correctionsPerSession": 0,
+        "maxConcurrentSessions": 2,
+        "meanDailyMaxConcurrent": 2
+      }
+    },
+    {
+      "week": "2026-W36",
+      "sessions": 10,
+      "toolCalls": 2015,
+      "metrics": {
+        "unverifiedDoneRate": 0.089,
+        "doneClaims": 45,
+        "bashFailureRate": 0.14,
+        "globAborts": 0,
+        "hiddenExitCodes": 0,
+        "timeouts": 0,
+        "bashCapHits": 0,
+        "portClashes": 0.15,
+        "missingPackages": 0.05,
+        "commandNotFound": 0.05,
+        "failingRetries": 0.35,
+        "editBeforeRead": 0.84,
+        "compactionsPerSession": 0.3,
+        "medianToolOutputBytes": 409957,
+        "p90ToolOutputBytes": 1059188,
+        "medianCheckRunBytes": 555,
+        "p90CheckRunBytes": 10708,
+        "checkRuns": 245,
+        "reworkPromptsPerSession": 0.1,
+        "correctionsPerSession": 0.1,
+        "maxConcurrentSessions": 2,
+        "meanDailyMaxConcurrent": 1.5
+      }
+    },
+    {
+      "week": "2026-W37",
+      "sessions": 18,
+      "toolCalls": 2275,
+      "metrics": {
+        "unverifiedDoneRate": 0.122,
+        "doneClaims": 41,
+        "bashFailureRate": 0.123,
+        "globAborts": 0,
+        "hiddenExitCodes": 0.13,
+        "timeouts": 0.04,
+        "bashCapHits": 0,
+        "portClashes": 0.18,
+        "missingPackages": 0.04,
+        "commandNotFound": 0.26,
+        "failingRetries": 0.35,
+        "editBeforeRead": 0.53,
+        "compactionsPerSession": 0.11,
+        "medianToolOutputBytes": 176789,
+        "p90ToolOutputBytes": 917175,
+        "medianCheckRunBytes": 435,
+        "p90CheckRunBytes": 4028,
+        "checkRuns": 209,
+        "reworkPromptsPerSession": 0.22,
+        "correctionsPerSession": 0.11,
+        "maxConcurrentSessions": 2,
+        "meanDailyMaxConcurrent": 1.6
+      }
+    },
+    {
+      "week": "2026-W38",
+      "sessions": 45,
+      "toolCalls": 7906,
+      "metrics": {
+        "unverifiedDoneRate": 0.092,
+        "doneClaims": 152,
+        "bashFailureRate": 0.126,
+        "globAborts": 0,
+        "hiddenExitCodes": 0.83,
+        "timeouts": 0.06,
+        "bashCapHits": 5,
+        "portClashes": 0.05,
+        "missingPackages": 0.06,
+        "commandNotFound": 0.1,
+        "failingRetries": 0.37,
+        "editBeforeRead": 0.9,
+        "compactionsPerSession": 0.24,
+        "medianToolOutputBytes": 435966,
+        "p90ToolOutputBytes": 1133727,
+        "medianCheckRunBytes": 487,
+        "p90CheckRunBytes": 3801,
+        "checkRuns": 939,
+        "reworkPromptsPerSession": 0.22,
+        "correctionsPerSession": 0,
+        "maxConcurrentSessions": 3,
+        "meanDailyMaxConcurrent": 1.86
+      }
+    },
+    {
+      "week": "2026-W39",
+      "sessions": 77,
+      "toolCalls": 12307,
+      "metrics": {
+        "unverifiedDoneRate": 0.1,
+        "doneClaims": 209,
+        "bashFailureRate": 0.115,
+        "globAborts": 0.2,
+        "hiddenExitCodes": 0.39,
+        "timeouts": 0.02,
+        "bashCapHits": 2,
+        "portClashes": 0.1,
+        "missingPackages": 0.02,
+        "commandNotFound": 0.07,
+        "failingRetries": 0.48,
+        "editBeforeRead": 0.31,
+        "compactionsPerSession": 0.1,
+        "medianToolOutputBytes": 430325,
+        "p90ToolOutputBytes": 899854,
+        "medianCheckRunBytes": 666,
+        "p90CheckRunBytes": 11965,
+        "checkRuns": 1202,
+        "reworkPromptsPerSession": 0.1,
+        "correctionsPerSession": 0.01,
+        "maxConcurrentSessions": 2,
+        "meanDailyMaxConcurrent": 1.86
+      }
+    },
+    {
+      "week": "2026-W40",
+      "sessions": 24,
+      "toolCalls": 5093,
+      "metrics": {
+        "unverifiedDoneRate": 0.066,
+        "doneClaims": 137,
+        "bashFailureRate": 0.06,
+        "globAborts": 1.88,
+        "hiddenExitCodes": 1.41,
+        "timeouts": 0.08,
+        "bashCapHits": 4,
+        "portClashes": 0.02,
+        "missingPackages": 0.1,
+        "commandNotFound": 0.04,
+        "failingRetries": 0.12,
+        "editBeforeRead": 0.82,
+        "compactionsPerSession": 0.04,
+        "medianToolOutputBytes": 350739,
+        "p90ToolOutputBytes": 1197169,
+        "medianCheckRunBytes": 423,
+        "p90CheckRunBytes": 2543,
+        "checkRuns": 793,
+        "reworkPromptsPerSession": 0.13,
+        "correctionsPerSession": 0.04,
+        "maxConcurrentSessions": 2,
+        "meanDailyMaxConcurrent": 1.5
+      }
+    },
+    {
+      "week": "2026-W41",
+      "sessions": 28,
+      "toolCalls": 3631,
+      "metrics": {
+        "unverifiedDoneRate": 0.056,
+        "doneClaims": 179,
+        "bashFailureRate": 0.037,
+        "globAborts": 2.64,
+        "hiddenExitCodes": 0.99,
+        "timeouts": 0.08,
+        "bashCapHits": 3,
+        "portClashes": 0,
+        "missingPackages": 0.06,
+        "commandNotFound": 0.06,
+        "failingRetries": 0,
+        "editBeforeRead": 0.28,
+        "compactionsPerSession": 0.07,
+        "medianToolOutputBytes": 321022,
+        "p90ToolOutputBytes": 570346,
+        "medianCheckRunBytes": 430,
+        "p90CheckRunBytes": 2637,
+        "checkRuns": 531,
+        "reworkPromptsPerSession": 0.21,
+        "correctionsPerSession": 0,
+        "maxConcurrentSessions": 3,
+        "meanDailyMaxConcurrent": 1.5
+      }
+    },
+    {
+      "week": "2026-W42",
+      "sessions": 28,
+      "toolCalls": 6047,
+      "metrics": {
+        "unverifiedDoneRate": 0.066,
+        "doneClaims": 258,
+        "bashFailureRate": 0.05,
+        "globAborts": 2.58,
+        "hiddenExitCodes": 1.85,
+        "timeouts": 0.41,
+        "bashCapHits": 20,
+        "portClashes": 0.15,
+        "missingPackages": 0.13,
+        "commandNotFound": 0.07,
+        "failingRetries": 0,
+        "editBeforeRead": 0.43,
+        "compactionsPerSession": 0.79,
+        "medianToolOutputBytes": 533255,
+        "p90ToolOutputBytes": 1020365,
+        "medianCheckRunBytes": 420,
+        "p90CheckRunBytes": 2049,
+        "checkRuns": 1128,
+        "reworkPromptsPerSession": 0.46,
+        "correctionsPerSession": 0,
+        "maxConcurrentSessions": 2,
+        "meanDailyMaxConcurrent": 1.71
+      }
+    },
+    {
+      "week": "2026-W43",
+      "sessions": 49,
+      "toolCalls": 7794,
+      "metrics": {
+        "unverifiedDoneRate": 0.134,
+        "doneClaims": 261,
+        "bashFailureRate": 0.102,
+        "globAborts": 0.24,
+        "hiddenExitCodes": 0.81,
+        "timeouts": 0.27,
+        "bashCapHits": 12,
+        "portClashes": 0.13,
+        "missingPackages": 0.05,
+        "commandNotFound": 0.06,
+        "failingRetries": 0,
+        "editBeforeRead": 0.37,
+        "compactionsPerSession": 0.31,
+        "medianToolOutputBytes": 266616,
+        "p90ToolOutputBytes": 599699,
+        "medianCheckRunBytes": 342,
+        "p90CheckRunBytes": 1617,
+        "checkRuns": 1094,
+        "reworkPromptsPerSession": 0.2,
+        "correctionsPerSession": 0.02,
+        "maxConcurrentSessions": 4,
+        "meanDailyMaxConcurrent": 1.86
+      }
+    },
+    {
+      "week": "2026-W44",
+      "sessions": 14,
+      "toolCalls": 1841,
+      "metrics": {
+        "unverifiedDoneRate": 0.057,
+        "doneClaims": 70,
+        "bashFailureRate": 0.098,
+        "globAborts": 0,
+        "hiddenExitCodes": 0.49,
+        "timeouts": 0,
+        "bashCapHits": 0,
+        "portClashes": 0,
+        "missingPackages": 0.16,
+        "commandNotFound": 0.05,
+        "failingRetries": 0,
+        "editBeforeRead": 0.65,
+        "compactionsPerSession": 0.21,
+        "medianToolOutputBytes": 232658,
+        "p90ToolOutputBytes": 564679,
+        "medianCheckRunBytes": 325,
+        "p90CheckRunBytes": 1750,
+        "checkRuns": 255,
+        "reworkPromptsPerSession": 0.21,
+        "correctionsPerSession": 0,
+        "maxConcurrentSessions": 2,
+        "meanDailyMaxConcurrent": 2
+      }
+    }
+  ],
+  "sessionsByRepository": [
+    {
+      "repository": "private repo A",
+      "sessions": 4
+    },
+    {
+      "repository": "private repo G",
+      "sessions": 1
+    },
+    {
+      "repository": "eduline-ai-shop",
+      "sessions": 134
+    },
+    {
+      "repository": "private repo C",
+      "sessions": 69
+    },
+    {
+      "repository": "global-config",
+      "sessions": 28
+    },
+    {
+      "repository": "home",
+      "sessions": 2
+    },
+    {
+      "repository": "private repo F",
+      "sessions": 7
+    },
+    {
+      "repository": "mexxi",
+      "sessions": 21
+    },
+    {
+      "repository": "private repo B",
+      "sessions": 1
+    },
+    {
+      "repository": "private repo D",
+      "sessions": 78
+    },
+    {
+      "repository": "unknown",
+      "sessions": 10
+    },
+    {
+      "repository": "verifika",
+      "sessions": 3
+    }
+  ],
+  "sessionsBySource": {
+    "claude": [
+      0,
+      58,
+      25,
+      38,
+      21
+    ],
+    "opencode": [
+      80,
+      136,
+      0,
+      0,
+      0
+    ]
+  },
+  "concurrencyByDay": {
+    "2026-08-20": 1,
+    "2026-08-22": 1,
+    "2026-08-23": 1,
+    "2026-08-24": 2,
+    "2026-08-25": 2,
+    "2026-08-28": 2,
+    "2026-08-29": 2,
+    "2026-09-05": 2,
+    "2026-09-06": 1,
+    "2026-09-08": 1,
+    "2026-09-09": 2,
+    "2026-09-10": 1,
+    "2026-09-12": 2,
+    "2026-09-13": 2,
+    "2026-09-14": 2,
+    "2026-09-15": 1,
+    "2026-09-16": 2,
+    "2026-09-17": 2,
+    "2026-09-18": 2,
+    "2026-09-19": 3,
+    "2026-09-20": 1,
+    "2026-09-21": 2,
+    "2026-09-22": 2,
+    "2026-09-23": 2,
+    "2026-09-24": 1,
+    "2026-09-25": 2,
+    "2026-09-26": 2,
+    "2026-09-27": 2,
+    "2026-09-28": 2,
+    "2026-09-29": 2,
+    "2026-09-30": 1,
+    "2026-10-01": 1,
+    "2026-10-02": 1,
+    "2026-10-03": 2,
+    "2026-10-05": 1,
+    "2026-10-06": 1,
+    "2026-10-07": 1,
+    "2026-10-08": 2,
+    "2026-10-10": 3,
+    "2026-10-11": 1,
+    "2026-10-12": 2,
+    "2026-10-13": 2,
+    "2026-10-14": 1,
+    "2026-10-15": 2,
+    "2026-10-16": 2,
+    "2026-10-17": 2,
+    "2026-10-18": 1,
+    "2026-10-19": 1,
+    "2026-10-20": 1,
+    "2026-10-21": 2,
+    "2026-10-22": 1,
+    "2026-10-23": 4,
+    "2026-10-24": 2,
+    "2026-10-25": 2,
+    "2026-10-26": 2,
+    "2026-10-27": 2
+  },
+  "hypotheses": [
+    {
+      "id": "H1-backpack",
+      "verdict": "mixed",
+      "headline": "Always-loaded rules across repositories: peak 96 (2026-10-25), now 96. Workflow prose in project repositories: peak 118 rules (2026-08-23), now 23. mexxi's own workflow prose: peak 106 (2026-09-30), now 97. Tool-enforced concerns across repositories: 1 at the first snapshot, 25 now.",
+      "evidence": {
+        "comparisons": [
+          {
+            "metric": "always-loaded directive rules, all repositories",
+            "peak": 96,
+            "peakDate": "2026-10-25",
+            "latest": 96,
+            "change": 0,
+            "reading": "no change"
+          },
+          {
+            "metric": "workflow prose rules kept in project repositories",
+            "peak": 118,
+            "peakDate": "2026-08-23",
+            "latest": 23,
+            "change": -0.805,
+            "reading": "improved"
+          },
+          {
+            "metric": "workflow prose rules in mexxi",
+            "peak": 106,
+            "peakDate": "2026-09-30",
+            "latest": 97,
+            "change": -0.085,
+            "reading": "no change"
+          }
+        ],
+        "concerns": [
+          {
+            "id": "run-checks-before-done",
+            "tool": "verify script",
+            "firstInProse": "2025-07-18",
+            "firstInTool": "2026-08-24",
+            "repositoriesWithProseNow": 7,
+            "repositoriesWithToolNow": 6
+          },
+          {
+            "id": "formatting",
+            "tool": "format check in verify",
+            "firstInProse": "2025-07-18",
+            "firstInTool": "2025-07-31",
+            "repositoriesWithProseNow": 2,
+            "repositoriesWithToolNow": 5
+          },
+          {
+            "id": "code-patterns",
+            "tool": "lint rule",
+            "firstInProse": "2025-07-19",
+            "firstInTool": "2025-07-31",
+            "repositoriesWithProseNow": 2,
+            "repositoriesWithToolNow": 6
+          },
+          {
+            "id": "complexity-coverage",
+            "tool": "coverage or CRAP gate",
+            "firstInProse": "2025-07-18",
+            "firstInTool": "2025-07-18",
+            "repositoriesWithProseNow": 5,
+            "repositoriesWithToolNow": 4
+          },
+          {
+            "id": "isolated-workspace",
+            "tool": "ibni prepare",
+            "firstInProse": "2026-08-23",
+            "firstInTool": "2026-09-10",
+            "repositoriesWithProseNow": 2,
+            "repositoriesWithToolNow": 1
+          },
+          {
+            "id": "ports",
+            "tool": "ibni port blocks",
+            "firstInProse": "2026-10-21",
+            "firstInTool": "2026-10-25",
+            "repositoriesWithProseNow": 5,
+            "repositoriesWithToolNow": 1
+          },
+          {
+            "id": "long-runs-and-waits",
+            "tool": "run slots and Monitor rule",
+            "firstInProse": "2026-10-25",
+            "firstInTool": "2026-10-25",
+            "repositoriesWithProseNow": 1,
+            "repositoriesWithToolNow": 1
+          },
+          {
+            "id": "shell-quoting-and-exit-codes",
+            "tool": "command fixer",
+            "firstInProse": null,
+            "firstInTool": "2026-10-21",
+            "repositoriesWithProseNow": 0,
+            "repositoriesWithToolNow": 1
+          }
+        ]
+      },
+      "caveats": [
+        "Counts directive lines (always, never, must, prefer...) in AGENTS.md, CLAUDE.md and rule files, and separately in commands and agent definitions; it does not weigh how long or how often a rule is read.",
+        "Global instructions live in mexxi's own AGENTS.md since August 2026; earlier global files in the hosts' own config directories were not in Git and have no history.",
+        "New repositories joining raise the total without any one backpack growing."
+      ]
+    },
+    {
+      "id": "H2-done-claims",
+      "verdict": "insufficient data",
+      "headline": "Claims that checks pass with no passing check after the last edit: 11.5% of 26 claims (16 sessions) before each repository added its verify script, 8.7% of 1338 claims (301 sessions) after. The detector's precision was 28-48% on a hand-checked sample, so this cannot carry a verdict.",
+      "evidence": {
+        "comparisons": [
+          {
+            "metric": "unverified done-claim rate",
+            "before": 0.115,
+            "after": 0.087,
+            "change": -0.243,
+            "beforeSessions": 16,
+            "afterSessions": 301,
+            "reading": "insufficient data"
+          }
+        ]
+      },
+      "caveats": [
+        "Session logs start on 2026-08-20, after the first verify script; the 'before' side is the few sessions in repositories that added theirs later.",
+        "A hand-checked sample of 25 flagged claims found 7 clearly unverified, 5 ambiguous and 13 false positives (METHOD.md).",
+        "Checks run by delegated subagents are invisible to the parent session and read as unverified."
+      ]
+    },
+    {
+      "id": "H3-lint",
+      "verdict": "insufficient data",
+      "headline": "Only 1 repository's history dates a lint tightening in words, and it predates the session logs, so its sessions number 0 before and 78 after: there is no before to compare.",
+      "evidence": {
+        "comparisons": [
+          {
+            "metric": "correction prompts per session",
+            "before": null,
+            "after": 0.01,
+            "change": null,
+            "beforeSessions": 0,
+            "afterSessions": 78,
+            "reading": "insufficient data"
+          }
+        ],
+        "lintErrorRulesNow": [
+          {
+            "source": "eduline-ai-shop",
+            "lintErrorRules": 9
+          },
+          {
+            "source": "private repo C",
+            "lintErrorRules": 2
+          },
+          {
+            "source": "private repo F",
+            "lintErrorRules": 2
+          },
+          {
+            "source": "mexxi",
+            "lintErrorRules": 0
+          },
+          {
+            "source": "private repo B",
+            "lintErrorRules": 0
+          },
+          {
+            "source": "private repo D",
+            "lintErrorRules": 29
+          },
+          {
+            "source": "verifika",
+            "lintErrorRules": 1
+          },
+          {
+            "source": "constitution-explained",
+            "lintErrorRules": 1
+          }
+        ]
+      },
+      "caveats": [
+        "Corrections are counted with the retro's CORRECTION_RE; it does not know which pattern a correction is about, so 'the same pattern' cannot be tested from transcripts.",
+        "Lint strictness over time is shown as the number of rules set to error in each ESLint config (backpack rows, lintErrorRules)."
+      ]
+    },
+    {
+      "id": "H4-verifika",
+      "verdict": "mixed",
+      "headline": "Median check-run output went from 513 to 372 bytes (p90 6038 to 1782); compactions per session 0.15 to 0.49. Claude Code only: p90 2310 to 1782 bytes, compactions 0.07 to 0.49 per session (56 and 72 sessions).",
+      "evidence": {
+        "comparisons": [
+          {
+            "metric": "median bytes per check run",
+            "before": 513,
+            "after": 372,
+            "change": -0.275,
+            "beforeSessions": 237,
+            "afterSessions": 72,
+            "reading": "improved"
+          },
+          {
+            "metric": "p90 bytes per check run",
+            "before": 6038,
+            "after": 1782,
+            "change": -0.705,
+            "beforeSessions": 237,
+            "afterSessions": 72,
+            "reading": "improved"
+          },
+          {
+            "metric": "compactions per session",
+            "before": 0.15,
+            "after": 0.49,
+            "change": 2.267,
+            "beforeSessions": 237,
+            "afterSessions": 72,
+            "reading": "worse"
+          },
+          {
+            "metric": "median bytes per check run, Claude Code only",
+            "before": 392,
+            "after": 372,
+            "change": -0.051,
+            "beforeSessions": 56,
+            "afterSessions": 72,
+            "reading": "no change"
+          },
+          {
+            "metric": "p90 bytes per check run, Claude Code only",
+            "before": 2310,
+            "after": 1782,
+            "change": -0.229,
+            "beforeSessions": 56,
+            "afterSessions": 72,
+            "reading": "slightly improved"
+          },
+          {
+            "metric": "compactions per session, Claude Code only",
+            "before": 0.07,
+            "after": 0.49,
+            "change": 6,
+            "beforeSessions": 56,
+            "afterSessions": 72,
+            "reading": "worse"
+          }
+        ]
+      },
+      "caveats": [
+        "Before verifika most sessions ran in OpenCode, after it all ran in Claude Code: the host, its compaction policy and the models changed at the same time. The Claude Code-only rows hold the host constant.",
+        "Agents often pipe check output through tail or grep, so bytes per check run measure what reached the context, not what the check printed."
+      ]
+    },
+    {
+      "id": "H5-environment",
+      "verdict": "not supported",
+      "headline": "5.7% of 2731 failed Bash calls had an environmental cause (shell glob, timeout, busy port, missing package or command). Most failures were the checks themselves failing, which is the work, not friction. Separately, 392 glob aborts and 422 hidden exit codes hit calls that often reported success.",
+      "evidence": {
+        "failedBashCalls": 2731,
+        "environmentalFailures": 155,
+        "globAborts": 392,
+        "hiddenExitCodes": 422,
+        "editBeforeRead": 458
+      },
+      "caveats": [
+        "Failures matching no pattern are not proof of model error: most are failing tests and builds during normal work.",
+        "Model intelligence is not measured; only environmental causes can be recognised from output text."
+      ]
+    },
+    {
+      "id": "H6-parallel",
+      "verdict": "mixed",
+      "headline": "Mean daily peak of concurrent sessions: 1.63 before ibni, 2.14 after. Port clashes per 100 tool calls: 0.08 before port blocks, 0.14 after; timeouts 0.12 to 0.03.",
+      "evidence": {
+        "comparisons": [
+          {
+            "metric": "mean daily peak of concurrent sessions",
+            "before": 1.63,
+            "after": 2.14,
+            "change": 0.313,
+            "beforeSessions": 299,
+            "afterSessions": 59,
+            "reading": "improved"
+          },
+          {
+            "metric": "port clashes per 100 tool calls",
+            "before": 0.08,
+            "after": 0.14,
+            "change": 0.75,
+            "beforeSessions": 337,
+            "afterSessions": 21,
+            "reading": "worse"
+          },
+          {
+            "metric": "timeouts per 100 tool calls",
+            "before": 0.12,
+            "after": 0.03,
+            "change": -0.75,
+            "beforeSessions": 337,
+            "afterSessions": 21,
+            "reading": "improved"
+          },
+          {
+            "metric": "port clashes per 100 tool calls, Claude Code only",
+            "before": 0.07,
+            "after": 0.14,
+            "change": 1,
+            "beforeSessions": 121,
+            "afterSessions": 21,
+            "reading": "worse"
+          },
+          {
+            "metric": "timeouts per 100 tool calls, Claude Code only",
+            "before": 0.26,
+            "after": 0.03,
+            "change": -0.885,
+            "beforeSessions": 121,
+            "afterSessions": 21,
+            "reading": "improved"
+          }
+        ]
+      },
+      "caveats": [
+        "The port-block 'after' side covers 3 days.",
+        "Concurrency counts sessions with activity within 30 minutes of each other; an idle open session does not count."
+      ]
+    }
+  ],
+  "pullRequests": {
+    "total": {
+      "pullRequests": 252,
+      "merged": 232,
+      "medianHoursToMerge": 0.5,
+      "medianCommits": 1,
+      "medianReviews": 0,
+      "withCommitsAfterFirstReview": 2
+    },
+    "byEra": [
+      {
+        "id": "prose-and-scripts",
+        "pullRequests": 0,
+        "merged": 0,
+        "medianHoursToMerge": null,
+        "medianCommits": null,
+        "medianReviews": null,
+        "withCommitsAfterFirstReview": 0
+      },
+      {
+        "id": "worktree-cli",
+        "pullRequests": 144,
+        "merged": 133,
+        "medianHoursToMerge": 0.4,
+        "medianCommits": 1,
+        "medianReviews": 0,
+        "withCommitsAfterFirstReview": 0
+      },
+      {
+        "id": "verifika",
+        "pullRequests": 20,
+        "merged": 20,
+        "medianHoursToMerge": 3.2,
+        "medianCommits": 2,
+        "medianReviews": 0,
+        "withCommitsAfterFirstReview": 0
+      },
+      {
+        "id": "ibni-mexxi",
+        "pullRequests": 58,
+        "merged": 50,
+        "medianHoursToMerge": 0.6,
+        "medianCommits": 2,
+        "medianReviews": 0,
+        "withCommitsAfterFirstReview": 2
+      },
+      {
+        "id": "port-blocks-run-slots",
+        "pullRequests": 30,
+        "merged": 29,
+        "medianHoursToMerge": 0.6,
+        "medianCommits": 1,
+        "medianReviews": 0,
+        "withCommitsAfterFirstReview": 0
+      }
+    ],
+    "byRepository": [
+      {
+        "repository": "private repo A",
+        "pullRequests": 1,
+        "merged": 1,
+        "medianHoursToMerge": 155.2,
+        "medianCommits": 1,
+        "medianReviews": 0,
+        "withCommitsAfterFirstReview": 0
+      },
+      {
+        "repository": "private repo G",
+        "pullRequests": 2,
+        "merged": 2,
+        "medianHoursToMerge": 0.2,
+        "medianCommits": 1,
+        "medianReviews": 0,
+        "withCommitsAfterFirstReview": 0
+      },
+      {
+        "repository": "eduline-ai-shop",
+        "pullRequests": 117,
+        "merged": 111,
+        "medianHoursToMerge": 0.5,
+        "medianCommits": 1,
+        "medianReviews": 0,
+        "withCommitsAfterFirstReview": 0
+      },
+      {
+        "repository": "private repo C",
+        "pullRequests": 48,
+        "merged": 46,
+        "medianHoursToMerge": 0.4,
+        "medianCommits": 1,
+        "medianReviews": 0,
+        "withCommitsAfterFirstReview": 0
+      },
+      {
+        "repository": "private repo F",
+        "pullRequests": 1,
+        "merged": 1,
+        "medianHoursToMerge": 155.1,
+        "medianCommits": 1,
+        "medianReviews": 0,
+        "withCommitsAfterFirstReview": 0
+      },
+      {
+        "repository": "mexxi",
+        "pullRequests": 50,
+        "merged": 42,
+        "medianHoursToMerge": 0.5,
+        "medianCommits": 1,
+        "medianReviews": 0,
+        "withCommitsAfterFirstReview": 1
+      },
+      {
+        "repository": "mexxi-demo",
+        "pullRequests": 2,
+        "merged": 1,
+        "medianHoursToMerge": 105.7,
+        "medianCommits": 1,
+        "medianReviews": 0,
+        "withCommitsAfterFirstReview": 0
+      },
+      {
+        "repository": "private repo D",
+        "pullRequests": 26,
+        "merged": 23,
+        "medianHoursToMerge": 4.9,
+        "medianCommits": 1,
+        "medianReviews": 0,
+        "withCommitsAfterFirstReview": 0
+      },
+      {
+        "repository": "verifika",
+        "pullRequests": 5,
+        "merged": 5,
+        "medianHoursToMerge": 3.8,
+        "medianCommits": 8,
+        "medianReviews": 0,
+        "withCommitsAfterFirstReview": 1
+      }
+    ],
+    "firstAgentPullRequest": "2026-09-10"
+  },
+  "quotes": [
+    {
+      "text": "Ordering, age, occasion and price specs pass.",
+      "context": "Claude Code reply; the test run just before it printed a failing spec (×).",
+      "date": "2026-10-15"
+    },
+    {
+      "text": "SE fits and the new layout test passes on both phones.",
+      "context": "Claude Code reply; the last test run before it exited with code 1.",
+      "date": "2026-10-24"
+    },
+    {
+      "text": "The header migration is done (11 pages, focused specs green).",
+      "context": "Claude Code reply; new component files were written after the last test run, and no test ran again.",
+      "date": "2026-10-08"
+    },
+    {
+      "text": "Lint and typecheck pass.",
+      "context": "Claude Code reply; a stylesheet was edited after the last lint or typecheck run.",
+      "date": "2026-10-16"
+    }
+  ],
+  "notes": [
+    "constitutionofmalta.com: no repository by that name exists locally or on GitHub; alexportelli12/constitution-explained (public, July 2025, with CLAUDE.md and .claude/) is taken to be it.",
+    "coding-agent-config is mexxi's earlier name: GitHub redirects it to alexportelli12/mexxi, so its history is mexxi's history.",
+    "Codex: only start, end, place and tool-call counts are read (five sessions), so Codex sessions count toward coverage and concurrency only.",
+    "Claude Code keeps transcripts for cleanupPeriodDays (90 here), but the oldest transcript on disk starts on 2026-09-26; nothing older survives to measure.",
+    "Session metrics before 2026-08-20 do not exist: anything older comes from Git history only.",
+    "Sessions whose working directory is under /tmp (segwi canaries, test fixtures) are excluded; their counts are in coverage.excluded.",
+    "Repositories not listed for publication are labelled 'private repo A', 'B'... in order of their first commit."
+  ]
+}

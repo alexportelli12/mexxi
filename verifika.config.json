@@ -77,6 +77,10 @@
       "command": "node scripts/segwi/audit.mjs",
       "paths": ["package.json", "package-lock.json", "scripts/segwi/web/package.json", "scripts/segwi/web/package-lock.json", "scripts/segwi/audit.mjs"]
     },
+    "journey": {
+      "command": "node --test research/journey/scripts/journey.test.mjs",
+      "paths": ["research/journey/scripts/**", "scripts/retro/session_retro.py", "scripts/lib/redact.mjs", "scripts/lib/secret-patterns.json"]
+    },
     "integration": {
       "command": "node --test scripts/integration.test.mjs",
       "dependsOn": ["config"]
