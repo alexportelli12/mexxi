@@ -1,0 +1,22 @@
+[
+  {
+    "text": "Ordering, age, occasion and price specs pass.",
+    "context": "Claude Code reply; the test run just before it printed a failing spec (×).",
+    "date": "2026-10-15"
+  },
+  {
+    "text": "SE fits and the new layout test passes on both phones.",
+    "context": "Claude Code reply; the last test run before it exited with code 1.",
+    "date": "2026-10-24"
+  },
+  {
+    "text": "The header migration is done (11 pages, focused specs green).",
+    "context": "Claude Code reply; new component files were written after the last test run, and no test ran again.",
+    "date": "2026-10-08"
+  },
+  {
+    "text": "Lint and typecheck pass.",
+    "context": "Claude Code reply; a stylesheet was edited after the last lint or typecheck run.",
+    "date": "2026-10-16"
+  }
+]
