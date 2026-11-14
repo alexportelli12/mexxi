@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { access, chmod, mkdir, mkdtemp, readdir, readFile, rename, rm, symlink, utimes, writeFile } from "node:fs/promises";
-import http from "node:http";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -12,6 +11,8 @@ import { fileURLToPath } from "node:url";
 import { loadConfig } from "../lib/config.mjs";
 import { COMMANDS } from "./ibni.mjs";
 import { MEDIA_EXTENSIONS } from "./lib/media.mjs";
+import { parseLsofListeners, parseSsListeners } from "./lib/ports.mjs";
+import { scopedSpawn } from "./lib/scope.mjs";
 
 const cli = fileURLToPath(new URL("./ibni.mjs", import.meta.url));
 const VERIFY_SCRIPT = "node -e \"process.exit(require('fs').existsSync('FAIL') ? 1 : 0)\"";
@@ -104,8 +105,6 @@ async function lifecycle(fixture, cwd, operation, options = {}, allowedExitCodes
       MEXXI_CONFIG: fixture.config,
       IMPLEMENTATION_WORKTREE_ROOT: "",
       OPENCODE_WORKTREE_ROOT: "",
-      // Tests never reach OpenRouter with a real key; triage tests set their own.
-      OPENROUTER_API_KEY: "",
       ...ghEnv(fixture.gh),
       ...extraEnv,
     },
@@ -474,6 +473,41 @@ test("publish stops before pushing when a final synchronization changes the tree
   assert.equal(published.json.published, true);
 });
 
+// Decision 0026: a sync that leaves the tree verify passed (nothing new on the
+// default branch, or only what the branch already holds, as when the lower PR
+// of a stack merges) must not cost another verify run.
+test("publish pushes without a second verify when the sync leaves the verified tree unchanged", async (t) => {
+  const fixture = await createFixture(t);
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "same tree" });
+  const { worktreePath, sessionId } = prepared.json;
+  await commit(worktreePath, "lower.txt", "lower\n", "the lower PR's change");
+  await commit(worktreePath, "own.txt", "own\n", "this PR's change");
+  await recordEvidence(fixture, prepared);
+  const verifiedTree = (await git(worktreePath, "rev-parse", "HEAD^{tree}")).stdout.trim();
+  // The lower PR lands on trunk with identical content (a squash merge).
+  await commit(fixture.seed, "lower.txt", "lower\n", "squash of the lower PR");
+  await git(fixture.seed, "push", "--quiet", "origin", "trunk");
+
+  const published = await lifecycle(fixture, worktreePath, "publish", { session: sessionId });
+  assert.equal(published.json.strategy, "rebase");
+  assert.equal(published.json.requiresRevalidation, false);
+  assert.equal(published.json.published, true);
+  assert.equal((await git(worktreePath, "rev-parse", "HEAD^{tree}")).stdout.trim(), verifiedTree);
+
+  // Published history takes a merge; the same holds when its tree is unchanged.
+  await commit(fixture.seed, "own.txt", "own\n", "the same change, landed elsewhere");
+  await git(fixture.seed, "push", "--quiet", "origin", "trunk");
+  await commit(worktreePath, "more.txt", "more\n", "a follow-up");
+  await recordEvidence(fixture, prepared);
+  const merged = await lifecycle(fixture, worktreePath, "publish", { session: sessionId });
+  assert.equal(merged.json.strategy, "merge");
+  assert.equal(merged.json.requiresRevalidation, false);
+  assert.equal(merged.json.published, true);
+  const unchanged = await lifecycle(fixture, worktreePath, "publish", { session: sessionId });
+  assert.equal(unchanged.json.strategy, "unchanged");
+  assert.equal(unchanged.json.published, true);
+});
+
 test("checks and publishes against a distinct configured push URL", async (t) => {
   const fixture = await createFixture(t);
   const fork = path.join(fixture.root, "fork.git");
@@ -682,6 +716,17 @@ async function ghStub(t) {
   t.after(() => rm(stubDirectory, { recursive: true, force: true }));
   const stub = path.join(stubDirectory, "gh");
   await writeFile(stub, `#!/bin/sh
+echo "$*" >> "\${GH_STUB_DIR}/calls"
+if [ "$1" = "run" ] && [ "$2" = "view" ]; then
+  if [ -f "\${GH_STUB_DIR}/job-$4.log" ]; then cat "\${GH_STUB_DIR}/job-$4.log"; exit 0; fi
+  echo "gh: no log for job $4" >&2
+  exit 1
+fi
+if [ "$1" = "pr" ] && [ "$2" = "list" ]; then
+  merged="\${GH_STUB_DIR}/merged-\$(printf %s "$4" | tr / _).json"
+  if [ -f "$merged" ]; then cat "$merged"; else echo "[]"; fi
+  exit 0
+fi
 if [ "$1" = "api" ]; then
   if [ -f "\${GH_STUB_DIR}/check-runs.json" ]; then cat "\${GH_STUB_DIR}/check-runs.json"; exit 0; fi
   echo "gh: check runs not configured" >&2
@@ -700,9 +745,22 @@ if [ ! -f "\${GH_STUB_DIR}/\${pr}" ]; then
   exit 1
 fi
 state="\$(cat "\${GH_STUB_DIR}/\${pr}")"
+if [ "$2" = "edit" ]; then exit 0; fi
+if [ "$2" = "checks" ]; then
+  case "$*" in *--watch*) exit 0;; esac
+  if [ ! -f "\${GH_STUB_DIR}/\${pr}.checks" ]; then echo "no checks reported on the 'x' branch" >&2; exit 1; fi
+  cat "\${GH_STUB_DIR}/\${pr}.checks"
+  exit 0
+fi
+case "$*" in *comments,reviews*)
+  if [ -f "\${GH_STUB_DIR}/\${pr}.discussion" ]; then cat "\${GH_STUB_DIR}/\${pr}.discussion"; exit 0; fi
+  echo "gh: discussion not configured" >&2; exit 1;;
+esac
+base="trunk"
+if [ -f "\${GH_STUB_DIR}/\${pr}.base" ]; then base="\$(cat "\${GH_STUB_DIR}/\${pr}.base")"; fi
 if [ -f "\${GH_STUB_DIR}/\${pr}.head" ]; then
   read -r headRef headOid < "\${GH_STUB_DIR}/\${pr}.head"
-  printf '{"state":"%s","headRefName":"%s","headRefOid":"%s"}\\n' "$state" "$headRef" "$headOid"
+  printf '{"state":"%s","headRefName":"%s","headRefOid":"%s","baseRefName":"%s"}\\n' "$state" "$headRef" "$headOid" "$base"
   exit 0
 fi
 if [ "$state" = "MERGED" ] && [ -f "\${GH_STUB_DIR}/\${pr}.merge" ]; then
@@ -1467,6 +1525,18 @@ function pidAlive(pid) {
   }
 }
 
+// Break: systemd 259 and later expand `$` in a scope's command line, so a
+// wrapper passed as `sh -c` text reads `$$` as `$` and counts itself as a
+// leftover, and the verify command is pasted in before sh parses it. Older
+// systemd leaves the text alone, so the scope tests below pass there anyway.
+test("a scope's command line holds no $ for systemd to expand, and the command travels in the environment", async () => {
+  const command = `test "$(printf %s ok)" = ok`;
+  const scoped = scopedSpawn({ command, env: {}, settings: { cpuWeight: 30, memoryMax: "512M" }, kind: "verify", sessionId: "s", logPath: "/tmp/x.log" });
+  assert.deepEqual(scoped.args.filter((arg) => arg.includes("$")), []);
+  assert.equal(scoped.env.IBNI_COMMAND, command);
+  assert.ok(existsSync(scoped.args.at(-1)), "the wrapper script ships beside scope.mjs");
+});
+
 // Break: verify runs as a plain child where a scope could start, so a server
 // the command leaves behind keeps its port and the run's cost goes unmeasured.
 test("verify runs in a systemd scope, stops what the command left running and records what it used", { skip: scopeSkip }, async (t) => {
@@ -1665,70 +1735,20 @@ test("setup warns when lockfiles below the root are left uninstalled because .me
   assert.equal(named.json.setup.warning, undefined);
 });
 
-// A local stand-in for OpenRouter's Decisions API: answers each request from
-// a queue ({status, body} or {hang: true}) and keeps what it was sent.
-async function jevStub(t, responses) {
-  const requests = [];
-  const server = http.createServer((request, response) => {
-    let body = "";
-    request.on("data", (chunk) => { body += chunk; });
-    request.on("end", () => {
-      requests.push({ headers: request.headers, body: JSON.parse(body) });
-      const next = responses.shift() ?? { status: 500, body: { error: { code: 500, message: "stub exhausted" } } };
-      if (next.hang) return;
-      response.writeHead(next.status, { "content-type": "application/json" });
-      response.end(JSON.stringify(next.body));
-    });
-  });
-  await new Promise((resolve) => { server.listen(0, "127.0.0.1", resolve); });
-  t.after(() => { server.closeAllConnections(); server.close(); });
-  return { requests, endpoint: `http://127.0.0.1:${server.address().port}/api/alpha/decisions` };
-}
-
-const JEV_ANSWERS = {
-  id: "gen-1",
-  model: "typesafe/jev-1.14-20261001",
-  answers: {
-    existingUi: { type: "noul", noul: 0.2 },
-    userFacing: { type: "noul", noul: 0.1 },
-    oneWayDoor: { type: "noul", noul: 0.05 },
-    size: { type: "choice", choice: "local", confidence: 0.8, probabilities: { local: 0.8, feature: 0.2 } },
-    reviewValue: { type: "score", score: 2.4, confidence: 0.6, probabilities: { 0: 0, 1: 0.1, 2: 0.4, 3: 0.5 } },
-  },
-  usage: { input_tokens: 900, output_tokens: 0, cost: 0.00004 },
-};
-
-async function useJev(fixture, jev) {
-  await writeFile(fixture.config, JSON.stringify({ paths: { worktreeRoot: fixture.worktrees }, jev }));
-}
-
-// The request and contract files /wettaq writes before calling triage.
-async function triageFiles(evidenceDir, request = "Rename the settings page", contract = "Goal: rename the page.") {
-  const files = { "request-file": path.join(evidenceDir, "request.md"), "contract-file": path.join(evidenceDir, "contract.md") };
-  await writeFile(files["request-file"], request);
-  await writeFile(files["contract-file"], contract);
-  return files;
-}
-
 test("lifecycle steps, verify attempts and finding counts are recorded and reported by stats", async (t) => {
   const fixture = await createFixture(t);
-  const jev = await jevStub(t, [{ status: 200, body: JEV_ANSWERS }]);
-  await useJev(fixture, { enabled: true, endpoint: jev.endpoint, owners: ["acme"], repositories: ["acme/widgets"] });
   // Unscoped, so the recording below has the same shape on every machine.
   const config = JSON.parse(await readFile(fixture.config, "utf8"));
   await writeFile(fixture.config, JSON.stringify({ ...config, workflow: { scope: { enabled: false } } }));
   const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "timed" });
   const { sessionId, worktreePath } = prepared.json;
-  const triaged = await lifecycle(fixture, fixture.control, "triage", { session: sessionId, ...await triageFiles(prepared.json.evidenceDir) }, [0], { OPENROUTER_API_KEY: "test-key" });
-  assert.equal(triaged.json.outcome, "answered");
   await commit(worktreePath, "feature.txt", "feature\n", "feature");
-  for (const options of [{ "before-shots": "skipped" }, { verify: "fail" }, { verify: "pass" }, { review: "3", accepted: "2", reviewer: "same" }, { qa: "0" }, { review: "1", accepted: "1", reviewer: "cross" }]) {
+  for (const options of [{ "before-shots": "skipped" }, { verify: "fail" }, { verify: "pass" }, { review: "3", accepted: "2" }, { qa: "0" }, { review: "1" }]) {
     const recorded = await lifecycle(fixture, fixture.control, "record", { session: sessionId, ...options });
     assert.equal(recorded.json.operation, "record");
   }
   for (const options of [{}, { verify: "maybe" }, { review: "-1" }, { verify: "pass", qa: "1" }, { "before-shots": "maybe" },
-    { review: "2", accepted: "1" }, { review: "2", reviewer: "same" }, { review: "2", accepted: "3", reviewer: "same" },
-    { review: "2", accepted: "1", reviewer: "other" }, { qa: "2", accepted: "1", reviewer: "same" }]) {
+    { review: "2", accepted: "3" }, { review: "2", accepted: "one" }, { qa: "2", accepted: "1" }]) {
     await lifecycle(fixture, fixture.control, "record", { session: sessionId, ...options }, [2]);
   }
   await lifecycle(fixture, worktreePath, "publish", { session: sessionId });
@@ -1752,25 +1772,17 @@ test("lifecycle steps, verify attempts and finding counts are recorded and repor
   // Two recorded by hand, one by ibni verify.
   assert.deepEqual({ ...stats.json.verify, history: undefined }, { attempts: 3, passed: 2, failed: 1, history: undefined });
   assert.deepEqual(stats.json.verify.history.map((entry) => entry.outcome), ["fail", "pass", "pass"]);
-  assert.deepEqual([stats.json.review.rounds, stats.json.review.findings], [2, 4]);
-  assert.deepEqual(stats.json.review.byReviewer, {
-    same: { rounds: 1, findings: 3, accepted: 2 },
-    cross: { rounds: 1, findings: 1, accepted: 1 },
-  });
+  // A review recorded without --accepted counts in rounds and findings only.
+  assert.deepEqual([stats.json.review.rounds, stats.json.review.findings, stats.json.review.accepted], [2, 4, 2]);
   assert.deepEqual([stats.json.qa.rounds, stats.json.qa.findings], [1, 0]);
-  assert.equal(stats.json.triage.status, "answered");
-  assert.deepEqual(stats.json.triage.answers.userFacing, { answer: "no", confidence: 0.9 });
-  // Triage advised against rendered QA, which the agent ran; the other two gates agree.
-  assert.deepEqual(stats.json.triage.agreement.gates, {
-    beforeShots: { triage: false, agent: false, agree: true },
-    renderedQa: { triage: false, agent: true, agree: false },
-    review: { triage: true, agent: true, agree: true },
-  });
-  assert.deepEqual([stats.json.triage.agreement.compared, stats.json.triage.agreement.agreed], [3, 2]);
 
   // The run pane mod's tests draw from a recording of this scenario; it must
   // keep the shape ibni prints, or those tests prove nothing.
   await lifecycle(fixture, worktreePath, "mark-pr", { session: sessionId, url: "https://github.com/alexportelli12/example/pull/42" });
+  await setGhState(fixture.gh, 42, "OPEN");
+  await setGhHead(fixture.gh, 42, prepared.json.branch, (await git(worktreePath, "rev-parse", "HEAD")).stdout.trim());
+  await setGhChecks(fixture.gh, 42, [ghCheck("verify", "pass")]);
+  await lifecycle(fixture, worktreePath, "ci-wait", { session: sessionId });
   const recorded = await import("../../claude/mods/run-pane/tests/recorded.mjs");
   const shape = (value) => Array.isArray(value) ? [shape(value[0])]
     : value && typeof value === "object" ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, shape(value[key])]))
@@ -1779,105 +1791,6 @@ test("lifecycle steps, verify attempts and finding counts are recorded and repor
     const live = await lifecycle(fixture, fixture.root, operation, { session: sessionId });
     assert.deepEqual(shape(json), shape(live.json), `claude/mods/run-pane/tests/recorded.mjs no longer matches ibni ${operation}; record it again`);
   }
-});
-
-test("triage sends nothing unless enabled, listed, owned by you and keyed, and records why", async (t) => {
-  const jev = await jevStub(t, []);
-  const key = { OPENROUTER_API_KEY: "test-key" };
-  const triage = async (fixture, prepared, env = key) => {
-    const result = await lifecycle(fixture, fixture.control, "triage", { session: prepared.json.sessionId, ...await triageFiles(prepared.json.evidenceDir) }, [0], env);
-    assert.equal(result.json.stage, "shadow");
-    assert.equal(result.json.outcome, "skipped");
-    return result.json.reason;
-  };
-
-  const local = await createFixture(t);
-  await useLocalRemote(local);
-  const localPrepared = await lifecycle(local, local.control, "prepare", { slug: "local remote" });
-  assert.equal(await triage(local, localPrepared), "jev.enabled is false");
-  await useJev(local, { enabled: true, endpoint: jev.endpoint, owners: ["acme"], repositories: ["acme/widgets"] });
-  assert.match(await triage(local, localPrepared), /^remote origin is not a GitHub repository/);
-
-  const fixture = await createFixture(t);
-  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "policy" });
-  const reasons = [];
-  for (const [jevConfig, env] of [
-    [{ enabled: true, endpoint: jev.endpoint, owners: ["acme"], repositories: ["acme/other"] }, key],
-    // Listed, but owned by an organisation that is not yours: excluded by default.
-    [{ enabled: true, endpoint: jev.endpoint, owners: ["alexportelli12"], repositories: ["acme/widgets"] }, key],
-    [{ enabled: true, endpoint: jev.endpoint, owners: ["ACME"], repositories: ["Acme/Widgets"] }, {}],
-  ]) {
-    await useJev(fixture, jevConfig);
-    reasons.push(await triage(fixture, prepared, env));
-  }
-  assert.deepEqual(reasons, [
-    "acme/widgets is not listed in jev.repositories",
-    "acme/widgets is owned by acme, which is not one of jev.owners; another organisation's content is not only yours to share",
-    "OPENROUTER_API_KEY is not set",
-  ]);
-  assert.equal(jev.requests.length, 0, "no skipped triage reaches the network");
-
-  const stats = await lifecycle(fixture, fixture.root, "stats", { session: prepared.json.sessionId });
-  assert.deepEqual(stats.json.triage.calls.map((call) => [call.outcome, call.reason]), reasons.map((reason) => ["skipped", reason]));
-  assert.deepEqual([stats.json.triage.status, stats.json.triage.answers], ["skipped", null]);
-  assert.deepEqual(stats.json.triage.agreement.gates.review, { triage: null, agent: null, agree: null });
-});
-
-test("triage sends only redacted metadata, records the answers and their cost, and keeps them from the agent", async (t) => {
-  const fixture = await createFixture(t);
-  const jev = await jevStub(t, [{ status: 200, body: JEV_ANSWERS }]);
-  await useJev(fixture, { enabled: true, endpoint: jev.endpoint, owners: ["acme"], repositories: ["acme/widgets"] });
-  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "metadata only" });
-  const { sessionId, worktreePath, evidenceDir } = prepared.json;
-  await commit(worktreePath, "committed.txt", "COMMITTED-CONTENT\n", "committed");
-  await writeFile(path.join(worktreePath, "README.md"), "initial\nUNCOMMITTED-CONTENT\n");
-  await writeFile(path.join(worktreePath, "untracked.txt"), "UNTRACKED-CONTENT\n");
-  await writeFile(path.join(worktreePath, ".env"), "API_TOKEN=ENV-CONTENT\n");
-  const token = "ghp_abcdefghijklmnopqrstuvwxyz012345";
-  const files = await triageFiles(evidenceDir, `Rotate the deploy key; the old one is ${token}`, "Goal: rotate the key.");
-
-  const result = await lifecycle(fixture, fixture.root, "triage", { session: sessionId, ...files }, [0], { OPENROUTER_API_KEY: "test-key" });
-  assert.deepEqual(result.json, { operation: "triage", sessionId, stage: "shadow", outcome: "answered", reason: null });
-
-  assert.equal(jev.requests.length, 1);
-  const [{ headers, body }] = jev.requests;
-  assert.equal(headers.authorization, "Bearer test-key");
-  assert.equal(body.model, "typesafe/jev-1.14");
-  // Paths and counts only: an untracked .env is named, never read.
-  assert.deepEqual(body.state.changedPaths, [".env", "README.md", "committed.txt", "untracked.txt"]);
-  assert.deepEqual(body.state.diffStats, { files: 4, insertions: 2, deletions: 0, untracked: 2 });
-  const sent = JSON.stringify(body);
-  for (const secret of ["CONTENT", token, "test-key"]) assert.ok(!sent.includes(secret), `${secret} never leaves`);
-  assert.equal(body.state.request, "Rotate the deploy key; the old one is [REDACTED]");
-
-  const metadata = JSON.parse(await metadataFile(worktreePath));
-  const [call] = metadata.triage;
-  assert.deepEqual(call.sent, body.state, "the metadata keeps exactly what was sent, for retro");
-  assert.equal(call.payloadBytes, Buffer.byteLength(JSON.stringify(body)));
-  assert.ok(call.payloadBytes < 32768);
-  assert.deepEqual([call.outcome, call.model, call.redacted, call.redactions, call.cost, call.attempts], ["answered", "typesafe/jev-1.14", true, 1, 0.00004, 1]);
-  assert.deepEqual(call.answers.size, { answer: "local", confidence: 0.8, probabilities: { local: 0.8, feature: 0.2 } });
-  assert.ok(call.latencyMs >= 0);
-
-  const stats = await lifecycle(fixture, fixture.root, "stats", { session: sessionId });
-  assert.equal(stats.json.triage.calls[0].sent, undefined, "stats leaves the sent text in metadata");
-  assert.deepEqual(stats.json.triage.answers.reviewValue, { answer: 2.4, confidence: 0.6 });
-});
-
-test("triage fails open on a server error or a timeout and records why", async (t) => {
-  const fixture = await createFixture(t);
-  const jev = await jevStub(t, [{ status: 503, body: { error: { code: 503, message: "unavailable" } } }, { hang: true }]);
-  await useJev(fixture, { enabled: true, endpoint: jev.endpoint, owners: ["acme"], repositories: ["acme/widgets"], timeoutMs: 500 });
-  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "fails open" });
-  const options = { session: prepared.json.sessionId, ...await triageFiles(prepared.json.evidenceDir) };
-  const env = { OPENROUTER_API_KEY: "test-key" };
-  const unavailable = await lifecycle(fixture, fixture.control, "triage", options, [0], env);
-  assert.deepEqual([unavailable.json.outcome, unavailable.json.reason], ["failed", "HTTP 503: unavailable"]);
-  const timedOut = await lifecycle(fixture, fixture.control, "triage", options, [0], env);
-  assert.deepEqual([timedOut.json.outcome, timedOut.json.reason], ["failed", "timed out after 500 ms"]);
-  const stats = await lifecycle(fixture, fixture.root, "stats", { session: prepared.json.sessionId });
-  assert.deepEqual(stats.json.triage.calls.map((call) => call.httpStatus), [503, null]);
-  assert.equal(stats.json.triage.status, "failed");
 });
 
 async function metadataFile(worktreePath) {
@@ -1943,6 +1856,178 @@ test("a fresh session adopts an open pull request's workspace and delivers a fol
   const stats = await lifecycle(fixture, fixture.control, "stats", { session: sessionB });
   assert.deepEqual(stats.json.adoptions.map(({ previousSessionId, sessionId }) => [previousSessionId, sessionId]), [[sessionA.json.sessionId, sessionB]]);
   assert.deepEqual(stats.json.steps.filter((step) => step.step === "adopt").map((step) => step.sessionId), [sessionB]);
+});
+
+// A command that exits 1 still prints its JSON; lifecycle parses only exit 0.
+async function lifecycleJson(fixture, cwd, operation, options, allowedExitCodes = [0, 1], extraEnv = {}) {
+  const result = await lifecycle(fixture, cwd, operation, options, allowedExitCodes, extraEnv);
+  return { ...result, json: JSON.parse(result.stdout) };
+}
+
+async function setGhChecks(stubDirectory, prNumber, checks) {
+  await writeFile(path.join(stubDirectory, `${prNumber}.checks`), JSON.stringify(checks));
+}
+
+const ghCheck = (name, bucket, link = `https://github.com/acme/widgets/runs/${name}`) => ({ name, state: bucket.toUpperCase(), bucket, link, workflow: "ci" });
+
+test("ci-wait reports green, each failure with its redacted log tail, no checks and a stale head, and stats counts the failed rounds", async (t) => {
+  const fixture = await createFixture(t);
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "ci wait" });
+  const { sessionId, worktreePath, branch } = prepared.json;
+  await publishAndMark(fixture, prepared, "feature\n", 7);
+  const publishedSha = (await git(worktreePath, "rev-parse", "HEAD")).stdout.trim();
+  await setGhState(fixture.gh, 7, "OPEN");
+  await setGhHead(fixture.gh, 7, branch, publishedSha);
+
+  // Catches: a pull request with no checks read as green.
+  const none = await lifecycleJson(fixture, fixture.control, "ci-wait", { session: sessionId, "timeout-minutes": "0.005" }, [1]);
+  assert.deepEqual([none.json.state, none.json.failed, none.json.prUrl, none.json.headSha], ["none", [], "https://example.test/pull/7", publishedSha]);
+
+  // Catches: a failed Actions job reported without its log, an unredacted
+  // secret in the tail, or an external status given a log it does not have.
+  const log = Array.from({ length: 100 }, (_, index) => `line ${index}`).concat(["token ghp_abcdefghijklmnopqrstuvwxyz0123"]).join("\n");
+  await writeFile(path.join(fixture.gh, "job-22.log"), log);
+  await setGhChecks(fixture.gh, 7, [
+    ghCheck("lint", "pass"),
+    ghCheck("test", "fail", "https://github.com/acme/widgets/actions/runs/11/job/22"),
+    ghCheck("vercel", "fail", "https://vercel.example/deploy/1"),
+  ]);
+  const failed = await lifecycleJson(fixture, fixture.control, "ci-wait", { session: sessionId }, [1]);
+  assert.equal(failed.json.state, "failed");
+  assert.deepEqual(failed.json.failed.map(({ name, url }) => [name, url]), [["test", "https://github.com/acme/widgets/actions/runs/11/job/22"], ["vercel", "https://vercel.example/deploy/1"]]);
+  const tail = failed.json.failed[0].logTail.split("\n");
+  assert.deepEqual([tail.length, tail[0], tail.at(-1)], [60, "line 41", "token [REDACTED]"]);
+  assert.equal(failed.json.failed[1].logTail, null);
+  assert.match(failed.json.nextAction, /three rounds/);
+
+  // Catches: a cancelled or still-running check counted as green.
+  await setGhChecks(fixture.gh, 7, [ghCheck("lint", "pass"), ghCheck("deploy", "cancel")]);
+  assert.equal((await lifecycleJson(fixture, fixture.control, "ci-wait", { session: sessionId }, [1])).json.state, "cancelled");
+  await setGhChecks(fixture.gh, 7, [ghCheck("lint", "pass"), ghCheck("slow", "pending")]);
+  assert.equal((await lifecycleJson(fixture, fixture.control, "ci-wait", { session: sessionId, "timeout-minutes": "0.005" }, [1])).json.state, "pending");
+
+  await setGhChecks(fixture.gh, 7, [ghCheck("lint", "pass"), ghCheck("docs", "skipping")]);
+  const green = await lifecycle(fixture, fixture.control, "ci-wait", { session: sessionId });
+  assert.deepEqual([green.json.state, green.json.failed, green.json.nextAction], ["green", [], undefined]);
+
+  // Catches: waiting on CI for a commit other than the one the session has.
+  await commit(worktreePath, "unpublished.txt", "fix\n", "an unpublished fix");
+  const stale = await lifecycleJson(fixture, fixture.control, "ci-wait", { session: sessionId }, [1]);
+  assert.equal(stale.json.state, "stale");
+  assert.match(stale.json.nextAction, /ibni publish/);
+
+  const stats = await lifecycle(fixture, fixture.control, "stats", { session: sessionId });
+  assert.deepEqual({ ...stats.json.ci, history: undefined }, { waits: 6, rounds: 1, state: "stale", history: undefined });
+  assert.deepEqual(stats.json.steps.filter((step) => step.step === "ci-wait").map((step) => step.outcome),
+    ["ci-none", "ci-failed", "ci-cancelled", "ci-pending", "succeeded", "ci-stale"]);
+  await lifecycle(fixture, fixture.control, "ci-wait", { session: sessionId, "timeout-minutes": "0" }, [2]);
+});
+
+test("ci-wait on GitLab reads the merge request's head pipeline jobs and the failed job's trace", async (t) => {
+  const fixture = await createFixture(t);
+  await useForgeRemote(fixture, "git@gitlab.com:group/widgets.git");
+  const glab = await glabStub(t);
+  const env = glab.env(fixture);
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "gitlab ci" }, [0], env);
+  const { sessionId, worktreePath, branch } = prepared.json;
+  await commit(worktreePath, "feature.txt", "feature\n", "feature");
+  await recordEvidence(fixture, prepared);
+  await lifecycle(fixture, worktreePath, "publish", { session: sessionId }, [0], env);
+  const sha = (await git(worktreePath, "rev-parse", "HEAD")).stdout.trim();
+  const mrUrl = "https://gitlab.com/group/widgets/-/merge_requests/3";
+  await lifecycle(fixture, worktreePath, "mark-pr", { session: sessionId, url: mrUrl }, [0], env);
+  const job = (id, name, status, extra = {}) => ({ id, name, status, stage: "test", web_url: `https://gitlab.com/group/widgets/-/jobs/${id}`, ...extra });
+  await glab.update({
+    mergeRequests: { "group/widgets!3": { iid: 3, state: "opened", source_branch: branch, sha, target_branch: "trunk", head_pipeline: { id: 90 } } },
+    jobs: { 90: [job(1, "lint", "success"), job(2, "unit", "failed"), job(3, "flaky", "failed", { allow_failure: true })] },
+    traces: { 2: "setup\nassertion failed" },
+  });
+  // Catches: a job allowed to fail failing the round, or the trace not fetched.
+  const failed = await lifecycleJson(fixture, fixture.control, "ci-wait", { session: sessionId }, [1], env);
+  assert.equal(failed.json.state, "failed");
+  assert.deepEqual(failed.json.failed, [{ name: "unit", url: "https://gitlab.com/group/widgets/-/jobs/2", logTail: "setup\nassertion failed" }]);
+  await glab.update({ jobs: { 90: [job(1, "lint", "success"), job(4, "manual deploy", "manual")] } });
+  assert.equal((await lifecycle(fixture, fixture.control, "ci-wait", { session: sessionId }, [0], env)).json.state, "green");
+});
+
+test("a stacked pull request is retargeted at the default branch only once its lower PR merged and the merge is pushed", async (t) => {
+  const fixture = await createFixture(t);
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "upper" });
+  const { sessionId, worktreePath, branch } = prepared.json;
+  await publishAndMark(fixture, prepared, "upper\n", 8);
+  const publishedSha = (await git(worktreePath, "rev-parse", "HEAD")).stdout.trim();
+  await setGhState(fixture.gh, 8, "OPEN");
+  await setGhHead(fixture.gh, 8, branch, publishedSha);
+  await writeFile(path.join(fixture.gh, "8.base"), "agent/lower");
+  // The lower branch is still on the remote and its PR open: nothing moves.
+  await git(fixture.seed, "push", "--quiet", "origin", "trunk:refs/heads/agent/lower");
+  const calls = async () => (await readFile(path.join(fixture.gh, "calls"), "utf8")).split("\n");
+  const open = await lifecycle(fixture, worktreePath, "sync", { session: sessionId });
+  assert.deepEqual([open.json.stack.retargeted, open.json.stack.base], [false, "agent/lower"]);
+  assert.ok(!(await calls()).some((call) => call.startsWith("pr edit")));
+
+  // Catches: retargeting before the merged base is in the pushed branch, or a
+  // rebase or force push instead of a merge.
+  await writeFile(path.join(fixture.gh, "merged-agent_lower.json"), JSON.stringify([{ url: "https://example.test/pull/5" }]));
+  await advanceRemote(fixture, "lower.txt");
+  const synced = await lifecycle(fixture, worktreePath, "sync", { session: sessionId });
+  assert.equal(synced.json.strategy, "merge");
+  assert.equal(synced.json.stack.retargeted, false);
+  assert.match(synced.json.stack.nextAction, /ibni publish/);
+  assert.ok(!(await calls()).some((call) => call.startsWith("pr edit")));
+  await recordEvidence(fixture, prepared);
+  const published = await lifecycle(fixture, worktreePath, "publish", { session: sessionId });
+  assert.equal(published.json.published, true);
+  assert.deepEqual([published.json.stack.retargeted, published.json.stack.to], [true, "trunk"]);
+  assert.ok((await calls()).includes("pr edit https://example.test/pull/8 --base trunk"));
+  await git(worktreePath, "merge-base", "--is-ancestor", publishedSha, "HEAD");
+
+  // A base branch that is gone counts as merged too.
+  await git(fixture.seed, "push", "--quiet", "origin", "--delete", "agent/lower");
+  await rm(path.join(fixture.gh, "merged-agent_lower.json"));
+  const gone = await lifecycle(fixture, worktreePath, "sync", { session: sessionId });
+  assert.deepEqual([gone.json.stack.retargeted, gone.json.stack.reason], [true, "agent/lower is gone"]);
+  // Not stacked: no stack field at all.
+  await writeFile(path.join(fixture.gh, "8.base"), "trunk");
+  assert.equal((await lifecycle(fixture, worktreePath, "sync", { session: sessionId })).json.stack, undefined);
+});
+
+test("adopt hands a follow-up session the PR, its checks and how to read review comments, and takes nothing over for a merged PR", async (t) => {
+  const fixture = await createFixture(t);
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "follow up" });
+  const { worktreePath, branch } = prepared.json;
+  await publishAndMark(fixture, prepared, "feature\n", 9);
+  const prUrl = "https://example.test/pull/9";
+  const headSha = (await git(worktreePath, "rev-parse", "HEAD")).stdout.trim();
+  await setGhState(fixture.gh, 9, "OPEN");
+  await setGhHead(fixture.gh, 9, branch, headSha);
+  await setGhChecks(fixture.gh, 9, [ghCheck("lint", "pass"), ghCheck("test", "fail")]);
+  await writeFile(path.join(fixture.gh, "9.discussion"), JSON.stringify({ comments: [{}, {}], reviews: [{}] }));
+
+  const adopted = await lifecycle(fixture, fixture.control, "adopt", { pr: prUrl });
+  assert.deepEqual(adopted.json.pr, { state: "OPEN", baseBranch: "trunk", headSha, url: prUrl });
+  assert.deepEqual(adopted.json.checks, {
+    state: "failed", total: 2, counts: { pass: 1, fail: 1, pending: 0, skipping: 0, cancel: 0 },
+    failed: [{ name: "test", url: "https://github.com/acme/widgets/runs/test" }],
+  });
+  assert.deepEqual([adopted.json.reviewComments.comments, adopted.json.reviewComments.reviews], [2, 1]);
+  assert.match(adopted.json.reviewComments.nextAction, /gh pr view https:\/\/example\.test\/pull\/9 --comments/);
+
+  // Catches: adopt taking over a merged PR's worktree for code changes, or
+  // refusing it over a dirty tree it would never touch.
+  await setGhState(fixture.gh, 9, "MERGED");
+  await writeFile(path.join(worktreePath, "scratch.txt"), "left behind\n");
+  const before = await metadataFile(worktreePath);
+  const merged = await lifecycle(fixture, fixture.control, "adopt", { pr: prUrl });
+  assert.deepEqual([merged.json.merged, merged.json.adopted, merged.json.sessionId, merged.json.pr.state], [true, false, undefined, "MERGED"]);
+  assert.match(merged.json.nextAction, new RegExp(`post-merge steps .* from ${fixture.control.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}, after updating it to the latest trunk`));
+  assert.equal(await metadataFile(worktreePath), before);
+
+  // A merged PR whose workspace is gone is still reported, from its URL.
+  const github = "https://github.com/acme/widgets/pull/9";
+  await writeFile(path.join(fixture.gh, "9.head"), `${branch} ${headSha}\n`);
+  const cleaned = await lifecycle(fixture, fixture.control, "adopt", { pr: github });
+  assert.deepEqual([cleaned.json.merged, cleaned.json.worktreePath], [true, null]);
 });
 
 async function gitStub(t) {
@@ -2129,164 +2214,22 @@ test("prepare refuses a .mexxi.json whose verify command it cannot trust", async
   assert.equal(list.json.workspaces.length, 0);
 });
 
-// A gh stand-in that keeps labels and issues in a JSON file, and logs what it
-// was asked to create.
-async function issueGhStub(t, { labels = [], issues = [] } = {}) {
-  const directory = await mkdtemp(path.join(os.tmpdir(), "mexxi-issue-gh-"));
-  t.after(() => rm(directory, { recursive: true, force: true }));
-  const state = path.join(directory, "state.json");
-  await writeFile(state, JSON.stringify({ labels, issues, created: [] }));
-  await writeFile(path.join(directory, "gh"), `#!${process.execPath}
-const fs = require("node:fs");
-const state = JSON.parse(fs.readFileSync(${JSON.stringify(state)}, "utf8"));
-const args = process.argv.slice(2);
-const value = (flag) => args[args.indexOf(flag) + 1];
-const save = () => fs.writeFileSync(${JSON.stringify(state)}, JSON.stringify(state));
-const [group, action] = args;
-if (value("--repo") !== "acme/widgets") { console.error("gh stub: no --repo acme/widgets in " + args.join(" ")); process.exit(4); }
-if (group === "label" && action === "list") console.log(JSON.stringify(state.labels.map((name) => ({ name }))));
-else if (group === "label" && action === "create") { state.labels.push(args[2]); save(); }
-else if (group === "issue" && action === "list") {
-  if (value("--label") !== "qa-check" || value("--state") !== "all") process.exit(3);
-  console.log(JSON.stringify(state.issues.map((title) => ({ title }))));
-} else if (group === "issue" && action === "create") {
-  if (value("--label") !== "qa-check") process.exit(3);
-  state.issues.push(value("--title")); state.created.push({ title: value("--title"), body: value("--body") }); save();
-  console.log("https://github.com/example/app/issues/" + (100 + state.issues.length));
-} else { console.error("gh stub: unexpected " + args.join(" ")); process.exit(1); }
-`);
-  await chmod(path.join(directory, "gh"), 493);
-  return { directory, env: { PATH: `${directory}:${process.env.PATH ?? ""}` }, read: async () => JSON.parse(await readFile(state, "utf8")) };
-}
-
-test("file-qa-checks files each suggestion as a qa-check issue, creating the label and skipping duplicates", async (t) => {
+test("info passes on review.tool, so the reviewer knows whether to run OCR", async (t) => {
   const fixture = await createFixture(t);
-  // The stub refuses any call without --repo acme/widgets, the remote's repository.
-  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "qa checks" });
-  const { sessionId, evidenceDir } = prepared.json;
-  const from = path.join(evidenceDir, "qa-checks.txt");
-  await writeFile(from, "- Fail on console errors at every route\n\n2. Assert no horizontal overflow at 390px\n* assert no horizontal overflow at  390px\n");
-
-  const gh = await issueGhStub(t, { issues: ["Fail on console errors at every route"] });
-  // Run from the evidence directory: the session is found from its metadata.
-  const first = await lifecycle(fixture, evidenceDir, "file-qa-checks", { session: sessionId, from }, [0], gh.env);
-  assert.deepEqual(first.json.created.map((issue) => issue.title), ["Assert no horizontal overflow at 390px"]);
-  assert.match(first.json.created[0].url, /issues\/\d+$/);
-  assert.deepEqual(first.json.skipped, ["Fail on console errors at every route", "assert no horizontal overflow at  390px"]);
-  const state = await gh.read();
-  assert.deepEqual(state.labels, ["qa-check"]);
-  assert.equal(state.created.length, 1);
-  assert.match(state.created[0].body, /Suggested by rendered QA of branch /);
-
-  // A repeat delivery files nothing and does not recreate the label.
-  const again = await lifecycle(fixture, evidenceDir, "file-qa-checks", { session: sessionId, from }, [0], gh.env);
-  assert.deepEqual(again.json.created, []);
-  assert.equal(again.json.skipped.length, 3);
-  assert.equal((await gh.read()).labels.length, 1);
-
-  await writeFile(from, `${"x".repeat(201)}\n`);
-  const tooLong = await lifecycle(fixture, evidenceDir, "file-qa-checks", { session: sessionId, from }, [2], gh.env);
-  assert.match(tooLong.stderr, /longer than 200 characters/);
-  const missing = await lifecycle(fixture, evidenceDir, "file-qa-checks", { session: sessionId }, [2], gh.env);
-  assert.match(missing.stderr, /requires --from/);
-});
-
-test("file-qa-checks refuses a remote that is not on a known forge rather than letting gh guess", async (t) => {
-  const fixture = await createFixture(t);
-  await useLocalRemote(fixture);
-  const { sessionId, evidenceDir } = (await lifecycle(fixture, fixture.control, "prepare", { slug: "qa local" })).json;
-  const from = path.join(evidenceDir, "qa-checks.txt");
-  await writeFile(from, "Fail on console errors\n");
-  const gh = await issueGhStub(t);
-  const result = await lifecycle(fixture, evidenceDir, "file-qa-checks", { session: sessionId, from }, [2], gh.env);
-  assert.match(result.stderr, /needs remote origin to be a GitHub or GitLab repository/);
-  assert.deepEqual((await gh.read()).labels, []);
-});
-
-// A codex stand-in: records its arguments and stdin, answers --version, and
-// writes the reviewer's final message to the -o file as the real CLI does.
-async function codexStub(t) {
-  const directory = await mkdtemp(path.join(os.tmpdir(), "mexxi-codex-"));
-  t.after(() => rm(directory, { recursive: true, force: true }));
-  await writeFile(path.join(directory, "codex"), `#!${process.execPath}
-const fs = require("node:fs");
-const args = process.argv.slice(2);
-if (args[0] === "--version") { console.log("codex-cli stub"); process.exit(0); }
-fs.writeFileSync(${JSON.stringify(path.join(directory, "call.json"))}, JSON.stringify({ args, stdin: fs.readFileSync(0, "utf8") }));
-fs.writeFileSync(args[args.indexOf("-o") + 1], "Mode: stub review\\nNo findings.\\n");
-`);
-  await chmod(path.join(directory, "codex"), 493);
-  return { directory, env: { PATH: `${directory}:${process.env.PATH ?? ""}` }, call: async () => JSON.parse(await readFile(path.join(directory, "call.json"), "utf8")) };
-}
-
-async function crossReviewSetup(t, claudeModels, extraConfig = {}) {
-  const fixture = await createFixture(t);
-  await writeFile(fixture.config, JSON.stringify({ paths: { worktreeRoot: fixture.worktrees }, models: { claude: claudeModels }, ...extraConfig }));
-  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "cross review" });
-  const background = path.join(prepared.json.evidenceDir, "review-background.md");
-  await writeFile(background, "Purpose: demo\n");
-  const options = { session: prepared.json.sessionId, mode: "discovery", background, target: "workspace changes against HEAD" };
-  return { fixture, prepared, options };
-}
-
-test("cross-review runs the shared reviewer through codex exec in a read-only sandbox with the configured model", async (t) => {
-  const { fixture, prepared, options } = await crossReviewSetup(t, { crossFamilyReviewer: "gpt-5.6-review" });
-  const codex = await codexStub(t);
-  const result = await lifecycle(fixture, prepared.json.evidenceDir, "cross-review", options, [0], codex.env);
-  const outputFile = path.join(prepared.json.evidenceDir, "cross-review-discovery.md");
-  assert.deepEqual(
-    { delegated: result.json.delegated, model: result.json.model, outputFile: result.json.outputFile },
-    { delegated: true, model: "gpt-5.6-review", outputFile },
-  );
-  assert.match(result.json.review, /No findings/);
-  const { args, stdin } = await codex.call();
-  assert.deepEqual(args, [
-    "exec", "--sandbox", "read-only", "--ephemeral", "--color", "never",
-    "-C", prepared.json.worktreePath, "-m", "gpt-5.6-review", "-o", outputFile, "-",
-  ]);
-  assert.match(stdin, /^# Code Reviewer/);
-  assert.match(stdin, /- Mode: discovery\n- Worktree: .+\n- Review target: workspace changes against HEAD\n- Review tool: ocr\n- Background file \(read it first\): .+review-background\.md/);
-
-  const badMode = await lifecycle(fixture, prepared.json.worktreePath, "cross-review", { ...options, mode: "polish" }, [2], codex.env);
-  assert.match(badMode.stderr, /--mode discovery or confirmation/);
-});
-
-test("cross-review and info pass on review.tool, so the reviewer knows whether to run OCR", async (t) => {
-  const { fixture, prepared, options } = await crossReviewSetup(t, { crossFamilyReviewer: "gpt-5.6-review" }, { review: { tool: "none" } });
+  await writeFile(fixture.config, JSON.stringify({ paths: { worktreeRoot: fixture.worktrees }, review: { tool: "none" } }));
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "review tool" });
   const info = await lifecycle(fixture, fixture.control, "info", { session: prepared.json.sessionId });
   assert.equal(info.json.reviewTool, "none");
-  const codex = await codexStub(t);
-  await lifecycle(fixture, prepared.json.evidenceDir, "cross-review", options, [0], codex.env);
-  assert.match((await codex.call()).stdin, /^- Review tool: none$/m);
-});
-
-test("cross-review falls back to the same-model reviewer and says why", async (t) => {
-  const unset = await crossReviewSetup(t, {});
-  const codex = await codexStub(t);
-  const noModel = await lifecycle(unset.fixture, unset.prepared.json.worktreePath, "cross-review", unset.options, [0], codex.env);
-  assert.equal(noModel.json.delegated, false);
-  assert.match(noModel.json.reason, /crossFamilyReviewer is not set/);
-  await assert.rejects(readFile(path.join(codex.directory, "call.json")), /ENOENT/, "codex was not run");
-
-  const configured = await crossReviewSetup(t, { crossFamilyReviewer: "gpt-5.6-review" });
-  // A PATH holding git and nothing else: no codex.
-  const bare = await mkdtemp(path.join(os.tmpdir(), "mexxi-bare-path-"));
-  t.after(() => rm(bare, { recursive: true, force: true }));
-  const gitPath = (await run("sh", ["-c", "command -v git"])).stdout.trim();
-  await symlink(gitPath, path.join(bare, "git"));
-  const missing = await lifecycle(configured.fixture, configured.prepared.json.worktreePath, "cross-review", configured.options, [0], { PATH: bare });
-  assert.equal(missing.json.delegated, false);
-  assert.match(missing.json.reason, /codex is not installed/);
 });
 
 // A glab stand-in for `glab api`: answers merge requests, commit statuses,
-// labels and issues from a JSON state file, and logs each call's host and
+// pipeline jobs and traces from a JSON state file, and logs each call's host and
 // endpoint. Any other glab command fails, so a test proves ibni used the API.
 async function glabStub(t, state = {}) {
   const directory = await mkdtemp(path.join(os.tmpdir(), "mexxi-glab-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const file = path.join(directory, "state.json");
-  await writeFile(file, JSON.stringify({ mergeRequests: {}, statuses: [], labels: [], issues: [], calls: [], ...state }));
+  await writeFile(file, JSON.stringify({ mergeRequests: {}, statuses: [], calls: [], ...state }));
   await writeFile(path.join(directory, "glab"), `#!${process.execPath}
 const fs = require("node:fs");
 const state = JSON.parse(fs.readFileSync(${JSON.stringify(file)}, "utf8"));
@@ -2311,18 +2254,12 @@ if ((match = route.match(/^projects\\/([^/]+)\\/merge_requests\\/(\\d+)$/))) {
 } else if (/^projects\\/[^/]+\\/repository\\/commits\\/[0-9a-f]+\\/statuses$/.test(route)) {
   if (state.statuses === null) fail("statuses unavailable");
   console.log(JSON.stringify(state.statuses));
-} else if (/^projects\\/[^/]+\\/labels$/.test(route)) {
-  if (method === "POST") { state.labels.push(fields); save(); console.log(JSON.stringify(fields)); }
-  else console.log(JSON.stringify(state.labels.filter((label) => label.name.includes(params.get("search") ?? ""))));
-} else if (/^projects\\/[^/]+\\/issues$/.test(route)) {
-  if (method === "POST") {
-    state.issues.push(fields); save();
-    console.log(JSON.stringify({ iid: state.issues.length, web_url: "https://" + hostname + "/issues/" + state.issues.length }));
-  } else {
-    const page = Number(params.get("page")), size = Number(params.get("per_page"));
-    const labelled = state.issues.filter((issue) => issue.labels === params.get("labels"));
-    console.log(JSON.stringify(labelled.slice((page - 1) * size, page * size)));
-  }
+} else if ((match = route.match(/^projects\\/[^/]+\\/pipelines\\/(\\d+)\\/jobs$/))) {
+  console.log(JSON.stringify((state.jobs ?? {})[match[1]] ?? []));
+} else if ((match = route.match(/^projects\\/[^/]+\\/jobs\\/(\\d+)\\/trace$/))) {
+  const trace = (state.traces ?? {})[match[1]];
+  if (trace === undefined) fail("no trace " + route);
+  process.stdout.write(trace);
 } else fail("unexpected endpoint " + endpoint);
 `);
   await chmod(path.join(directory, "glab"), 493);
@@ -2339,12 +2276,12 @@ const glabStatus = (sha, overrides = {}) => ({
   ...overrides,
 });
 
-test("a gitlab.com remote with nested groups takes baseline, media, issues, adopt and cleanup through glab", async (t) => {
+test("a gitlab.com remote with nested groups takes baseline, media, adopt and cleanup through glab", async (t) => {
   const fixture = await createFixture(t);
   await useForgeRemote(fixture, "git@gitlab.com:group/sub/widgets.git");
   const project = "group/sub/widgets";
   const sha = await optInToBaselineReuse(fixture);
-  const glab = await glabStub(t, { statuses: [glabStatus(sha)], issues: [{ title: "Fail on console errors at every route", labels: "qa-check" }] });
+  const glab = await glabStub(t, { statuses: [glabStatus(sha)] });
   const env = glab.env(fixture);
 
   // Baseline reuse reads the commit's statuses, and only a success on exactly baseSha counts.
@@ -2375,17 +2312,7 @@ test("a gitlab.com remote with nested groups takes baseline, media, issues, adop
   const media = await lifecycle(fixture, worktreePath, "publish-media", { session: sessionId }, [0], env);
   assert.equal(media.json.files[0].url, `https://gitlab.com/${project}/-/raw/${media.json.commit}/agent/gitlab/after%20home.png`);
 
-  const from = path.join(evidenceDir, "qa-checks.txt");
-  await writeFile(from, "Fail on console errors at every route\nAssert no horizontal overflow at 390px\n");
-  const filed = await lifecycle(fixture, evidenceDir, "file-qa-checks", { session: sessionId, from }, [0], env);
-  assert.deepEqual(filed.json.created, [{ title: "Assert no horizontal overflow at 390px", url: "https://gitlab.com/issues/2" }]);
-  assert.deepEqual(filed.json.skipped, ["Fail on console errors at every route"]);
-  let state = await glab.read();
-  assert.deepEqual(state.labels, [{ name: "qa-check", color: "#0E8A16", description: "A check rendered QA suggested, to become an executable test" }]);
-  assert.match(state.issues[1].description, /Suggested by rendered QA of branch /);
-  assert.ok(state.calls.every((call) => call.hostname === "gitlab.com" && (call.route.startsWith(`projects/${encodeURIComponent(project)}/`))));
-  const again = await lifecycle(fixture, evidenceDir, "file-qa-checks", { session: sessionId, from }, [0], env);
-  assert.deepEqual([again.json.created, (await glab.read()).labels.length], [[], 1]);
+  assert.ok((await glab.read()).calls.every((call) => call.hostname === "gitlab.com" && (call.route.startsWith(`projects/${encodeURIComponent(project)}/`))));
 
   // adopt reads the merge request named by the URL mark-pr recorded.
   await commit(worktreePath, "feature.txt", "feature\n", "feature");
@@ -2408,7 +2335,7 @@ test("a gitlab.com remote with nested groups takes baseline, media, issues, adop
   const removed = await lifecycle(fixture, fixture.control, "cleanup", { "dry-run": "false" }, [0], env);
   assert.equal(removed.json.results.find((row) => row.worktreePath === worktreePath).decision, "remove");
   assert.equal(await pathExists(worktreePath), false);
-  state = await glab.read();
+  const state = await glab.read();
   assert.ok(state.calls.some((call) => call.route === `projects/${encodeURIComponent(project)}/merge_requests/7`));
 });
 
@@ -2421,10 +2348,6 @@ test("a self-hosted remote has no forge until forge.hosts or the repository's .m
   const unknown = await lifecycle(fixture, fixture.control, "prepare", { slug: "self hosted" }, [0], env);
   assert.equal(unknown.json.forge, null);
   assert.match(unknown.json.forgeReason, /git\.example\.com, which is not a known forge; map it in forge\.hosts/);
-  const from = path.join(unknown.json.evidenceDir, "qa-checks.txt");
-  await writeFile(from, "Fail on console errors\n");
-  const refused = await lifecycle(fixture, fixture.control, "file-qa-checks", { session: unknown.json.sessionId, from }, [2], env);
-  assert.match(refused.stderr, /needs remote origin to be a GitHub or GitLab repository[\s\S]*forge\.hosts/);
   // No forge CLI is guessed for an unknown host.
   assert.deepEqual((await glab.read()).calls, []);
 
@@ -2871,4 +2794,213 @@ test("a workspace from before ibni ran setup and verify still adopts and publish
   assert.match(refused.json.nextAction, new RegExp(`^Run ibni verify --session ${sessionId} in the background`));
   await recordEvidence(fixture, { json: { worktreePath, sessionId } });
   assert.equal((await lifecycle(fixture, worktreePath, "publish", { session: sessionId })).json.published, true);
+});
+
+async function writeMetadataFile(worktreePath, change) {
+  const gitDirectory = (await git(worktreePath, "rev-parse", "--absolute-git-dir")).stdout.trim();
+  const file = path.join(gitDirectory, "implementation-workspace.json");
+  const metadata = JSON.parse(await readFile(file, "utf8"));
+  await writeFile(file, JSON.stringify(change(metadata), null, 2));
+}
+
+// Every time in the metadata moved back by days, as if nothing happened since.
+const aged = (days) => (metadata) => {
+  const back = (iso) => (iso ? new Date(Date.parse(iso) - days * 86_400_000).toISOString() : iso);
+  return {
+    ...metadata, createdAt: back(metadata.createdAt), updatedAt: back(metadata.updatedAt),
+    steps: (metadata.steps ?? []).map((step) => ({ ...step, startedAt: back(step.startedAt), endedAt: back(step.endedAt) })),
+    records: (metadata.records ?? []).map((record) => ({ ...record, at: back(record.at) })),
+  };
+};
+
+const runLog = async (fixture) => (await readFile(path.join(fixture.worktrees, ".ibni", "runs.jsonl"), "utf8").catch(() => ""))
+  .split("\n").filter(Boolean).map((line) => JSON.parse(line));
+
+test("the run log records a finished CI wait and a removed workspace under the runId prepare assigned and adopt kept", async (t) => {
+  const fixture = await createFixture(t);
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "logged" });
+  const { sessionId, worktreePath, branch } = prepared.json;
+  const { runId, createdAt } = JSON.parse(await metadataFile(worktreePath));
+  assert.match(runId, /^[0-9a-f]{24}$/);
+  await publishAndMark(fixture, prepared, "feature\n", 11);
+  const headSha = (await git(worktreePath, "rev-parse", "HEAD")).stdout.trim();
+  await setGhState(fixture.gh, 11, "OPEN");
+  await setGhHead(fixture.gh, 11, branch, headSha);
+  await lifecycle(fixture, fixture.control, "record", { session: sessionId, review: "2", accepted: "1" });
+
+  // Catches: a timed-out wait logged as if the run ended.
+  await setGhChecks(fixture.gh, 11, [ghCheck("slow", "pending")]);
+  await lifecycleJson(fixture, fixture.control, "ci-wait", { session: sessionId, "timeout-minutes": "0.005" }, [1]);
+  assert.deepEqual(await runLog(fixture), []);
+  await setGhChecks(fixture.gh, 11, [ghCheck("verify", "fail")]);
+  await lifecycleJson(fixture, fixture.control, "ci-wait", { session: sessionId }, [1]);
+  await setGhChecks(fixture.gh, 11, [ghCheck("verify", "pass")]);
+  await lifecycle(fixture, fixture.control, "ci-wait", { session: sessionId });
+
+  // Catches: adopt minting a new runId, so a follow-up looks like another run.
+  const adopted = await lifecycle(fixture, fixture.control, "adopt", { pr: "https://example.test/pull/11" });
+  assert.equal(JSON.parse(await metadataFile(worktreePath)).runId, runId);
+
+  await pretendMerged(fixture, prepared);
+  await setGhState(fixture.gh, 11, "MERGED");
+  await rm(path.join(fixture.gh, "11.head"));
+  await setGhMergeCommit(fixture.gh, 11, (await git(fixture.control, "rev-parse", "HEAD")).stdout.trim());
+  const cleaned = await lifecycle(fixture, fixture.control, "cleanup", { "dry-run": "false" });
+  assert.equal(cleaned.json.removedCount, 1);
+
+  const lines = await runLog(fixture);
+  assert.deepEqual(lines.map(({ event, outcome, ci }) => [event, outcome, ci.state, ci.rounds]),
+    [["ci", "ci-failed", "failed", 1], ["ci", "green", "green", 2], ["removed", "merged", "green", 2]]);
+  const [, green, removed] = lines;
+  assert.deepEqual(Object.keys(removed), ["version", "runId", "recordedAt", "event", "repository", "branch", "worktreePath", "prUrl", "startedAt", "outcome", "steps", "verify", "review", "qa", "ci"]);
+  assert.deepEqual([green.version, green.runId, green.repository, green.branch, green.worktreePath, green.prUrl],
+    [1, runId, "control", branch, worktreePath, "https://example.test/pull/11"]);
+  assert.equal(green.startedAt, createdAt);
+  assert.deepEqual([removed.runId, removed.verify, removed.review, removed.qa], [runId, { attempts: 1, failed: 0 }, { passes: 1, findings: 2, accepted: 1 }, { passes: 0, findings: 0 }]);
+  assert.ok(removed.steps.prepare >= 0 && removed.steps["ci-wait"] >= 0 && removed.steps.adopt >= 0);
+  assert.equal(adopted.json.sessionId !== sessionId, true);
+});
+
+test("a workspace from before runIds is logged under its first session id and its createdAt", async (t) => {
+  const fixture = await createFixture(t);
+  await writeFile(fixture.config, JSON.stringify({ paths: { worktreeRoot: fixture.worktrees }, workflow: { pruneAfterDays: 1 } }));
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "old run" });
+  await writeMetadataFile(prepared.json.worktreePath, (metadata) => { const { runId: _runId, ...rest } = aged(3)(metadata); return rest; });
+  const { createdAt } = JSON.parse(await metadataFile(prepared.json.worktreePath));
+  await lifecycle(fixture, fixture.control, "cleanup", { "dry-run": "false" });
+  const [line] = await runLog(fixture);
+  assert.deepEqual([line.event, line.outcome, line.runId, line.startedAt, line.prUrl, line.ci], ["removed", "abandoned", prepared.json.sessionId, createdAt, null, { rounds: 0, state: null }]);
+});
+
+test("cleanup prunes idle workspaces without a PR or with a closed one, keeping unpushed branches and everything in use", async (t) => {
+  const fixture = await createFixture(t);
+  await writeFile(fixture.config, JSON.stringify({ paths: { worktreeRoot: fixture.worktrees }, workflow: { pruneAfterDays: 2 } }));
+  const make = (slug) => lifecycle(fixture, fixture.control, "prepare", { slug });
+  const abandoned = await make("abandoned");
+  await commit(abandoned.json.worktreePath, "local.txt", "only here\n", "work on no remote");
+  const closed = await make("closed");
+  await publishAndMark(fixture, closed, "closed\n", 12);
+  await setGhState(fixture.gh, 12, "CLOSED");
+  const recent = await make("recent");
+  const dirty = await make("dirty");
+  await writeFile(path.join(dirty.json.worktreePath, "scratch.txt"), "uncommitted\n");
+  const handLocked = await make("hand locked");
+  const busy = await make("busy");
+  for (const workspace of [abandoned, closed, dirty, handLocked, busy]) await writeMetadataFile(workspace.json.worktreePath, aged(3));
+  await writeMetadataFile(recent.json.worktreePath, aged(1));
+  await git(fixture.control, "worktree", "unlock", handLocked.json.worktreePath);
+  await git(fixture.control, "worktree", "lock", "--reason", "keeping this one", handLocked.json.worktreePath);
+  // A live verify run of the busy session holds a slot.
+  const slot = path.join(fixture.worktrees, ".ibni", "slots", "slot-0");
+  await mkdir(slot, { recursive: true });
+  await writeFile(path.join(slot, "owner.json"), JSON.stringify({ sessionId: busy.json.sessionId, kind: "verify", hostname: os.hostname(), pid: process.pid }));
+
+  const next = await make("next");
+  const { removed, kept } = next.json.cleanup;
+  const byPath = (list, workspace) => list.find((row) => row.worktreePath === workspace.json.worktreePath);
+  // Catches: a pruned branch deleted while its commits are on no remote.
+  assert.deepEqual(
+    [byPath(removed, abandoned).pruned, byPath(removed, abandoned).outcome, byPath(removed, abandoned).keptBranch, byPath(removed, abandoned).branchDeleted],
+    [true, "abandoned", abandoned.json.branch, false],
+  );
+  assert.match(byPath(removed, abandoned).reason, /no recorded pull request and idle for 3 days/);
+  assert.equal((await git(fixture.control, "rev-parse", "--verify", abandoned.json.branch)).code, 0);
+  assert.deepEqual([byPath(removed, closed).outcome, byPath(removed, closed).branchDeleted], ["closed", true]);
+  assert.equal(await pathExists(`${closed.json.worktreePath}.evidence`), false);
+  // Catches: pruning what is recent, dirty, locked by a person or in use.
+  assert.match(byPath(kept, recent).reason, /pruned once idle for 2 days/);
+  assert.match(byPath(kept, dirty).reason, /uncommitted or untracked work/);
+  assert.match(byPath(kept, handLocked).reason, /locked by hand: keeping this one/);
+  assert.match(byPath(kept, busy).reason, /run of this session is in progress/);
+  assert.deepEqual((await runLog(fixture)).map(({ outcome, branch }) => [outcome, branch]).sort(),
+    [["abandoned", abandoned.json.branch], ["closed", closed.json.branch]].sort());
+});
+
+test("adopt resolves duplicate recorders, a reviewer's push and an interrupted publish, and still refuses lost work", async (t) => {
+  const fixture = await createFixture(t);
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "owner" });
+  const { worktreePath, branch } = prepared.json;
+  await publishAndMark(fixture, prepared, "feature\n", 13);
+  const prUrl = "https://example.test/pull/13";
+  const publishedSha = (await git(worktreePath, "rev-parse", "HEAD")).stdout.trim();
+  await setGhState(fixture.gh, 13, "OPEN");
+  await setGhHead(fixture.gh, 13, branch, publishedSha);
+  // A second workspace recorded the same URL on another branch.
+  const stray = await lifecycle(fixture, fixture.control, "prepare", { slug: "stray" });
+  await publishAndMark(fixture, stray, "stray\n", 13);
+
+  // A reviewer pushes a commit to the pull request's branch.
+  const reviewer = path.join(fixture.root, "reviewer");
+  await run("git", ["clone", "--quiet", "--branch", branch, fixture.remote, reviewer]);
+  await git(reviewer, "config", "user.name", "Reviewer");
+  await git(reviewer, "config", "user.email", "reviewer@example.test");
+  const reviewed = await commit(reviewer, "suggestion.txt", "suggested\n", "apply suggestion");
+  await git(reviewer, "push", "--quiet", "origin", branch);
+  await setGhHead(fixture.gh, 13, branch, reviewed);
+
+  // Catches: duplicates refused although one workspace plainly owns the PR,
+  // or a clean worktree left behind a reviewer's push.
+  const adopted = await lifecycle(fixture, fixture.control, "adopt", { pr: prUrl });
+  assert.equal(adopted.json.worktreePath, worktreePath);
+  assert.deepEqual(adopted.json.passedOver.map((entry) => entry.worktreePath), [stray.json.worktreePath]);
+  assert.deepEqual(adopted.json.fastForwarded, { from: publishedSha, to: reviewed });
+  assert.equal((await git(worktreePath, "rev-parse", "HEAD")).stdout.trim(), reviewed);
+  assert.equal(JSON.parse(await metadataFile(worktreePath)).publishedSha, reviewed);
+  assert.equal(adopted.json.verified.current, false);
+
+  // Catches: an interrupted publish from a dead session blocking adoption for good.
+  await writeMetadataFile(worktreePath, (metadata) => ({ ...metadata, pendingOperation: { type: "publication", headSha: "f".repeat(40), priorPublishedSha: reviewed, startedAt: new Date().toISOString() } }));
+  const settled = await lifecycle(fixture, fixture.control, "adopt", { pr: prUrl });
+  assert.deepEqual(settled.json.settled, { type: "publication", outcome: "not pushed" });
+  assert.equal(JSON.parse(await metadataFile(worktreePath)).pendingOperation, null);
+
+  // Kept refusals: a publish whose outcome is unknown, and diverged history.
+  await writeMetadataFile(worktreePath, (metadata) => ({ ...metadata, pendingOperation: { type: "publication", headSha: "f".repeat(40), priorPublishedSha: "e".repeat(40), startedAt: new Date().toISOString() } }));
+  const unclear = await lifecycle(fixture, fixture.control, "adopt", { pr: prUrl }, [2]);
+  assert.match(unclear.stderr, /incomplete publication operation whose outcome adopt cannot prove/);
+  await writeMetadataFile(worktreePath, (metadata) => ({ ...metadata, pendingOperation: null }));
+  await commit(worktreePath, "local.txt", "local\n", "local work");
+  const another = await commit(reviewer, "more.txt", "more\n", "another suggestion");
+  await git(reviewer, "push", "--quiet", "origin", branch);
+  await setGhHead(fixture.gh, 13, branch, another);
+  const before = await metadataFile(worktreePath);
+  const diverged = await lifecycle(fixture, fixture.control, "adopt", { pr: prUrl }, [2]);
+  assert.match(diverged.stderr, /do not all match/);
+  assert.equal(await metadataFile(worktreePath), before);
+  // Two recorders on the PR's branch is still ambiguous.
+  await writeMetadataFile(stray.json.worktreePath, (metadata) => ({ ...metadata, branch }));
+  assert.match((await lifecycle(fixture, fixture.control, "adopt", { pr: prUrl }, [2])).stderr, /ownership is ambiguous|unexpected branch/);
+});
+
+// Recorded from ss -ltnpH and lsof -nP -iTCP:4551 -sTCP:LISTEN -Fpc.
+const SS_SAMPLE = `LISTEN 0      511        127.0.0.1:4551      0.0.0.0:*    users:(("node",pid=1234,fd=20))
+LISTEN 0      4096          [::]:4552         [::]:*    users:(("vite",pid=99,fd=3),("node",pid=98,fd=3))
+LISTEN 0      128        0.0.0.0:22        0.0.0.0:*
+`;
+const LSOF_SAMPLE = "p1234\ncnode\np1240\ncnext-server\n";
+
+test("port holders are read from ss and lsof output, and verify names what holds a bound port", async (t) => {
+  // Catches: a holder lost to IPv6 brackets, several processes on one port,
+  // or a socket another user owns given a made-up pid.
+  assert.deepEqual(parseSsListeners(SS_SAMPLE), [
+    { port: 4551, pid: 1234, command: "node" },
+    { port: 4552, pid: 99, command: "vite" },
+    { port: 4552, pid: 98, command: "node" },
+    { port: 22, pid: null, command: null },
+  ]);
+  assert.deepEqual(parseLsofListeners(LSOF_SAMPLE, 4551), [{ port: 4551, pid: 1234, command: "node" }, { port: 4551, pid: 1240, command: "next-server" }]);
+  assert.deepEqual(parseLsofListeners("", 4551), []);
+
+  const fixture = await createFixture(t);
+  const probe = await listen(0);
+  const first = probe.address().port + 1;
+  probe.close();
+  await portsConfig(fixture, { first, last: first + 9, blockSize: 5 });
+  const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "held port" });
+  const squatter = await listen(prepared.json.ports.first + 1);
+  t.after(() => squatter.close());
+  const refused = await verify(fixture, prepared, [2]);
+  // The command is the process's name as the kernel reports it (node, or its main thread's).
+  assert.match(refused.stderr, new RegExp(`port ${first + 1} is held by \\S+ \\(pid ${process.pid}\\); stop it`));
+  assert.match(refused.stderr, new RegExp(`holders: \\[\\{"port":${first + 1},"pid":${process.pid},"command":"[^"]+"\\}\\]`));
 });

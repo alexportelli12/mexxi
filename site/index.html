@@ -192,7 +192,7 @@
               Your checks must pass before and after, run by mexxi itself rather than taken on
               the agent’s word. For a UI change it opens the app in a real
               browser at phone, tablet and desktop sizes. A second agent, which cannot edit code,
-              reviews substantial changes.
+              reviews substantial changes, and the run waits until your CI passes.
             </p>
           </li>
           <li class="step">
@@ -200,7 +200,8 @@
             <h3>You decide</h3>
             <p>
               The pull request’s first screen gives the merge call, the one check worth doing
-              yourself, and the evidence. Merge it, or ask <code>/wettaq</code> for changes.
+              yourself, and the evidence. Merge it, or ask <code>/wettaq</code> for changes in a
+              new session.
             </p>
           </li>
         </ol>
@@ -226,8 +227,8 @@
             <h3>It isn’t a service</h3>
             <p>
               It runs on your machine, with the agent and subscription you already have. There is no
-              server and no account. One experiment, Jev triage, sends task metadata (never code) to an
-              outside model, and it is off unless you turn it on.
+              server and no account, and nothing from your repository leaves your machine except
+              through your own agent and forge.
             </p>
           </li>
           <li class="feature">

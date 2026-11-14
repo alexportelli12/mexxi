@@ -28,7 +28,7 @@ Rules that hold throughout:
   explain what differs, and ask; do not delete, move or force anything.
 - Ask only what cannot be detected. Everything else takes the defaults in
   `config.schema.json`.
-- Never write an API key into any file. Jev's key stays in `OPENROUTER_API_KEY`.
+- Never write an API key or token into any file.
 
 ## 1. Check prerequisites
 
@@ -70,15 +70,9 @@ you would pick:
    already exists there, ask for another path.
 2. **Hosts.** Offer the detected ones; each undetected host is set to `false`.
 3. **Models per role,** for each chosen host: the `reviewer` and `uiDesigner`
-   agents, and optionally a `crossFamilyReviewer` (a model from a different
-   family to the implementer's, which makes the independent review stronger).
-   OpenCode also has `general` and `explore`. "Host default" (`null`) is a fine
-   answer, and for OpenCode the schema defaults apply unless told otherwise.
-4. **Jev on or off.** Default off. If on, ask for the GitHub owners that are
-   theirs (`jev.owners`) and the repositories it may run in
-   (`jev.repositories`, as `owner/name`), and tell them to export
-   `OPENROUTER_API_KEY`. Jev only records answers beside the agent's own
-   decisions; it changes nothing.
+   agents. OpenCode also has `general` and `explore`. "Host default" (`null`)
+   is a fine answer, and for OpenCode the schema defaults apply unless told
+   otherwise.
 
 ## What the installer changes
 
@@ -100,15 +94,16 @@ and on an upgrade alike:
     then keeps session transcripts on disk for 90 days instead of deleting
     them after its default 30, so a retro can read them. Transcripts hold
     everything a session saw, so this is longer retention of that data;
-  - the guard and loop-breaker hooks, as `PreToolUse`, `PostToolUse` and
-    `PostToolUseFailure` groups.
+  - the guard hook as a `PreToolUse` group, and the post-tool hook (the loop
+    breaker, and a one-time reminder to load `test-design` when a session first
+    edits a test) as `PostToolUse` and `PostToolUseFailure` groups.
 
   A key the user set to a different value is a conflict: the installer stops
   and changes nothing.
 - **Claude Code mods** (`mods`): `claude plugin` adds the `mexxi` marketplace
   and installs each mod, which writes `extraKnownMarketplaces` and
   `enabledPlugins` into the same `settings.json`.
-- **Codex's `~/.codex/hooks.json`:** the guard and loop-breaker groups, merged
+- **Codex's `~/.codex/hooks.json`:** the guard and post-tool groups, merged
   in beside the user's own hooks.
 - A `post-merge` Git hook in the clone, so every `git pull` there reruns the
   installer.
@@ -125,14 +120,13 @@ First install, in order:
 2. Install dependencies from the clone: `npm ci`.
 3. Write the config to a scratch file outside `~/.config`, with only the keys
    that differ from the defaults. It must set `paths.checkout` to the clone,
-   and may set `hosts`, `models` and `jev`. Example:
+   and may set `hosts` and `models`. Example:
 
    ```json
    {
      "paths": { "checkout": "~/workspace/mexxi" },
      "hosts": { "opencode": false },
-     "models": { "claude": { "reviewer": "opus" } },
-     "jev": { "enabled": true, "owners": ["me"], "repositories": ["me/app"] }
+     "models": { "claude": { "reviewer": "opus" } }
    }
    ```
 
@@ -195,7 +189,7 @@ commands it prints) and rerun until it is green. Do not report success on any
 other evidence.
 
 Codex needs one more step the installer cannot do: start `codex` once and
-trust the mexxi guard and loop breaker hooks in `/hooks`. Codex skips untrusted
+trust the mexxi guard and post-tool hooks in `/hooks`. Codex skips untrusted
 hooks. Say so whenever Codex is a chosen host.
 
 ## Upgrade and repair
@@ -210,7 +204,7 @@ On a rerun, in the clone from `paths.checkout`:
 3. `git pull --ff-only`, then `npm ci`.
 4. `node scripts/install.mjs`, then `node scripts/install.mjs --check`. This
    re-renders the host files from `config.json`, so it also repairs a broken
-   link or a stale render. Edits to `config.json` (new models, Jev on) take
+   link or a stale render. Edits to `config.json` (new models, another host) take
    effect the same way.
 5. Work through anything `--check` lists, as in section 5.
 

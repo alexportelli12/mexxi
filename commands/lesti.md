@@ -18,9 +18,9 @@ first, since establishing one is the job.
 
 `/wettaq` in `commands/wettaq.md` of the mexxi clone (`paths.checkout` in
 `~/.config/mexxi/config.json`, default `~/workspace/mexxi`) owns the lifecycle
-this command reuses. Read it, and follow its **Prepare The Isolated Workspace**
-(use the slug `lesti`), **Delivery** and **Completion** sections as written.
-Skip its contract, triage and **Preflight** stages: ignore `baseline`, and do
+this command reuses. Read it, and follow its **Prepare**
+(use the slug `lesti`), **Delivery**, **CI** and **Completion** sections as written.
+Skip its **Contract** and **Preflight** stages: ignore `baseline`, and do
 not stop on a failing verify.
 
 ## Audit Before Changing Anything
@@ -73,10 +73,9 @@ reads separately from the code fixes.
 
 **Fix, never weaken.** Fix a failure at its cause. Disabling a lint rule,
 skipping or deleting a test, loosening types or lowering a threshold is not a
-fix. If a failure cannot be fixed without a product decision, ask. In an
-unattended run follow `/wettaq`'s **Unattended runs** rule: take the most
-reasonable reading, fix it and record it as an assumption; stop and report only
-for a one-way door.
+fix. When a fix needs a choice the repository does not settle, follow
+`/wettaq`'s **Decide and record** rule: take the most reasonable reading, fix it
+and record it. Stop and ask only for a one-way door or product direction.
 
 ## Prove It
 

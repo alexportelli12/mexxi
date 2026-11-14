@@ -6,23 +6,11 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { readFile, rm } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
-// Runs inside the scope: marks that the scope started, runs the command, then
-// writes the scope's own counters as labelled lines before the shell exits,
-// because a scope with nothing left in it is gone. The processes still in the
-// scope are counted with the shell's own read, which starts no process of its
-// own. A command killed by a signal ends the shell with the same signal.
-const WRAPPER = [
-  'echo started > "$IBNI_SCOPE_STATS"',
-  'sh -c "$IBNI_COMMAND"',
-  "status=$?",
-  "cgroup=/sys/fs/cgroup$(cut -d: -f3 /proc/self/cgroup | head -n 1)",
-  "left=0",
-  'while read -r pid; do [ "$pid" = "$$" ] || left=$((left + 1)); done < "$cgroup/cgroup.procs"',
-  '{ echo "left $left"; echo "peak $(cat "$cgroup/memory.peak" 2>/dev/null)"; grep "^usage_usec " "$cgroup/cpu.stat"; grep "^oom_kill " "$cgroup/memory.events"; } >> "$IBNI_SCOPE_STATS" 2>/dev/null',
-  'if [ "$status" -gt 128 ]; then kill -$((status - 128)) $$; fi',
-  "exit $status",
-].join("; ");
+// Runs inside the scope and reports what it used; it is a file because
+// systemd 259 and later expand `$` in a scope's command line.
+const WRAPPER = fileURLToPath(new URL("./scope-wrapper.sh", import.meta.url));
 
 function quiet(file, args, env) {
   return new Promise((resolve) => {
@@ -69,7 +57,7 @@ export function scopedSpawn({ command, env, settings, kind, sessionId, logPath }
       // At the ceiling the kernel kills the largest process, not the whole
       // scope, so the wrapper lives to report it; a leftover gets 5 s to stop.
       "-p", "OOMPolicy=continue", "-p", "TimeoutStopSec=5s",
-      "--", "sh", "-c", WRAPPER,
+      "--", "sh", WRAPPER,
     ],
     env: { ...env, IBNI_COMMAND: command, IBNI_SCOPE_STATS: statsPath },
     // What the command left running is stopped with the scope (SIGTERM,

@@ -14,18 +14,15 @@
       "general": null,
       "explore": null,
       "uiDesigner": null,
-      "reviewer": null,
-      "crossFamilyReviewer": null
+      "reviewer": null
     },
     "claude": {
       "uiDesigner": null,
-      "reviewer": null,
-      "crossFamilyReviewer": null
+      "reviewer": null
     },
     "codex": {
       "uiDesigner": null,
-      "reviewer": null,
-      "crossFamilyReviewer": null
+      "reviewer": null
     }
   },
   "workflow": {
@@ -41,6 +38,7 @@
       "blockSize": 10
     },
     "warmCaches": true,
+    "pruneAfterDays": 14,
     "verifySlots": 2,
     "scope": {
       "enabled": true,
@@ -66,7 +64,6 @@
       "git push -f"
     ],
     "protectedBranches": [],
-    "blockUnquotedGlobs": false,
     "repeatedFailureLimit": 3
   },
   "claude": {
@@ -75,17 +72,6 @@
   },
   "forge": {
     "hosts": {}
-  },
-  "jev": {
-    "enabled": false,
-    "stage": "shadow",
-    "model": "typesafe/jev-1.14",
-    "endpoint": "https://openrouter.ai/api/alpha/decisions",
-    "owners": [],
-    "repositories": [],
-    "maxPayloadBytes": 32768,
-    "timeoutMs": 5000,
-    "zeroDataRetention": true
   },
   "segwi": {
     "enabled": false,
@@ -130,7 +116,6 @@
     "transcriptRetentionDays": 90
   },
   "mods": [
-    "run-pane",
-    "command-fixer"
+    "run-pane"
   ]
 }

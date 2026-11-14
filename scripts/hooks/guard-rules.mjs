@@ -1,13 +1,13 @@
 // The shared guard's rules. guard.mjs, the hook entry every host runs, says
-// what they refuse and which gaps are accepted; OpenCode's plugin and the loop
-// breaker import guardToolCall and guardConfig from here.
+// what they refuse and which gaps are accepted; OpenCode's plugin imports
+// guardToolCall and refusalMessage, and the loop breaker guardConfig, from here.
 import { execFileSync } from "node:child_process";
 import { readFileSync, realpathSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { ConfigError, configPath, loadConfig, resolveConfig } from "../lib/config.mjs";
 import { LEGACY_METADATA_FILE, METADATA_FILE } from "../ibni/lib/metadata.mjs";
-import { simpleCommands } from "./shell.mjs";
+import { simpleCommands, sleepLoops } from "./shell.mjs";
 
 // Tools whose input.command is a shell command line, per host: Claude Code's
 // Bash and Monitor (a monitor's script is a shell command too), Codex's Bash,
@@ -568,16 +568,19 @@ function checkShopify(argv) {
   return `${name} ${method} to the Shopify Admin API writes to a live store; production writes need a human`;
 }
 
-function checkGlobs(command, config) {
-  if (!config.guard.blockUnquotedGlobs) return null;
-  const index = command.argv.findIndex((arg, at) => command.globs[at] && /^--(?:include|exclude)(?:-dir)?=/.test(arg));
-  if (index === -1) return null;
-  const [option, value] = command.argv[index].split(/=(.*)/s);
-  return `unquoted ${command.argv[index]} is expanded by zsh before ${command.argv[0]} sees it (and aborts when nothing matches); quote it: ${option}='${value}'`;
+// Where a cd or pushd leaves the commands after it, or null for any other
+// command.
+function changedDirectory(argv, directory, home) {
+  if (argv[0] !== "cd" && argv[0] !== "pushd") return null;
+  const target = argv.slice(1).find((arg) => !arg.startsWith("-") || arg === "-");
+  if (target === undefined) return home;
+  if (target === "-") return directory;
+  return path.resolve(directory, target.replace(/^~(?=\/|$)/, home));
 }
 
-// The reason a command line is refused, or null. cwd is where the host runs
-// it; a `cd` earlier in the same line moves later commands.
+// The reason a command line is refused for crossing a red line, or null. cwd
+// is where the host runs it; a `cd` earlier in the same line moves later
+// commands.
 export function checkCommand(command, { cwd, config, home = os.homedir() }) {
   let directory = cwd;
   // Each directory's HEAD as switches earlier in the line leave it.
@@ -585,10 +588,9 @@ export function checkCommand(command, { cwd, config, home = os.homedir() }) {
   for (const simple of simpleCommands(command)) {
     const { argv } = simple;
     if (simple.refused) return simple.refused;
-    if (argv[0] === "cd" || argv[0] === "pushd") {
-      const target = argv.slice(1).find((arg) => !arg.startsWith("-") || arg === "-");
-      if (target === undefined) directory = home;
-      else if (target !== "-") directory = path.resolve(directory, target.replace(/^~(?=\/|$)/, home));
+    const moved = changedDirectory(argv, directory, home);
+    if (moved !== null) {
+      directory = moved;
       continue;
     }
     const relocatedBy = command.match(RELOCATING_ENV)?.[0] ?? null;
@@ -596,8 +598,7 @@ export function checkCommand(command, { cwd, config, home = os.homedir() }) {
       ?? (words[0] === "gh" ? checkGh(words) : null)
       ?? (words[0] === "glab" ? checkGlab(words) : null)
       ?? checkDeny(words, config)
-      ?? checkShopify(words)
-      ?? checkGlobs({ ...simple, argv: words }, config);
+      ?? checkShopify(words);
     const reason = check(argv);
     if (reason) return reason;
     if (simple.nameExpanded) {
@@ -627,15 +628,323 @@ export async function guardConfig() {
   }
 }
 
+// Help, not red lines (decision 0021). These refusals catch commands that
+// would fail or mislead in a known way, and hand back the corrected command:
+// the guard refuses rather than rewriting, because a rewritten call is one
+// the host's permission review never saw. Like the red-line checks, they back
+// up written rules (the overlay's "wait with Monitor, never sleep", ibni's
+// verify, Read before Edit); they do not own them. Which ones apply depends
+// on the host: Claude Code ("claude"), Codex ("codex") or OpenCode
+// ("opencode"). An unknown host gets only the host-neutral ones.
+
+const quote = (value) => (/^[A-Za-z0-9_@%+=:,./-]+$/.test(value) ? value : `'${value.replace(/'/g, "'\\''")}'`);
+const quoteAlways = (value) => `'${value.replace(/'/g, "'\\''")}'`;
+
+const BRACE_LIST = /^([^{}]*)\{([^{}]*,[^{}]*)\}([^{}]*)$/;
+
+// The patterns a glob stands for once the shell expands its braces, or null
+// when the braces are anything but one simple comma list (nested, a {1..3}
+// range).
+function braceExpand(value) {
+  if (!/[{}]/.test(value)) return [value];
+  const match = BRACE_LIST.exec(value);
+  return match ? match[2].split(",").map((entry) => `${match[1]}${entry}${match[3]}`) : null;
+}
+
+const GLOB_OPTION = /^(--(?:include|exclude)(?:-dir)?)=(.*)$/s;
+const FIND_PATTERNS = new Set(["-name", "-iname", "-path", "-ipath", "-wholename", "-iwholename"]);
+
+// The unquoted globs zsh would expand (and abort the line on when nothing
+// matches) in one simple command, each { words, fixed }: the words as
+// written, in order, and what replaces them.
+function unquotedGlobs({ argv, globs }) {
+  const found = [];
+  for (let at = 1; at < argv.length; at += 1) {
+    if (!globs[at]) continue;
+    const option = argv[at].match(GLOB_OPTION);
+    if (option) {
+      const patterns = braceExpand(option[2]) ?? [option[2]];
+      found.push({ words: [argv[at]], fixed: patterns.map((pattern) => `${option[1]}=${quoteAlways(pattern)}`).join(" ") });
+    } else if (argv[0] === "find" && FIND_PATTERNS.has(argv[at - 1])) {
+      const patterns = braceExpand(argv[at]) ?? [argv[at]];
+      found.push(patterns.length === 1
+        ? { words: [argv[at]], shown: `${argv[at - 1]} ${argv[at]}`, fixed: quoteAlways(patterns[0]) }
+        // find has no brace syntax either: one test per entry, or-ed.
+        : { words: [argv[at - 1], argv[at]], fixed: `\\( ${patterns.map((pattern) => `${argv[at - 1]} ${quoteAlways(pattern)}`).join(" -o ")} \\)` });
+    }
+  }
+  return found;
+}
+
+const escapeRegex = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// The line with each glob replaced, or null when a replacement cannot be
+// placed for certain: its words must appear exactly once in the line as
+// written, standing as words of their own.
+function replaceGlobs(line, globsFound) {
+  let fixed = line;
+  for (const { words, fixed: replacement } of globsFound) {
+    const pattern = new RegExp(`(?<=^|[\\s;&|(])${words.map(escapeRegex).join("[ \\t]+")}(?=$|[\\s;&|)<>])`, "g");
+    const matches = fixed.match(pattern) ?? [];
+    if (matches.length !== 1) return null;
+    fixed = fixed.replace(pattern, () => replacement);
+  }
+  return fixed;
+}
+
+const CHECK_SCRIPT = /^(?:test|lint|verify|typecheck|check)(?:$|[:-])/;
+const CHECK_COMMANDS = new Set(["vitest", "jest", "mocha", "pytest", "eslint", "tsc", "vfk", "verifika"]);
+
+// Whether a command runs tests, lint or verify, whose exit status is the
+// result.
+function runsChecks(argv) {
+  const name = commandName(argv[0] ?? "");
+  if (CHECK_COMMANDS.has(name)) return true;
+  if (name === "playwright") return argv.includes("test");
+  if (name === "node") return argv.includes("--test");
+  if (name === "go" || name === "cargo") return argv[firstWord(argv, 1)] === "test";
+  if (/^python3?$/.test(name)) return argv[1] === "-m" && argv[2] === "pytest";
+  if (!PACKAGE_MANAGERS.has(name)) return false;
+  const at = firstWord(argv, 1);
+  const word = WORD_ALIASES[argv[at]] ?? argv[at];
+  if (word === undefined) return false;
+  if (word === "test" || (name === "npm" && ["t", "tst"].includes(word))) return true;
+  if (word === "run") return CHECK_SCRIPT.test(argv[firstWord(argv, at + 1)] ?? "");
+  if (PACKAGE_RUNNERS.has(word)) return runsChecks(argv.slice(firstWord(argv, at + 1)));
+  // pnpm, yarn and bun run a script or a package's command by its bare name.
+  return name !== "npm" && (CHECK_SCRIPT.test(word) || runsChecks(argv.slice(at)));
+}
+
+const FILTERS = new Set(["tail", "head", "grep"]);
+
+// Whether argv is a full verify run: npm run verify, verifika or vfk --all, or
+// the session's own verifyCommand (with any arguments after it).
+function fullVerify(argv, metadata) {
+  const name = commandName(argv[0]);
+  if (name === "npm") {
+    const at = firstWord(argv, 1);
+    if ((WORD_ALIASES[argv[at]] ?? argv[at]) === "run" && argv[firstWord(argv, at + 1)] === "verify") return true;
+  }
+  if ((name === "verifika" || name === "vfk") && argv.includes("--all")) return true;
+  if (typeof metadata.verifyCommand !== "string") return false;
+  const own = simpleCommands(metadata.verifyCommand);
+  return own.length === 1 && own[0].argv.length > 0 && own[0].argv.every((word, at) => argv[at] === word);
+}
+
+// head and tail options that take a value, and the ones that follow a file.
+const HEAD_TAIL_VALUES = new Set(["-n", "-c", "--lines", "--bytes", "-s", "--sleep-interval", "--pid", "--max-unchanged-stats"]);
+const FOLLOW = /^(?:-[A-Za-z]*[fF][A-Za-z]*|--follow(?:=.*)?|--retry)$/;
+
+// What a plain file read shows: { files, offset, limit, fromEnd } when argv
+// prints files as they are (cat, head, tail without following, sed -n), or
+// null. Words the shell expands are skipped: they name no file for certain.
+function fileRead({ argv, globs, expansions }) {
+  const [name] = argv;
+  const operand = (at) => !globs[at] && !expansions[at] && argv[at] !== "-";
+  if (name === "cat") {
+    const files = argv.slice(1).filter((arg, at) => !arg.startsWith("-") && operand(at + 1));
+    return files.length ? { files } : null;
+  }
+  if (name === "head" || name === "tail") {
+    const files = [];
+    let lines = null;
+    for (let at = 1; at < argv.length; at += 1) {
+      const [option, inline] = argv[at].split(/=(.*)/s);
+      if (FOLLOW.test(argv[at])) return null;
+      if (HEAD_TAIL_VALUES.has(option)) {
+        const value = inline ?? argv[++at];
+        if (option === "-n" || option === "--lines") lines = value;
+      } else if (/^-n.+/.test(argv[at])) lines = argv[at].slice(2);
+      else if (/^-\d+$/.test(argv[at])) lines = argv[at].slice(1);
+      else if (!argv[at].startsWith("-") && operand(at)) files.push(argv[at]);
+    }
+    if (!files.length) return null;
+    const count = lines ?? "10";
+    if (name === "head") return /^\d+$/.test(count) ? { files, offset: 1, limit: Number(count) } : { files };
+    if (/^\+\d+$/.test(count)) return { files, offset: Number(count.slice(1)) };
+    return /^\d+$/.test(count) ? { files, limit: Number(count), fromEnd: true } : { files };
+  }
+  if (name === "sed") {
+    const options = argv.slice(1).filter((arg) => arg.startsWith("-"));
+    if (!options.some((arg) => /^-[A-Za-z]*n[A-Za-z]*$/.test(arg) || arg === "--quiet" || arg === "--silent")) return null;
+    if (options.some((arg) => /^-[A-Za-z]*i/.test(arg) || arg.startsWith("--in-place") || /^-[A-Za-z]*[ef]$/.test(arg) || arg === "--expression")) return null;
+    const positional = argv.map((arg, at) => ({ arg, at })).slice(1).filter(({ arg }) => !arg.startsWith("-"));
+    const [script, ...rest] = positional;
+    const files = rest.filter(({ at }) => operand(at)).map(({ arg }) => arg);
+    if (!script || !files.length) return null;
+    const range = script.arg.match(/^(\d+)(?:,(\d+))?p$/);
+    if (!range) return { files };
+    const from = Number(range[1]);
+    return { files, offset: from, limit: range[2] ? Number(range[2]) - from + 1 : 1 };
+  }
+  return null;
+}
+
+// Whether file sits inside directory, as written or as real paths (a file
+// that does not exist yet has no real path to compare).
+function inside(file, directory) {
+  return [[file, directory], [canonical(file), canonical(directory)]].some(([one, other]) => {
+    const relative = path.relative(path.resolve(other), path.resolve(one));
+    return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
+  });
+}
+
+// The host's own tool for reading a file, written as a call with the range
+// the shell command showed.
+function readToolCall(host, file, { offset, limit, fromEnd }) {
+  const start = fromEnd ? "<near the end: the line count minus " + limit + ">" : offset;
+  if (host === "opencode") {
+    const args = [`filePath: ${file}`, ...(start !== undefined ? [`offset: ${start}`] : []), ...(limit !== undefined ? [`limit: ${limit}`] : [])];
+    return `use the read tool with offset and limit: read(${args.join(", ")})`;
+  }
+  const args = [file, ...(start !== undefined ? [`offset: ${start}`] : []), ...(limit !== undefined ? [`limit: ${limit}`] : [])];
+  return `use the Read tool with offset and limit: Read(${args.join(", ")})`;
+}
+
+const URL_IN_LINE = /https?:\/\/[^\s'"`;|&()<>]+/;
+const LOG_IN_LINE = /[^\s'"`;|&()<>=]+\.(?:log|out)\b/;
+
+// The wait a sleep loop does, as a command that ends when the wait does
+// (polling a URL or a log the loop names, or both patterns when it names
+// neither), and the Monitor command that would stream that log instead.
+function waitPatterns(line, loop) {
+  const url = line.match(URL_IN_LINE)?.[0];
+  const grep = [...loop.condition, ...loop.body].find((argv) => argv[0] === "grep");
+  const pattern = grep?.slice(1).find((arg) => !arg.startsWith("-"));
+  const log = line.match(LOG_IN_LINE)?.[0];
+  const forUrl = `until curl -sf ${url ? quote(url) : "<url>"} >/dev/null; do sleep 1; done`;
+  const forLog = `until grep -q ${pattern ? quoteAlways(pattern) : "'<ready text>'"} ${log ? quote(log) : "<log>"}; do sleep 1; done`;
+  const stream = `tail -F ${log ? quote(log) : "<log>"} | grep --line-buffered ${pattern ? quoteAlways(pattern) : "'<text>'"}`;
+  if (url && !log) return { wait: `for the URL: ${forUrl}`, stream };
+  if (log && !url) return { wait: `for the log: ${forLog}`, stream };
+  return { wait: `for a URL: ${forUrl}; for a log line: ${forLog}`, stream };
+}
+
+// The reason a command line is refused to help, or null. host and tool are the
+// host's name and the tool the call came through; background is whether
+// Claude Code runs it with run_in_background.
+export function helpReason(line, { cwd, host = null, tool = null, background = false, home = os.homedir() }) {
+  const simples = simpleCommands(line);
+  const owned = new Map();
+  const ownerOf = (directory) => {
+    if (!owned.has(directory)) owned.set(directory, ownedWorktree(directory));
+    return owned.get(directory);
+  };
+  const inBackground = host === "claude" ? "with run_in_background: true and wait for its completion notification" : "and wait for it to finish";
+
+  // A full verify run by hand, inside an ibni worktree: ibni verify runs the
+  // same command with the workspace's ports and slot, and records the result.
+  let directory = cwd;
+  for (const { argv } of simples) {
+    const moved = changedDirectory(argv, directory, home);
+    if (moved !== null) {
+      directory = moved;
+      continue;
+    }
+    // The session's own verifyCommand may be any command, so ownership is
+    // looked up for each directory the line runs in (once per directory).
+    const metadata = argv.length ? ownerOf(directory) : null;
+    if (metadata && fullVerify(argv, metadata)) {
+      return `${argv.join(" ")} runs the full verify by hand inside an ibni worktree, without the workspace's ports, run slot or recorded result; run ibni verify --session ${metadata.sessionId ?? "<sessionId>"} ${inBackground} (targeted checks such as vfk --changed or one test file stay fine)`;
+    }
+  }
+
+  // Text fixes that compose into one corrected line: quoted globs, and
+  // pipefail for checks piped into a filter.
+  const globsFound = simples.flatMap((simple) => unquotedGlobs(simple).map((glob) => ({ ...glob, nested: simple.nested })));
+  const piped = /pipefail/.test(line) ? null : simples.find((simple) => FILTERS.has(simple.argv[0]) && simple.upstream.some(runsChecks));
+  if (globsFound.length || piped) {
+    const why = [];
+    if (globsFound.length) {
+      const braces = globsFound.some(({ words }) => /[{}]/.test(words.at(-1)));
+      why.push(`unquoted ${globsFound.map(({ words, shown }) => shown ?? words.join(" ")).join(", ")} would be expanded by zsh before the command sees it, and zsh aborts the whole line when nothing matches; quote each pattern${braces ? ", one per brace entry (grep and find have no brace syntax)" : ""}`);
+    }
+    if (piped) {
+      const checks = piped.upstream.find(runsChecks);
+      why.push(`${checks.join(" ")} piped into ${piped.argv[0]} reports ${piped.argv[0]}'s exit status, so a failing run reads as a pass; keep the checks' status with pipefail`);
+    }
+    const fixedGlobs = globsFound.some(({ nested }) => nested) ? null : replaceGlobs(line, globsFound);
+    if (fixedGlobs !== null && !piped?.nested) {
+      return `${why.join("; ")}. Run instead: ${piped ? `set -o pipefail; ${fixedGlobs}` : fixedGlobs}`;
+    }
+    const fixes = [...globsFound.map(({ words, fixed }) => `${fixed} for ${words.join(" ")}`), ...(piped ? [`set -o pipefail; at the start of the script that runs the pipe`] : [])];
+    return `${why.join("; ")}. Write ${fixes.join(", and ")}`;
+  }
+
+  // Claude Code's Bash in the foreground, waiting in a sleep loop: the call
+  // blocks until the wait ends. Monitor runs such loops by design, and Codex
+  // and OpenCode have no background tool to offer instead.
+  if (host === "claude" && tool === "Bash" && !background) {
+    const [loop] = sleepLoops(line);
+    if (loop) {
+      const { wait, stream } = waitPatterns(line, loop);
+      return `a while or until loop that sleeps holds this Bash call in the foreground until the wait ends or the call times out; rerun this exact loop with run_in_background: true, and you get one completion notification when it exits (start a server it waits for in its own Bash call with run_in_background: true). The wait ${wait}, with run_in_background: true. Use the Monitor tool (command, description, timeout_ms) only for a stream of events, such as each matching log line: ${stream}; tail | grep -m1 can hang, so never use it for a one-shot wait`;
+    }
+  }
+
+  // A plain read of a worktree file through the shell: what the shell shows
+  // does not count as a read, so a later edit of the file is refused. Codex
+  // has no read tool and reads through the shell.
+  if ((host === "claude" && tool === "Bash") || host === "opencode") {
+    directory = cwd;
+    for (const simple of simples) {
+      const moved = changedDirectory(simple.argv, directory, home);
+      if (moved !== null) {
+        directory = moved;
+        continue;
+      }
+      if (simple.stdoutToFile || simple.nested) continue;
+      let read = fileRead(simple);
+      // cat file | head -n 20 reads the file as surely as head -n 20 file.
+      const [producer] = simple.upstream;
+      if (!read && producer?.[0] === "cat" && producer.length === 2 && ["head", "tail", "sed"].includes(simple.argv[0])) {
+        const filtered = fileRead({ argv: [...simple.argv, producer[1]], globs: [], expansions: [] });
+        read = filtered && { ...filtered, files: [producer[1]] };
+      }
+      // A file whose output feeds another command is being processed, not read.
+      if (!read || (simple.pipesOn && simple.argv[0] === "cat")) continue;
+      const worktree = ownerOf(directory)?.worktreePath;
+      const file = worktree && read.files.map((name) => path.resolve(directory, name.replace(/^~(?=\/|$)/, home))).find((name) => inside(name, worktree));
+      if (file) {
+        const others = read.files.length > 1 ? " (and likewise for each other file)" : "";
+        return `${simple.argv[0]} shows ${file} through the shell, which does not count as reading it, so a later edit of it is refused until it is read; ${readToolCall(host, file, read)}${others}`;
+      }
+    }
+  }
+  return null;
+}
+
+// The host a hook runs for, from its --host argument: "claude", "codex" or
+// "opencode", or null for anything else.
+export function hostFrom(argv) {
+  const at = argv.findIndex((arg) => arg === "--host" || arg.startsWith("--host="));
+  if (at === -1) return null;
+  const value = argv[at].includes("=") ? argv[at].slice(argv[at].indexOf("=") + 1) : argv[at + 1];
+  return ["claude", "codex", "opencode"].includes(value) ? value : null;
+}
+
+// The message each host hands the agent for a verdict. A red line is never to
+// be routed around; a help refusal comes with the command to run instead.
+export function refusalMessage({ reason, help }) {
+  return help
+    ? `mexxi guard refused this command to help, not over a red line: ${reason}. Run the corrected command instead.`
+    : `mexxi guard blocked this command: ${reason}. Do not retry it in pieces, rephrase it or route around it; report what was blocked and why it was needed.`;
+}
+
 // Host-neutral entry: the tool call in Claude Code's PreToolUse shape, which
-// Codex shares and OpenCode's plugin builds.
-export async function guardToolCall(input, { config, home } = {}) {
+// Codex shares and OpenCode's plugin builds. Returns null, or { reason, help }:
+// help is true for a refusal that only hands back a corrected command.
+export async function guardToolCall(input, { config, home, host = null } = {}) {
   if (!SHELL_TOOLS.has(input?.tool_name)) return null;
   const command = commandLine(input.tool_input?.command);
   if (command === null) {
-    return `could not read the command (expected a string or an array of strings, got ${JSON.stringify(input.tool_input?.command) ?? "nothing"}); refusing it`;
+    return { reason: `could not read the command (expected a string or an array of strings, got ${JSON.stringify(input.tool_input?.command) ?? "nothing"}); refusing it`, help: false };
   }
-  return checkCommand(command, { cwd: input.cwd || process.cwd(), config: config ?? await guardConfig(), home });
+  const cwd = input.cwd || process.cwd();
+  const reason = checkCommand(command, { cwd, config: config ?? await guardConfig(), home });
+  if (reason) return { reason, help: false };
+  const help = helpReason(command, { cwd, host, tool: input.tool_name, background: input.tool_input?.run_in_background === true, home });
+  return help ? { reason: help, help: true } : null;
 }
 
 // The shell command line a tool call runs. Codex has sent an argv array

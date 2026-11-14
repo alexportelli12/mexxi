@@ -131,4 +131,28 @@ test("a sweep screenshots every viewport and reports overflow and small touch ta
   assert.equal(phone.consoleErrors.length, 1);
   await access(path.join(broken.out, "before-fixture-390.png"));
   await access(path.join(broken.out, "before-fixture-1000.png"));
+  assert.deepEqual(clean.report.axe.violations, [], "a labelled button and a named link break no ARIA or label rule");
+});
+
+// Breaks caught: the axe check not running, running rules that ignore ARIA
+// references, or reporting nothing for a dangling aria-labelledby and an
+// unlabelled field (decision 0024 made this check scripted).
+test("a sweep reports dangling ARIA references and unlabelled fields through axe", async (t) => {
+  const config = await browserAvailable();
+  if (!config) return t.skip("no Chromium or Playwright available");
+  const root = await mkdtemp(path.join(os.tmpdir(), "mexxi-sweep-axe-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const page = path.join(root, "aria.html");
+  await writeFile(page, `<!doctype html><html lang="en"><title>x</title><body>
+    <button aria-labelledby="missing-id" style="width:48px;height:48px"></button>
+    <input type="text" id="unlabelled"></body></html>`);
+  const out = path.join(root, "out");
+  const result = spawnSync(process.execPath, [script, "--url", pathToFileURL(page).href, "--out", out, "--viewports", "390"], { encoding: "utf8" });
+  assert.equal(result.status, 0, result.stderr);
+  const { axe } = JSON.parse(result.stdout);
+  assert.equal(axe.width, 390);
+  const rules = axe.violations.map((violation) => violation.rule);
+  assert.ok(rules.includes("button-name") || rules.includes("aria-valid-attr-value"), `dangling aria-labelledby reported: ${rules}`);
+  assert.ok(rules.includes("label"), `unlabelled input reported: ${rules}`);
+  assert.ok(axe.violations.every((violation) => violation.nodes.length > 0 && violation.nodes[0].target));
 });

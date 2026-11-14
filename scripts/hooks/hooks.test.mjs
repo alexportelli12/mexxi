@@ -28,7 +28,9 @@ const baseConfig = JSON.stringify({ guard: { protectedBranches: ["release"], den
 await writeFile(configFile, baseConfig);
 const { default: opencodePlugin } = await import("../../opencode/plugins/mexxi-guard.js");
 const { exitCode } = await import("./loop-breaker.mjs");
+const { isTestFile, patchPaths } = await import("./test-design-nudge.mjs");
 const { resolveConfig } = await import("../lib/config.mjs");
+const { claudeHooks, codexHooks, mergeOwnedHooks } = await import("../lib/host-hooks.mjs");
 
 function git(cwd, ...args) {
   return execFileSync("git", args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
@@ -63,16 +65,16 @@ const codexInput = (command, cwd) => ({
   permission_mode: "default", tool_name: "Bash", tool_input: { command }, tool_use_id: "call_1", turn_id: "turn_1",
 });
 
-function runHook(script, input) {
-  const result = spawnSync(process.execPath, [path.join(hooks, script)], { input: JSON.stringify(input), encoding: "utf8", env: process.env });
-  return { code: result.status, stderr: result.stderr };
+function runHook(script, input, args = []) {
+  const result = spawnSync(process.execPath, [path.join(hooks, script), ...args], { input: JSON.stringify(input), encoding: "utf8", env: process.env });
+  return { code: result.status, stderr: result.stderr, stdout: result.stdout };
 }
 
 // The guard's verdict on every host: null when allowed, else the reason each
 // host gave the agent. All three must agree.
 async function verdicts(command, cwd = clone) {
-  const claude = runHook("guard.mjs", claudeInput(command, cwd));
-  const codex = runHook("guard.mjs", codexInput(command, cwd));
+  const claude = runHook("guard.mjs", claudeInput(command, cwd), ["--host", "claude"]);
+  const codex = runHook("guard.mjs", codexInput(command, cwd), ["--host", "codex"]);
   const { "tool.execute.before": before } = await opencodePlugin.server({ directory: cwd });
   let opencode = null;
   await before({ tool: "bash", sessionID: "ses_1", callID: "call_1" }, { args: { command, description: "test" } })
@@ -587,17 +589,319 @@ test("look-alikes are allowed: feature pushes, quoted text and other commands", 
     "npm run deploy-docs",
     "firebase deployments:list",
     "gh pr view 12 --json mergeable",
-    "grep -rn x --include=*.ts .",
   ]) await assertAllowed(command);
 });
 
-test("unquoted --include=* globs are blocked only when guard.blockUnquotedGlobs is on", async (t) => {
-  await writeFile(configFile, JSON.stringify({ guard: { blockUnquotedGlobs: true } }));
-  t.after(() => writeFile(configFile, baseConfig));
-  await assertBlocked("grep -rn x --include=*.ts .", /quote it: --include='\*\.ts'/);
-  await assertBlocked("rg x && grep -r y --exclude-dir=node_* .", /--exclude-dir='node_\*'/);
-  await assertAllowed("grep -rn x --include='*.ts' .");
-  await assertAllowed('grep -rn x "--include=*.ts" .');
+// The help refusals (decision 0021): a command that would fail or mislead in
+// a known way is refused with the corrected command, never rewritten. Each
+// host's verdict comes from its real entry: the installed hook command line
+// with its --host for Claude Code and Codex, the plugin for OpenCode.
+async function helpVerdict(host, command, { cwd = clone, tool, background } = {}) {
+  if (host === "opencode") {
+    const { "tool.execute.before": before } = await opencodePlugin.server({ directory: cwd });
+    return before({ tool: "bash", sessionID: "s", callID: "c" }, { args: { command } }).then(() => null, (error) => error.message);
+  }
+  const input = host === "claude" ? claudeInput(command, cwd) : codexInput(command, cwd);
+  if (tool) input.tool_name = tool;
+  if (background !== undefined) input.tool_input = { ...input.tool_input, run_in_background: background };
+  const result = runHook("guard.mjs", input, host ? ["--host", host] : []);
+  return result.code === 2 ? result.stderr : result.code === 0 ? null : `exit ${result.code}: ${result.stderr}`;
+}
+
+const ALL_HOSTS = ["claude", "codex", "opencode"];
+
+// The refusal on each host names the exact fix, and says it is help, not a
+// red line, so the agent runs the fix instead of reporting a block.
+async function assertHelped(command, fix, { hosts = ALL_HOSTS, ...options } = {}) {
+  for (const host of hosts) {
+    const message = await helpVerdict(host, command, options);
+    assert.ok(message, `${host} should refuse to help: ${command}`);
+    assert.ok(message.includes(fix), `${host}: ${command}\nexpected the fix: ${fix}\ngot: ${message}`);
+    assert.match(message, /refused this command to help, not over a red line: .*Run the corrected command instead\./s);
+    assert.doesNotMatch(message, /Do not retry it in pieces/);
+  }
+}
+
+async function assertNotHelped(command, { hosts = ALL_HOSTS, ...options } = {}) {
+  for (const host of hosts) assert.equal(await helpVerdict(host, command, options), null, `${host} should allow: ${command}`);
+}
+
+test("an unquoted --include, --exclude or find -name glob is refused with the whole corrected line; braces become one pattern each", async () => {
+  for (const [command, fixed] of [
+    ["grep -rn foo --include=*.ts --exclude-dir=node_modules .", "Run instead: grep -rn foo --include='*.ts' --exclude-dir=node_modules ."],
+    ["rg x --exclude=*.min.js && grep -r y --include=*.{ts,tsx} src", "Run instead: rg x --exclude='*.min.js' && grep -r y --include='*.ts' --include='*.tsx' src"],
+    ["grep -r y --include=src/*.{ts,tsx,} .", "Run instead: grep -r y --include='src/*.ts' --include='src/*.tsx' --include='src/*.' ."],
+    ["rg x && grep -r y --exclude-dir=node_* .", "Run instead: rg x && grep -r y --exclude-dir='node_*' ."],
+    ["find . -name *.ts -type f", "Run instead: find . -name '*.ts' -type f"],
+    ["find src -iname *.{ts,tsx}", "Run instead: find src \\( -iname '*.ts' -o -iname '*.tsx' \\)"],
+    ["find . -path */dist/*", "Run instead: find . -path '*/dist/*'"],
+    // A heredoc body or herestring is data: only the real word is replaced.
+    ["cat <<EOF > notes.md\ndon't stop\nEOF\ngrep -r x --include=*.ts .", "Run instead: cat <<EOF > notes.md\ndon't stop\nEOF\ngrep -r x --include='*.ts' ."],
+    ["grep x --include=*.ts <<<'--include=*.md'", "Run instead: grep x --include='*.ts' <<<'--include=*.md'"],
+  ]) await assertHelped(command, fixed);
+  await assertHelped("grep -r x --include=*.ts .", "unquoted --include=*.ts would be expanded by zsh before the command sees it, and zsh aborts the whole line when nothing matches; quote each pattern.");
+  // Where the line cannot be rebuilt for certain, the corrected word is given.
+  await assertHelped("cat <<EOF | grep --include=*.ts x\n--include=*.ts\nEOF", "Write --include='*.ts' for --include=*.ts");
+  await assertHelped("bash -c 'grep -r x --include=*.{ts,tsx} .'", "Write --include='*.ts' --include='*.tsx' for --include=*.{ts,tsx}");
+  for (const command of [
+    "grep -rn x --include='*.ts' .",
+    'grep -rn x "--include=*.ts" .',
+    "grep -r y --include=\\*.ts .",
+    "find . -name '*.ts'",
+    'echo "--include=*.ts"',
+    "ls *.ts",
+    "cat <<'EOF' > notes.md\ngrep -r x --include=*.ts .\nfind . -name *.ts\nEOF",
+  ]) await assertNotHelped(command);
+});
+
+test("tests, lint or verify piped into tail, head or grep without pipefail are refused with set -o pipefail added", async () => {
+  await assertHelped("npm test 2>&1 | tail -40", "npm test piped into tail reports tail's exit status, so a failing run reads as a pass; keep the checks' status with pipefail. Run instead: set -o pipefail; npm test 2>&1 | tail -40");
+  for (const command of [
+    "npm run test:unit | grep FAIL",
+    "npm run -s lint | head",
+    "npm run verify 2>&1 | tail -5",
+    "pnpm test | tail",
+    "pnpm run lint | head -20",
+    "yarn verify | tail",
+    "npx vitest run src/a.test.ts | tail -30",
+    "vitest run | grep -v PASS",
+    "jest --ci 2>&1 | tail",
+    "npx playwright test | tail",
+    "node --test scripts/hooks/hooks.test.mjs 2>&1 | grep -A5 'not ok'",
+    "pytest -x | tail -n 20",
+    "python -m pytest | tail",
+    "eslint . | head",
+    "tsc --noEmit | head -50",
+    "go test ./... | grep -v '^ok'",
+    "cargo test 2>&1 | tail",
+    "vfk --changed 2>&1 | tail -40",
+    "npx verifika --all | tee out.log | tail",
+    "cd app && npm test |& tail",
+  ]) await assertHelped(command, `Run instead: set -o pipefail; ${command}`);
+  // Both fixes in one line come back as one corrected line.
+  await assertHelped("npm test | grep -r x --include=*.ts", "Run instead: set -o pipefail; npm test | grep -r x --include='*.ts'");
+  await assertHelped("bash -c 'npm test | tail'", "Write set -o pipefail; at the start of the script that runs the pipe");
+  for (const command of [
+    "set -o pipefail; npm test 2>&1 | tail -40",
+    "set -o pipefail && vfk --changed | tail",
+    "bash -o pipefail -c 'npm test | tail'",
+    "npm test",
+    "npm test || echo failed",
+    "npm test > out.log; tail out.log",
+    "ls | head",
+    "git log --oneline | head",
+    "npm run build | tail",
+    "npm run test-results-report | jq .",
+    'echo "npm test | tail"',
+    "cat <<'EOF' > notes.md\nnpm run verify | tail\nEOF",
+  ]) await assertNotHelped(command);
+});
+
+test("a full verify run by hand inside an ibni worktree is refused in favour of ibni verify in the background", async () => {
+  for (const command of ["npm run verify", "npm run -s verify", "npm run --silent verify", "npx verifika --all", "verifika --all", "vfk --all", "npm run verify 2>&1 | tail"]) {
+    await assertHelped(command, "runs the full verify by hand inside an ibni worktree, without the workspace's ports, run slot or recorded result; run ibni verify --session abc123 with run_in_background: true and wait for its completion notification", { cwd: owned, hosts: ["claude"] });
+    await assertHelped(command, "run ibni verify --session abc123 and wait for it to finish", { cwd: owned, hosts: ["codex", "opencode"] });
+  }
+  await assertHelped(`cd ${owned} && npm run verify`, "ibni verify --session abc123", { cwd: clone });
+  for (const command of ["vfk --changed", "vfk --check hooks", "npx verifika --changed", "node --test scripts/a.test.mjs", "npm test", "npm run verify:docs"]) {
+    await assertNotHelped(command, { cwd: owned });
+  }
+  // Outside an ibni worktree there is no ibni verify to run instead.
+  for (const command of ["npm run verify", "vfk --all"]) await assertNotHelped(command, { cwd: clone });
+});
+
+test("the session's own verifyCommand from ibni's metadata counts as a full verify", async (t) => {
+  const metadataFile = path.join(git(owned, "rev-parse", "--absolute-git-dir"), "implementation-workspace.json");
+  const original = await readFile(metadataFile, "utf8");
+  t.after(() => writeFile(metadataFile, original));
+  await writeFile(metadataFile, JSON.stringify({ ...JSON.parse(original), verifyCommand: "make check" }));
+  await assertHelped("make check", "ibni verify --session abc123", { cwd: owned });
+  await assertHelped("make check V=1", "ibni verify --session abc123", { cwd: owned });
+  await assertNotHelped("make build", { cwd: owned });
+});
+
+test("a foreground while or until loop that sleeps is refused on Claude Code's Bash, with the wait to run in the background", async () => {
+  const url = "npm run dev & until curl -sf http://localhost:5173 >/dev/null; do sleep 1; done";
+  await assertHelped(url, "a while or until loop that sleeps holds this Bash call in the foreground until the wait ends or the call times out; rerun this exact loop with run_in_background: true, and you get one completion notification when it exits (start a server it waits for in its own Bash call with run_in_background: true). The wait for the URL: until curl -sf http://localhost:5173 >/dev/null; do sleep 1; done, with run_in_background: true. Use the Monitor tool (command, description, timeout_ms) only for a stream of events, such as each matching log line: tail -F <log> | grep --line-buffered '<text>'; tail | grep -m1 can hang, so never use it for a one-shot wait", { hosts: ["claude"] });
+  await assertHelped("until grep -q 'ready in' /tmp/dev.log; do sleep 2; done", "The wait for the log: until grep -q 'ready in' /tmp/dev.log; do sleep 1; done, with run_in_background: true. Use the Monitor tool (command, description, timeout_ms) only for a stream of events, such as each matching log line: tail -F /tmp/dev.log | grep --line-buffered 'ready in';", { hosts: ["claude"] });
+  await assertHelped("while true; do\n  if curl -s localhost:3000; then break; fi\n  sleep 1\ndone", "The wait for a URL: until curl -sf <url> >/dev/null; do sleep 1; done; for a log line: until grep -q '<ready text>' <log>; do sleep 1; done", { hosts: ["claude"] });
+  // Monitor runs such loops by design, a background call does not block, and
+  // Codex and OpenCode have no Monitor or background call to offer instead.
+  await assertNotHelped(url, { hosts: ["claude"], tool: "Monitor" });
+  await assertNotHelped(url, { hosts: ["claude"], background: true });
+  await assertNotHelped(url, { hosts: ["codex", "opencode"] });
+  for (const command of [
+    "for i in 1 2 3; do sleep 1; done",
+    "sleep 5",
+    "while read -r line; do echo \"$line\"; done < list.txt",
+    "while sleep 1; do date; break; done",
+    "echo 'until curl -sf x; do sleep 1; done'",
+    "cat <<'EOF' > wait.sh\nwhile true; do sleep 1; done\nEOF",
+  ]) await assertNotHelped(command, { hosts: ["claude"] });
+});
+
+test("a host the guard cannot name gets only the host-neutral help refusals", async () => {
+  await assertNotHelped("until curl -sf http://localhost:5173; do sleep 1; done", { hosts: [null] });
+  await assertNotHelped("head -n 40 README.md", { hosts: [null], cwd: owned });
+  await assertHelped("grep -r x --include=*.ts .", "Run instead: grep -r x --include='*.ts' .", { hosts: [null] });
+});
+
+test("cat, head, tail or sed -n on a worktree file is refused on Claude Code and OpenCode with the read tool call to use instead", async () => {
+  const file = path.join(owned, "README.md");
+  await assertHelped("head -n 40 README.md", `head shows ${file} through the shell, which does not count as reading it, so a later edit of it is refused until it is read; use the Read tool with offset and limit: Read(${file}, offset: 1, limit: 40)`, { cwd: owned, hosts: ["claude"] });
+  await assertHelped("head -n 40 README.md", `use the read tool with offset and limit: read(filePath: ${file}, offset: 1, limit: 40)`, { cwd: owned, hosts: ["opencode"] });
+  for (const [command, call] of [
+    ["head README.md", `Read(${file}, offset: 1, limit: 10)`],
+    ["head -20 README.md", `Read(${file}, offset: 1, limit: 20)`],
+    ["sed -n '10,30p' README.md", `Read(${file}, offset: 10, limit: 21)`],
+    ["sed -n 5p README.md", `Read(${file}, offset: 5, limit: 1)`],
+    ["tail -n 25 README.md", `Read(${file}, offset: <near the end: the line count minus 25>, limit: 25)`],
+    ["tail -n +100 README.md", `Read(${file}, offset: 100)`],
+    ["cat README.md", `Read(${file})`],
+    ["cat -n README.md", `Read(${file})`],
+    [`cat ${file}`, `Read(${file})`],
+    ["cat README.md | head -n 5", `Read(${file}, offset: 1, limit: 5)`],
+    ["head -n 3 ../task/README.md", `Read(${file}, offset: 1, limit: 3)`],
+  ]) await assertHelped(command, call, { cwd: owned, hosts: ["claude"] });
+  await assertHelped(`cd ${owned} && cat README.md`, `Read(${file})`, { cwd: clone, hosts: ["claude"] });
+  // Codex has no read tool, and reads through the shell.
+  await assertNotHelped("sed -n '1,5p' README.md", { cwd: owned, hosts: ["codex"] });
+  await assertNotHelped("head -n 5 README.md", { cwd: owned, hosts: ["claude"], tool: "Monitor" });
+  for (const command of [
+    `cat ${path.join(clone, "README.md")}`,
+    "git log | head -n 5",
+    "tail -F app.log",
+    "tail -f README.md",
+    "tail --follow=name app.log",
+    "cat README.md > copy.md",
+    "head -n 5 README.md >/dev/null",
+    "cat README.md | jq .",
+    "grep -n x README.md",
+    "rg x README.md",
+    "sed -i 's/a/b/' README.md",
+    "sed 's/a/b/' README.md",
+    "cat \"$FILE\"",
+    "head -n 5 *.md",
+    "cat <<'EOF'\nhead -n 40 README.md\nEOF",
+    "echo 'cat README.md'",
+  ]) await assertNotHelped(command, { cwd: owned, hosts: ["claude", "opencode"] });
+  // Outside an ibni worktree there is nothing to protect an edit of.
+  await assertNotHelped("cat README.md", { cwd: clone, hosts: ["claude", "opencode"] });
+});
+
+test("a red line wins over a help refusal in the same line", async () => {
+  await assertBlocked("npm test | tail; git push --force origin feature", /force/);
+});
+
+test("the installed hooks tell the guard its host and run the post-tool entry, and an install replaces the old mexxi-owned entries rather than adding seconds", async () => {
+  const checkout = path.resolve(hooks, "../..");
+  const config = { paths: { checkout } };
+  const claude = claudeHooks(config).PreToolUse[0].hooks[0].command;
+  const codex = codexHooks(config).PreToolUse[0].hooks[0].command;
+  assert.equal(claude, `node ${path.join(checkout, "scripts/hooks/guard.mjs")} --host claude`);
+  assert.equal(codex, `node ${path.join(checkout, "scripts/hooks/guard.mjs")} --host codex`);
+  // The command line as the host runs it reaches the guard with that host.
+  const loop = "until curl -sf http://localhost:5173; do sleep 1; done";
+  const run = (line, input) => spawnSync("sh", ["-c", line], { input: JSON.stringify(input), encoding: "utf8", env: process.env });
+  assert.equal(run(claude, claudeInput(loop, clone)).status, 2);
+  assert.equal(run(codex, codexInput(loop, clone)).status, 0);
+
+  // Edits and shell results both reach the one post-tool entry.
+  const postTool = `node ${path.join(checkout, "scripts/hooks/post-tool.mjs")}`;
+  assert.deepEqual(claudeHooks(config).PostToolUse, [{ matcher: "Bash|Edit|Write|MultiEdit|NotebookEdit", hooks: [{ type: "command", command: postTool }] }]);
+  assert.deepEqual(claudeHooks(config).PostToolUseFailure, [{ matcher: "Bash", hooks: [{ type: "command", command: postTool }] }]);
+  assert.deepEqual(codexHooks(config).PostToolUse, [{ matcher: "Bash|apply_patch", hooks: [{ type: "command", command: postTool }] }]);
+
+  // An older install recorded the bare guard command and the loop breaker as its own.
+  const entry = (script) => [{ type: "command", command: `node ${path.join(checkout, "scripts/hooks", script)}` }];
+  const old = {
+    PreToolUse: [{ matcher: "Bash|Monitor", hooks: entry("guard.mjs") }],
+    PostToolUse: [{ matcher: "Bash|Edit|Write|MultiEdit|NotebookEdit", hooks: entry("loop-breaker.mjs") }],
+    PostToolUseFailure: [{ matcher: "Bash", hooks: entry("loop-breaker.mjs") }],
+  };
+  const user = { matcher: "Bash", hooks: [{ type: "command", command: "my-hook" }] };
+  const desired = claudeHooks(config);
+  const merged = mergeOwnedHooks({ current: { ...old, PreToolUse: [user, ...old.PreToolUse] }, previous: old, desired, file: "settings.json" });
+  assert.deepEqual(merged.hooks, { ...desired, PreToolUse: [user, ...desired.PreToolUse] });
+  assert.deepEqual(merged.owned, desired);
+  assert.ok(merged.drift.some((line) => /PreToolUse hook Bash\|Monitor -> node \S+guard\.mjs was added by mexxi and is no longer wanted/.test(line)), merged.drift.join("\n"));
+  assert.ok(merged.drift.some((line) => /PostToolUse hook \S+ -> node \S+loop-breaker\.mjs was added by mexxi and is no longer wanted/.test(line)), merged.drift.join("\n"));
+  // The next install finds nothing to change.
+  const again = mergeOwnedHooks({ current: merged.hooks, previous: merged.owned, desired, file: "settings.json" });
+  assert.deepEqual([again.hooks, again.drift], [merged.hooks, []]);
+});
+
+// The test-design nudge (decision 0025), through each host's real entry.
+const claudeEdit = (session, tool, toolInput) => ({
+  session_id: session, transcript_path: "/tmp/t.jsonl", cwd: clone, permission_mode: "default", hook_event_name: "PostToolUse",
+  tool_name: tool, tool_input: toolInput, tool_response: { filePath: toolInput.file_path ?? toolInput.notebook_path, type: "update" }, tool_use_id: "toolu_3",
+});
+const codexPatch = (session, patch, response = '{"exit_code":0,"output":"Success. Updated the following files"}') => ({
+  session_id: session, transcript_path: null, cwd: clone, hook_event_name: "PostToolUse", model: "gpt-5.6-luna", permission_mode: "default",
+  tool_name: "apply_patch", tool_input: { command: patch }, tool_response: response, tool_use_id: "call_2", turn_id: "turn_1",
+});
+// The additionalContext a post-tool run hands the agent, or null; the edit is never blocked.
+function nudged(input) {
+  const result = runHook("post-tool.mjs", input);
+  assert.equal(result.code, 0, `an edit is never blocked: ${result.stderr}`);
+  return result.stdout ? JSON.parse(result.stdout).hookSpecificOutput : null;
+}
+
+test("the first test-file edit in a session tells the agent to load test-design, once, and a non-test edit never does", async () => {
+  assert.equal(nudged(claudeEdit("n1", "Edit", { file_path: `${clone}/src/app.ts`, old_string: "a", new_string: "b" })), null);
+  assert.equal(nudged(claudeEdit("n1", "Write", { file_path: `${clone}/README.md`, content: "x" })), null);
+  const first = nudged(claudeEdit("n1", "Edit", { file_path: `${clone}/src/app.test.ts`, old_string: "a", new_string: "b" }));
+  assert.deepEqual(first, {
+    hookEventName: "PostToolUse",
+    additionalContext: `You just edited a test file (${clone}/src/app.test.ts). Load the test-design skill now, before writing or changing more tests: it decides which tests the change needs and how to see each one fail.`,
+  });
+  // Once per session: later test edits, of any file, add nothing.
+  assert.equal(nudged(claudeEdit("n1", "MultiEdit", { file_path: `${clone}/tests/other_test.py`, edits: [] })), null);
+  assert.equal(nudged(claudeEdit("n1", "Edit", { file_path: `${clone}/src/app.test.ts`, old_string: "b", new_string: "c" })), null);
+  // Another session gets its own nudge; a shell command never triggers one.
+  assert.equal(nudged({ ...success("n2", "Bash", { command: "cat src/app.test.ts" }) }), null);
+  assert.match(nudged(claudeEdit("n2", "NotebookEdit", { notebook_path: `${clone}/tests/explore.ipynb`, new_source: "x" })).additionalContext, /tests\/explore\.ipynb\)\. Load the test-design skill now/);
+});
+
+test("Codex's apply_patch is read for the files it touches, and a failed patch does not count", async () => {
+  assert.deepEqual(patchPaths("*** Begin Patch\n*** Update File: src/app.ts\n@@\n-a\n+b\n*** Add File: src/__tests__/app.ts\n+x\n*** Delete File: old_test.go\n*** Update File: lib/a.py\n*** Move to: tests/a.py\n*** End Patch"),
+    ["src/app.ts", "src/__tests__/app.ts", "old_test.go", "lib/a.py", "tests/a.py"]);
+  // A line inside a hunk that reads like a header is still hunk text when it does not start the line.
+  assert.deepEqual(patchPaths("*** Begin Patch\n*** Update File: src/app.ts\n@@\n+ // *** Add File: x.test.ts\n*** End Patch"), ["src/app.ts"]);
+  const patch = "*** Begin Patch\n*** Update File: src/app.ts\n@@\n-a\n+b\n*** Add File: src/app.spec.ts\n+it('x')\n*** End Patch";
+  assert.equal(nudged(codexPatch("c-n1", patch, '{"exit_code":1,"output":"patch did not apply"}')), null);
+  assert.equal(nudged(codexPatch("c-n1", "*** Begin Patch\n*** Update File: src/app.ts\n@@\n-a\n+b\n*** End Patch")), null);
+  assert.match(nudged(codexPatch("c-n1", patch)).additionalContext, /^You just edited a test file \(src\/app\.spec\.ts\)\. Load the test-design skill now/);
+  assert.equal(nudged(codexPatch("c-n1", patch)), null);
+});
+
+test("OpenCode's plugin appends the nudge to the first test-file edit's output, once", async () => {
+  const { "tool.execute.after": after } = await opencodePlugin.server({ directory: clone });
+  const edit = async (tool, args) => {
+    const output = { title: tool, output: "Edit applied successfully.", metadata: {} };
+    await after({ tool, sessionID: "ses_nudge", callID: "c", args }, output);
+    return output.output;
+  };
+  assert.equal(await edit("edit", { filePath: `${clone}/src/app.ts`, oldString: "a", newString: "b" }), "Edit applied successfully.");
+  assert.equal(await edit("write", { filePath: `${clone}/e2e/login.ts`, content: "x" }),
+    `Edit applied successfully.\n\nmexxi: You just edited a test file (${clone}/e2e/login.ts). Load the test-design skill now, before writing or changing more tests: it decides which tests the change needs and how to see each one fail.`);
+  assert.equal(await edit("patch", { patchText: "*** Begin Patch\n*** Add File: test_app.py\n+x\n*** End Patch" }), "Edit applied successfully.");
+  // Its patch tool's text is read like Codex's.
+  const { "tool.execute.after": fresh } = await opencodePlugin.server({ directory: clone });
+  const output = { title: "patch", output: "ok", metadata: {} };
+  await fresh({ tool: "patch", sessionID: "ses_nudge_2", callID: "c", args: { patchText: "*** Begin Patch\n*** Add File: test_app.py\n+x\n*** End Patch" } }, output);
+  assert.match(output.output, /\(test_app\.py\)\. Load the test-design skill now/);
+});
+
+test("test files are told apart by path, as the one exported list of patterns says", () => {
+  for (const file of [
+    "src/app.test.ts", "src/app.spec.tsx", "scripts/hooks/hooks.test.mjs", "web/app-test.js", "test_app.py", "pkg/app_test.py",
+    "internal/server_test.go", "spec/models/user_spec.rb", "src/test/java/AppTest.java", "src/__tests__/app.js", "tests/fixtures/data.json",
+    "test/helper.rb", "e2e/login.ts", "C:\\repo\\tests\\a.py",
+  ]) assert.ok(isTestFile(file), file);
+  for (const file of ["src/app.ts", "README.md", "src/testing.ts", "src/latest/app.ts", "src/contest.py", "docs/test-design.md", "src/protest_app.py", "attestation.go"]) {
+    assert.ok(!isTestFile(file), file);
+  }
 });
 
 test("the guard fails closed on input it cannot read, and ignores tools that run no shell", async () => {
@@ -686,42 +990,42 @@ const success = (session, tool, input) => ({
 
 test("the loop breaker stops the third identical failure in a Claude Code session", async () => {
   const command = "npm test -- --run src/app.spec.ts";
-  assert.equal(runHook("loop-breaker.mjs", failure("s1", command)).code, 0);
-  assert.equal(runHook("loop-breaker.mjs", failure("s1", `${command}  `)).code, 0);
+  assert.equal(runHook("post-tool.mjs", failure("s1", command)).code, 0);
+  assert.equal(runHook("post-tool.mjs", failure("s1", `${command}  `)).code, 0);
   // Another session's failures are its own.
-  assert.equal(runHook("loop-breaker.mjs", failure("s2", command)).code, 0);
-  const third = runHook("loop-breaker.mjs", failure("s1", command));
+  assert.equal(runHook("post-tool.mjs", failure("s2", command)).code, 0);
+  const third = runHook("post-tool.mjs", failure("s1", command));
   assert.equal(third.code, 2);
   assert.match(third.stderr, /failed 3 times in this session[\s\S]*Stop retrying it\. Re-diagnose/);
-  assert.equal(runHook("loop-breaker.mjs", failure("s1", command)).code, 2);
+  assert.equal(runHook("post-tool.mjs", failure("s1", command)).code, 2);
   // An interrupted run or a shell that never started is not a failed attempt.
-  assert.equal(runHook("loop-breaker.mjs", { ...failure("s2", command), is_interrupt: true }).code, 0);
-  assert.equal(runHook("loop-breaker.mjs", failure("s2", command, "spawn /bin/zsh ENOENT")).code, 0);
+  assert.equal(runHook("post-tool.mjs", { ...failure("s2", command), is_interrupt: true }).code, 0);
+  assert.equal(runHook("post-tool.mjs", failure("s2", command, "spawn /bin/zsh ENOENT")).code, 0);
 });
 
 test("a success whose output reads like a failure is a success", async () => {
   const command = "npm test";
-  runHook("loop-breaker.mjs", failure("s5", command));
-  runHook("loop-breaker.mjs", failure("s5", command));
+  runHook("post-tool.mjs", failure("s5", command));
+  runHook("post-tool.mjs", failure("s5", command));
   const printed = success("s5", "Bash", { command });
   printed.tool_response.stdout = "Exit code 1\nexpected: Exit code 1";
-  assert.equal(runHook("loop-breaker.mjs", printed).code, 0);
+  assert.equal(runHook("post-tool.mjs", printed).code, 0);
   // The success cleared the count, so two more failures stay under the limit.
-  assert.equal(runHook("loop-breaker.mjs", failure("s5", command)).code, 0);
-  assert.equal(runHook("loop-breaker.mjs", failure("s5", command)).code, 0);
+  assert.equal(runHook("post-tool.mjs", failure("s5", command)).code, 0);
+  assert.equal(runHook("post-tool.mjs", failure("s5", command)).code, 0);
 });
 
 test("an edit or a success between failures is progress, not a retry", async () => {
   const command = "npm run verify";
-  runHook("loop-breaker.mjs", failure("s3", command));
-  runHook("loop-breaker.mjs", failure("s3", command));
-  assert.equal(runHook("loop-breaker.mjs", success("s3", "Edit", { file_path: "a.ts", old_string: "a", new_string: "b" })).code, 0);
-  assert.equal(runHook("loop-breaker.mjs", failure("s3", command)).code, 0);
-  assert.equal(runHook("loop-breaker.mjs", failure("s3", command)).code, 0);
-  assert.equal(runHook("loop-breaker.mjs", success("s3", "Bash", { command })).code, 0);
-  assert.equal(runHook("loop-breaker.mjs", failure("s3", command)).code, 0);
-  assert.equal(runHook("loop-breaker.mjs", failure("s3", command)).code, 0);
-  assert.equal(runHook("loop-breaker.mjs", failure("s3", command)).code, 2);
+  runHook("post-tool.mjs", failure("s3", command));
+  runHook("post-tool.mjs", failure("s3", command));
+  assert.equal(runHook("post-tool.mjs", success("s3", "Edit", { file_path: "a.ts", old_string: "a", new_string: "b" })).code, 0);
+  assert.equal(runHook("post-tool.mjs", failure("s3", command)).code, 0);
+  assert.equal(runHook("post-tool.mjs", failure("s3", command)).code, 0);
+  assert.equal(runHook("post-tool.mjs", success("s3", "Bash", { command })).code, 0);
+  assert.equal(runHook("post-tool.mjs", failure("s3", command)).code, 0);
+  assert.equal(runHook("post-tool.mjs", failure("s3", command)).code, 0);
+  assert.equal(runHook("post-tool.mjs", failure("s3", command)).code, 2);
 });
 
 test("Codex's PostToolUse carries the exit status in tool_response", async () => {
@@ -742,15 +1046,15 @@ test("Codex's PostToolUse carries the exit status in tool_response", async () =>
   assert.equal(exitCode('{"exit_code":0,"output":"Exit code 1"}'), 0);
   const command = "cargo build";
   const failed = '{"exit_code":101,"output":"error[E0425]"}';
-  assert.equal(runHook("loop-breaker.mjs", codex("c1", command, failed)).code, 0);
+  assert.equal(runHook("post-tool.mjs", codex("c1", command, failed)).code, 0);
   // An unreadable result counts as nothing, not as a failure or a success.
-  assert.equal(runHook("loop-breaker.mjs", codex("c1", command, "unknown shape")).code, 0);
-  assert.equal(runHook("loop-breaker.mjs", codex("c1", command, { exit_code: 101 })).code, 0);
-  const third = runHook("loop-breaker.mjs", codex("c1", command, failed));
+  assert.equal(runHook("post-tool.mjs", codex("c1", command, "unknown shape")).code, 0);
+  assert.equal(runHook("post-tool.mjs", codex("c1", command, { exit_code: 101 })).code, 0);
+  const third = runHook("post-tool.mjs", codex("c1", command, failed));
   assert.equal(third.code, 2);
   assert.match(third.stderr, /failed 3 times/);
-  assert.equal(runHook("loop-breaker.mjs", { ...codex("c1", "x", null), tool_name: "apply_patch", tool_input: { command: "*** Begin Patch" } }).code, 0);
-  assert.equal(runHook("loop-breaker.mjs", codex("c1", command, failed)).code, 0);
+  assert.equal(runHook("post-tool.mjs", { ...codex("c1", "x", null), tool_name: "apply_patch", tool_input: { command: "*** Begin Patch" } }).code, 0);
+  assert.equal(runHook("post-tool.mjs", codex("c1", command, failed)).code, 0);
 });
 
 test("OpenCode's plugin runs the loop breaker on the bash tool's exit status", async () => {
@@ -770,15 +1074,15 @@ test("OpenCode's plugin runs the loop breaker on the bash tool's exit status", a
 test("the limit comes from guard.repeatedFailureLimit, and state stays under the home's mexxi state", async (t) => {
   await writeFile(configFile, JSON.stringify({ guard: { repeatedFailureLimit: 2 } }));
   t.after(() => writeFile(configFile, baseConfig));
-  assert.equal(runHook("loop-breaker.mjs", failure("s4", "make")).code, 0);
-  assert.equal(runHook("loop-breaker.mjs", failure("s4", "make")).code, 2);
+  assert.equal(runHook("post-tool.mjs", failure("s4", "make")).code, 0);
+  assert.equal(runHook("post-tool.mjs", failure("s4", "make")).code, 2);
   const directory = path.join(home, ".local/share/mexxi/state/loop-breaker");
   const [state] = readdirSync(directory);
   assert.match(await readFile(path.join(directory, state), "utf8"), /"counts"/);
   // A corrupt state file never fails the tool call.
   await mkdir(directory, { recursive: true });
   for (const name of readdirSync(directory)) await writeFile(path.join(directory, name), "{");
-  const broken = runHook("loop-breaker.mjs", failure("s4", "make"));
+  const broken = runHook("post-tool.mjs", failure("s4", "make"));
   assert.equal(broken.code, 0);
   await rm(directory, { recursive: true });
 });

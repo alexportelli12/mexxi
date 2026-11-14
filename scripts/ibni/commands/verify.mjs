@@ -7,7 +7,7 @@ import { assertClean, assertNoGitOperation, cleanOutput, git } from "../lib/git.
 import { withRepositoryLock } from "../lib/lock.mjs";
 import { logTail, runLoggedInSlot, scopeFields } from "../lib/logged-run.mjs";
 import { evidenceDirectoryFor, sessionVerifyCommand, updateMetadata } from "../lib/metadata.mjs";
-import { busyPorts, recordedBlock, sessionRunEnvironment } from "../lib/ports.mjs";
+import { busyPorts, describeHolders, portHolders, recordedBlock, sessionRunEnvironment } from "../lib/ports.mjs";
 import { ownedSession } from "../lib/session.mjs";
 
 const DIRTY_HINT = "ibni verify binds its result to a committed tree. Commit the change first (or, before any commit, leave the tree at baseSha for the baseline run), then run it again.";
@@ -107,9 +107,13 @@ export async function verifyWorkspace({ cwd = process.cwd(), sessionId }) {
   const portsFree = async () => {
     const busy = await busyPorts(recordedBlock(metadata));
     if (busy.length) {
+      const { holders, reason } = await portHolders(busy);
       throw new WorkspaceError(
-        `port ${busy.join(", ")} of this workspace's block is already in use`,
-        "Stop whatever listens there (often a dev server started in this workspace), then run ibni verify again.",
+        `port ${busy.join(", ")} of this workspace's block is already in use: ${describeHolders(busy, holders)}; stop it`,
+        [
+          "Stop whatever listens there (often a dev server started in this workspace), then run ibni verify again.",
+          `holders: ${JSON.stringify(holders)}${reason ? ` (${reason})` : ""}`,
+        ].join("\n"),
       );
     }
   };

@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 // The loop breaker: a post-tool hook that counts identical failing shell
 // commands per agent session. When the same command fails for the
 // guard.repeatedFailureLimit-th time (third by default) it exits 2, and the
@@ -7,8 +6,7 @@
 // A successful edit (any host's file-editing tool) clears the session's
 // counts, because rerunning a check after changing the code is the normal
 // fix-and-verify loop, not a retry. A success of the same command clears that
-// command's count. The decision is deterministic; Phase 6 may add a Jev
-// judgement for near-identical retries.
+// command's count. The decision is deterministic.
 //
 // Hosts report a failure differently:
 //   Claude Code  PostToolUseFailure with `error` ("Exit code N\n..."); its
@@ -19,19 +17,20 @@
 //                anything else as unknown (not counted).
 //   OpenCode     its plugin passes the Claude Code shape, from the bash tool's
 //                metadata.exit.
+//
+// Claude Code and Codex run it through post-tool.mjs, the one post-tool hook
+// entry; OpenCode's plugin calls recordToolResult directly.
 import { createHash } from "node:crypto";
-import { mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { guardConfig, SHELL_TOOLS } from "./guard-rules.mjs";
+import { SHELL_TOOLS } from "./guard-rules.mjs";
+import { pruneStale, sessionFile, sessionStateDirectory } from "./session-state.mjs";
 
 // File-editing tools by host: Claude Code, Codex (apply_patch), OpenCode.
-const EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit", "apply_patch", "edit", "write", "patch"]);
-const STALE_AFTER_MS = 7 * 24 * 60 * 60 * 1000;
+export const EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit", "apply_patch", "edit", "write", "patch", "multiedit"]);
 
 export function stateDirectory(home = os.homedir()) {
-  return path.join(home, ".local/share/mexxi/state/loop-breaker");
+  return sessionStateDirectory("loop-breaker", home);
 }
 
 // The exit status a host reported, or null when it cannot be told. Only the
@@ -92,19 +91,6 @@ function outcome(input) {
   return "unknown";
 }
 
-function sessionFile(directory, sessionId) {
-  const name = createHash("sha256").update(String(sessionId)).digest("hex").slice(0, 32);
-  return path.join(directory, `${name}.json`);
-}
-
-async function pruneStale(directory, now) {
-  for (const name of await readdir(directory).catch(() => [])) {
-    const file = path.join(directory, name);
-    const info = await stat(file).catch(() => null);
-    if (info && now - info.mtimeMs > STALE_AFTER_MS) await rm(file, { force: true });
-  }
-}
-
 // Records one tool result and returns the message for the agent, or null.
 export async function recordToolResult(input, { limit, directory = stateDirectory(), now = Date.now() } = {}) {
   const sessionId = input?.session_id;
@@ -138,25 +124,4 @@ export async function recordToolResult(input, { limit, directory = stateDirector
   const count = state.counts[key] ?? 0;
   if (result !== "failed" || count < (limit ?? 3)) return null;
   return `This exact command has now failed ${count} times in this session with no file edited in between: ${command.trim().slice(0, 200)}\nStop retrying it. Re-diagnose before running anything again: read the whole error, check the assumption it contradicts, and change the approach, or report the blocker with what you tried.`;
-}
-
-async function readStdin() {
-  const chunks = [];
-  for await (const chunk of process.stdin) chunks.push(chunk);
-  return Buffer.concat(chunks).toString("utf8");
-}
-
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  try {
-    const input = JSON.parse(await readStdin());
-    const config = await guardConfig();
-    const message = await recordToolResult(input, { limit: config.guard.repeatedFailureLimit });
-    if (message) {
-      process.stderr.write(`mexxi loop breaker: ${message}\n`);
-      process.exit(2);
-    }
-  } catch (error) {
-    // Counting is advisory: a broken state file must never fail the tool call.
-    process.stderr.write(`mexxi loop breaker skipped: ${error.message}\n`);
-  }
 }

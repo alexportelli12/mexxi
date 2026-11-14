@@ -45,7 +45,7 @@
     },
     "models": {
       "description": "Model per role and host. null means the role inherits the host's own model.",
-      "why": "Different jobs suit different models, and a reviewer from another model family catches what the builder's family misses.",
+      "why": "Different jobs suit different models, and a reviewer on a model you choose can catch what the builder's model misses.",
       "type": "object",
       "additionalProperties": false,
       "default": {},
@@ -59,8 +59,7 @@
             "general": { "description": "OpenCode's built-in general subagent.", "type": ["string", "null"], "default": null },
             "explore": { "description": "OpenCode's built-in explore subagent.", "type": ["string", "null"], "default": null },
             "uiDesigner": { "description": "The shared ui-designer agent.", "type": ["string", "null"], "default": null },
-            "reviewer": { "description": "The shared code-reviewer agent.", "type": ["string", "null"], "default": null },
-            "crossFamilyReviewer": { "description": "A reviewer model from a different family to the implementer's, as provider/model, because a reviewer from the builder's own family shares its blind spots. Rendered as the code-reviewer's model in place of reviewer. null falls back to the reviewer's model.", "type": ["string", "null"], "default": null }
+            "reviewer": { "description": "The shared code-reviewer agent.", "type": ["string", "null"], "default": null }
           }
         },
         "claude": {
@@ -70,8 +69,7 @@
           "default": {},
           "properties": {
             "uiDesigner": { "description": "The shared ui-designer agent.", "type": ["string", "null"], "default": null },
-            "reviewer": { "description": "The shared code-reviewer agent.", "type": ["string", "null"], "default": null },
-            "crossFamilyReviewer": { "description": "A Codex model that `ibni cross-review` runs the code-reviewer on through codex exec in a read-only sandbox, so the reviewer is not the implementer's family and does not share its blind spots. null, or Codex not installed, falls back to the reviewer's model and says so in the pull request's Evidence.", "type": ["string", "null"], "default": null }
+            "reviewer": { "description": "The shared code-reviewer agent.", "type": ["string", "null"], "default": null }
           }
         },
         "codex": {
@@ -81,8 +79,7 @@
           "default": {},
           "properties": {
             "uiDesigner": { "description": "The shared ui-designer agent.", "type": ["string", "null"], "default": null },
-            "reviewer": { "description": "The shared code-reviewer agent.", "type": ["string", "null"], "default": null },
-            "crossFamilyReviewer": { "description": "Codex has only one family, so this is simply used in place of reviewer as the code-reviewer's model; null falls back to the reviewer's model.", "type": ["string", "null"], "default": null }
+            "reviewer": { "description": "The shared code-reviewer agent.", "type": ["string", "null"], "default": null }
           }
         }
       }
@@ -118,6 +115,7 @@
           }
         },
         "warmCaches": { "description": "Copy build, type-check, lint and test caches (.next/cache, *.tsbuildinfo, .eslintcache, node_modules/.vite/vitest) that the control checkout has into each new worktree after setup, up to 1 GB each, so its first verify run is not a cold one. Each tool checks its cache against the sources, so a stale copy only costs a rebuild.", "type": "boolean", "default": true },
+        "pruneAfterDays": { "description": "Days after which ibni prepare's cleanup removes a retained workspace whose pull request closed without merging, or that never recorded one: such a worktree takes disk space and nobody returns to it. A workspace with uncommitted work, one in use, or one whose state ibni cannot read is never removed, and a local branch with commits on no remote is kept.", "type": "integer", "minimum": 1, "maximum": 3650, "default": 14 },
         "verifySlots": { "description": "How many setup and verify runs ibni lets run at once on this machine, across every repository; the rest wait in a queue and report the wait as queuedMs. Two suits a machine with 8 cores: raise it if runs rarely wait, and lower it if checks start to time out under load.", "type": "integer", "minimum": 1, "maximum": 64, "default": 2 },
         "scope": {
           "description": "The systemd user scope ibni runs setup and verify in, where systemd-run --user works; elsewhere they run as plain child processes.",
@@ -164,7 +162,7 @@
       }
     },
     "guard": {
-      "description": "What the shared guard hook blocks on every host.",
+      "description": "What the shared guard hook refuses on every host, beside the command fixes it names (decision 0021).",
       "why": "A stuck agent occasionally runs something destructive, so a hook backs up the rules by stopping the commands you list.",
       "type": "object",
       "additionalProperties": false,
@@ -188,11 +186,6 @@
           "items": { "type": "string", "minLength": 1 },
           "default": []
         },
-        "blockUnquotedGlobs": {
-          "description": "Refuse unquoted --include=* and --exclude=* globs, which zsh expands (and aborts on when nothing matches) unless setopt no_nomatch reaches the agent's shell. Leave off once a fresh Claude Code session shows `grep -rn x --include=*.ts .` searching; turn on if it fails with 'no matches found'.",
-          "type": "boolean",
-          "default": false
-        },
         "repeatedFailureLimit": {
           "description": "How many times the same shell command may fail in one agent session, with no file edited in between, before the loop breaker tells the agent to stop retrying and re-diagnose.",
           "type": "integer",
@@ -210,11 +203,11 @@
       "default": {},
       "properties": {
         "bashMaxTimeoutMs": { "description": "Longest a foreground Bash command may run (BASH_MAX_TIMEOUT_MS), in milliseconds. Set it above your slowest repository's verify run; the default is 15 minutes.", "type": "integer", "minimum": 1000, "default": 900000 },
-        "contextNudgePercent": { "description": "Context window fill, in percent, at which the run pane's band suggests a fresh session and ibni adopt for follow-ups.", "type": "integer", "minimum": 1, "maximum": 100, "default": 70 }
+        "contextNudgePercent": { "description": "Context window fill, in percent, at which the run pane's band suggests finishing the run and starting follow-ups in a new session with /wettaq <pull request URL>.", "type": "integer", "minimum": 1, "maximum": 100, "default": 70 }
       }
     },
     "forge": {
-      "description": "Which code forge a repository's pull requests, CI state, issues and media URLs come from: GitHub through gh, GitLab through glab. github.com and gitlab.com are known; a repository can name its own with \"forge\" in its committed .mexxi.json, which wins over this group. A remote on any other host has no forge, and the steps that need one fail or skip with the reason.",
+      "description": "Which code forge a repository's pull requests, CI state and media URLs come from: GitHub through gh, GitLab through glab. github.com and gitlab.com are known; a repository can name its own with \"forge\" in its committed .mexxi.json, which wins over this group. A remote on any other host has no forge, and the steps that need one fail or skip with the reason.",
       "why": "mexxi has to know whether a repository lives on GitHub or GitLab to open its pull requests and read its CI.",
       "type": "object",
       "additionalProperties": false,
@@ -226,25 +219,6 @@
           "additionalProperties": { "type": "string", "enum": ["github", "gitlab"] },
           "default": {}
         }
-      }
-    },
-    "jev": {
-      "description": "Jev triage through OpenRouter; the API key is read from OPENROUTER_API_KEY, never from this file.",
-      "why": "Jev is an outside decision model, reached through OpenRouter. This tests whether it would choose a task's checks better than the agent, while only recording its answers.",
-      "scope": "Experimental, and off by default",
-      "type": "object",
-      "additionalProperties": false,
-      "default": {},
-      "properties": {
-        "enabled": { "description": "Run triage at all.", "type": "boolean", "default": false },
-        "stage": { "description": "What triage may do with its answers. Only shadow exists: it records answers beside the agent's own gate choices and changes nothing. Escalate (add a gate on a confident answer) and skip (drop the independent review on a confident mechanical answer) come only once shadow data shows agreement.", "type": "string", "enum": ["shadow"], "default": "shadow" },
-        "model": { "description": "Pinned Jev model; not the ~typesafe/jev-latest alias, so a release cannot shift answers mid-calibration.", "type": "string", "default": "typesafe/jev-1.14" },
-        "endpoint": { "description": "OpenRouter's Decisions API, which takes the question schema triage sends. It receives the API key, so it must be HTTPS; plain HTTP is allowed only on loopback (localhost, 127.0.0.1, [::1]), where a local stand-in never sends the key over a network.", "type": "string", "pattern": "^(https://|http://(localhost|127\\.0\\.0\\.1|\\[::1\\])(:[0-9]+)?(/|$))", "default": "https://openrouter.ai/api/alpha/decisions" },
-        "owners": { "description": "GitHub accounts and organisations that are yours. A listed repository owned by anyone else is skipped, since its content is not only yours to share. Jev runs only on github.com: a repository on GitLab or a self-hosted forge is skipped.", "type": "array", "items": { "type": "string", "pattern": "^[^/\\s]+$" }, "default": [] },
-        "repositories": { "description": "Repositories (owner/name, as in the push remote's github.com URL) triage may run in.", "type": "array", "items": { "type": "string", "pattern": "^[^/\\s]+/[^/\\s]+$" }, "default": [] },
-        "maxPayloadBytes": { "description": "Each request stays below this many bytes; larger text puts Jev in a slower, less accurate long-context mode.", "type": "integer", "minimum": 4096, "default": 32768 },
-        "timeoutMs": { "description": "How long one request may take before triage gives up and the run carries on.", "type": "integer", "minimum": 500, "default": 5000 },
-        "zeroDataRetention": { "description": "Ask OpenRouter to route only to providers that retain no data (provider.zdr). If none serves the model, calls fail and are recorded with the reason.", "type": "boolean", "default": true }
       }
     },
     "segwi": {
@@ -367,11 +341,11 @@
     },
     "mods": {
       "description": "Which Claude Code mods the installer installs.",
-      "why": "Claude Code can load two optional extras: the run pane, which shows where a run stands beside the chat, and the command fixer, which repairs shell commands that would otherwise fail.",
+      "why": "Claude Code can load an optional extra: the run pane, which shows where a run stands beside the chat.",
       "scope": "Claude Code only",
       "type": "array",
-      "items": { "type": "string", "enum": ["run-pane", "command-fixer"] },
-      "default": ["run-pane", "command-fixer"]
+      "items": { "type": "string", "enum": ["run-pane"] },
+      "default": ["run-pane"]
     }
   }
 }

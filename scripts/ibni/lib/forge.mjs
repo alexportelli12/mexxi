@@ -1,5 +1,5 @@
 // The code forge a repository lives on: where its pull requests (GitLab: merge
-// requests), CI state, issues and media URLs come from. GitHub goes through
+// requests), CI state and media URLs come from. GitHub goes through
 // `gh`, GitLab through `glab api`. Detection never guesses: a remote on a host
 // that is neither known nor mapped in forge.hosts has no forge, and every
 // caller that needs one fails or skips with the reason.
@@ -13,6 +13,9 @@ const KNOWN_HOSTS = { "github.com": "github", "gitlab.com": "gitlab" };
 const SSH_ENDPOINTS = { "ssh.github.com": "github.com", "altssh.gitlab.com": "gitlab.com" };
 const LABELS = { github: "GitHub", gitlab: "GitLab" };
 const CHANGE_STATES = new Set(["OPEN", "MERGED", "CLOSED"]);
+// gh's check buckets; GitLab job statuses are mapped onto them.
+const BUCKETS = new Set(["pass", "fail", "pending", "skipping", "cancel"]);
+const NO_CHECKS = /no checks reported/i;
 
 // A remote URL as host and repository path, or null for a local path or a form
 // that names no host. GitLab paths may hold nested groups (group/sub/repo). An
@@ -39,14 +42,6 @@ export async function configuredRemoteRepository(root, remote) {
     if (value) return parseRemoteUrl(value);
   }
   return null;
-}
-
-// The push remote's github.com repository as owner/repo, or null. Jev triage
-// matches only this, so a self-hosted forge's names never collide with it.
-export async function configuredGithubRepository(root, remote) {
-  const parsed = await configuredRemoteRepository(root, remote);
-  if (parsed?.host !== "github.com" || parsed.namespace.includes("/")) return null;
-  return { owner: parsed.namespace, repo: parsed.repo };
 }
 
 // "forge" in the repository's committed .mexxi.json, read from the base commit
@@ -160,7 +155,7 @@ function githubForge({ host, namespace: owner, repo }) {
     // The pull request's state (OPEN, MERGED or CLOSED), merge commit, head
     // branch and head commit; fields gh does not report are null.
     async changeRequest(root, url) {
-      const result = await gh(root, ["pr", "view", url, "--json", "state,mergeCommit,headRefName,headRefOid"]);
+      const result = await gh(root, ["pr", "view", url, "--json", "state,mergeCommit,headRefName,headRefOid,baseRefName"]);
       const parsed = parseJson(result.stdout, "gh");
       if (!CHANGE_STATES.has(parsed?.state)) throw new WorkspaceError(`unexpected gh output: ${result.stdout.trim()}`);
       const oid = parsed.mergeCommit?.oid;
@@ -169,7 +164,57 @@ function githubForge({ host, namespace: owner, repo }) {
         mergeCommit: typeof oid === "string" && /^[0-9a-f]+$/i.test(oid) ? oid : null,
         headBranch: typeof parsed.headRefName === "string" ? parsed.headRefName : null,
         headSha: typeof parsed.headRefOid === "string" ? parsed.headRefOid : null,
+        baseBranch: typeof parsed.baseRefName === "string" ? parsed.baseRefName : null,
       };
+    },
+    // The pull request's checks as { name, bucket, link, workflow }, bucket
+    // being gh's pass, fail, pending, skipping or cancel. gh exits 8 while
+    // checks are pending and 1 when one failed, and still prints them.
+    async checks(root, url) {
+      const result = await run("gh", ["pr", "checks", url, "--json", "name,state,bucket,link,workflow"], { cwd: root, timeout: 60_000, allowedExitCodes: [0, 1, 8] }).catch((error) => {
+        if (NO_CHECKS.test(error.stderr ?? "")) return { stdout: "[]" };
+        throw error;
+      });
+      if (NO_CHECKS.test(result.stderr ?? "")) return [];
+      return parseArray(result.stdout.trim() || "[]", "gh").map((item) => ({
+        name: String(item?.name ?? "?"), bucket: BUCKETS.has(item?.bucket) ? item.bucket : "pending",
+        link: typeof item?.link === "string" ? item.link : null, workflow: typeof item?.workflow === "string" ? item.workflow : null,
+      }));
+    },
+    // Blocks until the checks finish or timeoutMs passes; the result is read
+    // with checks() afterwards, since --watch cannot print JSON. A failing
+    // check does not stop the watch (no --fail-fast), so every failure of the
+    // round is known before a fix starts.
+    async watchChecks(root, url, timeoutMs) {
+      await run("gh", ["pr", "checks", url, "--watch", "--interval", "30"], { cwd: root, timeout: timeoutMs, allowedExitCodes: [0, 1, 8] }).catch(() => {});
+    },
+    // The end of a failed GitHub Actions job's log, or null for a check that
+    // is not an Actions job (an external status has no log to fetch).
+    async failedLog(root, check) {
+      const job = check.link?.match(/\/actions\/runs\/\d+\/job\/(\d+)/);
+      if (!job) return null;
+      const result = await gh(root, ["run", "view", "--job", job[1], "--log-failed", "--repo", repository], 120_000);
+      return result.stdout;
+    },
+    // How much discussion the pull request holds, and the commands that read
+    // it; the counts are null when gh cannot report them.
+    async discussion(root, url) {
+      const number = url.match(/\/pull\/(\d+)/)?.[1];
+      const commands = [`gh pr view ${url} --comments`, `gh api repos/${owner}/${repo}/pulls/${number}/comments --paginate${host === "github.com" ? "" : ` --hostname ${host}`}`];
+      try {
+        const parsed = parseJson((await gh(root, ["pr", "view", url, "--json", "comments,reviews"])).stdout, "gh");
+        return { comments: Array.isArray(parsed?.comments) ? parsed.comments.length : null, reviews: Array.isArray(parsed?.reviews) ? parsed.reviews.length : null, commands };
+      } catch {
+        return { comments: null, reviews: null, commands };
+      }
+    },
+    async retarget(root, url, branch) {
+      await gh(root, ["pr", "edit", url, "--base", branch], 60_000);
+    },
+    // The merged pull request whose head is branch, if any.
+    async mergedRequestFor(root, branch) {
+      const list = parseArray(await ghRepo(root, ["pr", "list", "--head", branch, "--state", "merged", "--json", "url", "--limit", "1"]), "gh");
+      return list[0]?.url ?? null;
     },
     // Runs of the named check on sha, normalised to GitHub's check-run fields.
     // On github.com (including an SSH alias for it) gh fills {owner}/{repo}
@@ -186,19 +231,6 @@ function githubForge({ host, namespace: owner, repo }) {
         url: item?.html_url ?? null, completedAt: item?.completed_at ?? null,
       }));
     },
-    async ensureLabel(root, { name, color, description }) {
-      const labels = parseArray(await ghRepo(root, ["label", "list", "--limit", "200", "--json", "name"]), "gh");
-      if (!labels.some((label) => label.name === name)) {
-        await ghRepo(root, ["label", "create", name, "--color", color, "--description", description]);
-      }
-    },
-    async issueTitles(root, label) {
-      const issues = parseArray(await ghRepo(root, ["issue", "list", "--label", label, "--state", "all", "--limit", "500", "--json", "title"]), "gh");
-      return issues.map((issue) => issue.title);
-    },
-    async createIssue(root, { title, label, body }) {
-      return ghRepo(root, ["issue", "create", "--title", title, "--label", label, "--body", body]);
-    },
     rawFileUrl(commit, file) {
       return `https://${host}/${owner}/${repo}/blob/${commit}/${encodePath(file)}?raw=true`;
     },
@@ -211,16 +243,22 @@ const GITLAB_STATES = { opened: "OPEN", locked: "OPEN", merged: "MERGED", closed
 // Finished GitLab commit statuses, as GitHub check-run conclusions; any other
 // status (pending, running, created, manual) is a run still in progress.
 const GITLAB_CONCLUSIONS = { success: "success", failed: "failure", canceled: "cancelled", skipped: "skipped" };
+const GITLAB_BUCKETS = { success: "pass", failed: "fail", canceled: "cancel", skipped: "skipping", manual: "skipping" };
 const PAGE_SIZE = 100;
-const MAX_PAGES = 5;
+
+function mergeRequestParts(url) {
+  const match = url.match(GITLAB_MERGE_REQUEST);
+  if (!match) throw new WorkspaceError(`not a GitLab merge request URL: ${url}`);
+  return { urlHost: match[1], projectPath: match[2], iid: match[3] };
+}
 
 function gitlabForge({ host, namespace, repo }) {
   const project = `projects/${encodeURIComponent(`${namespace}/${repo}`)}`;
   // Every call names the host and project, so glab never guesses them from
   // another remote. -f sends a field as a string, never reading @file.
-  const call = async (root, apiHost, endpoint, fields = {}) => {
+  const call = async (root, apiHost, endpoint, fields = {}, method = Object.keys(fields).length ? "POST" : null) => {
     const args = ["api", "--hostname", apiHost];
-    if (Object.keys(fields).length) args.push("--method", "POST");
+    if (method) args.push("--method", method);
     args.push(endpoint);
     for (const [key, value] of Object.entries(fields)) args.push("-f", `${key}=${value}`);
     return cleanOutput(await run("glab", args, { cwd: root, timeout: 60_000 }));
@@ -233,9 +271,7 @@ function gitlabForge({ host, namespace, repo }) {
     cli: "glab",
     host,
     async changeRequest(root, url) {
-      const match = url.match(GITLAB_MERGE_REQUEST);
-      if (!match) throw new WorkspaceError(`not a GitLab merge request URL: ${url}`);
-      const [, urlHost, projectPath, iid] = match;
+      const { urlHost, projectPath, iid } = mergeRequestParts(url);
       const parsed = await api(root, urlHost, `projects/${encodeURIComponent(projectPath)}/merge_requests/${iid}`);
       const state = GITLAB_STATES[parsed?.state];
       if (!state) throw new WorkspaceError(`unexpected glab output: ${JSON.stringify(parsed)}`);
@@ -246,7 +282,49 @@ function gitlabForge({ host, namespace, repo }) {
         mergeCommit: merge ?? null,
         headBranch: typeof parsed.source_branch === "string" ? parsed.source_branch : null,
         headSha: typeof parsed.sha === "string" ? parsed.sha : null,
+        baseBranch: typeof parsed.target_branch === "string" ? parsed.target_branch : null,
       };
+    },
+    // The jobs of the merge request's head pipeline, as gh's check buckets.
+    // A job allowed to fail never fails the request, as GitLab shows it.
+    async checks(root, url) {
+      const { urlHost, projectPath, iid } = mergeRequestParts(url);
+      const request = await api(root, urlHost, `projects/${encodeURIComponent(projectPath)}/merge_requests/${iid}`);
+      const pipeline = request?.head_pipeline?.id;
+      if (!pipeline) return [];
+      const jobs = await list(root, urlHost, `projects/${encodeURIComponent(projectPath)}/pipelines/${pipeline}/jobs?per_page=${PAGE_SIZE}`);
+      return jobs.map((job) => ({
+        name: String(job?.name ?? "?"),
+        bucket: job?.status === "failed" && job?.allow_failure ? "pass" : GITLAB_BUCKETS[job?.status] ?? "pending",
+        link: typeof job?.web_url === "string" ? job.web_url : null,
+        workflow: typeof job?.stage === "string" ? job.stage : null,
+        id: job?.id ?? null,
+      }));
+    },
+    async failedLog(root, check) {
+      if (!check.id || !check.link) return null;
+      const { host: urlHost, projectPath } = check.link.match(/^https?:\/\/(?<host>[^/]+)\/(?<projectPath>.+?)\/-\/jobs\/\d+/)?.groups ?? {};
+      if (!urlHost) return null;
+      return call(root, urlHost, `projects/${encodeURIComponent(projectPath)}/jobs/${check.id}/trace`);
+    },
+    async discussion(root, url) {
+      const { urlHost, projectPath, iid } = mergeRequestParts(url);
+      const endpoint = `projects/${encodeURIComponent(projectPath)}/merge_requests/${iid}`;
+      const commands = [`glab mr view ${iid} --comments --repo ${projectPath}`, `glab api --hostname ${urlHost} ${endpoint}/discussions?per_page=100`];
+      try {
+        const notes = await list(root, urlHost, `${endpoint}/notes?per_page=${PAGE_SIZE}`);
+        return { comments: notes.filter((note) => !note?.system).length, reviews: null, commands };
+      } catch {
+        return { comments: null, reviews: null, commands };
+      }
+    },
+    async retarget(root, url, branch) {
+      const { urlHost, projectPath, iid } = mergeRequestParts(url);
+      await call(root, urlHost, `projects/${encodeURIComponent(projectPath)}/merge_requests/${iid}`, { target_branch: branch }, "PUT");
+    },
+    async mergedRequestFor(root, branch) {
+      const merged = await list(root, host, `${project}/merge_requests?source_branch=${encodeURIComponent(branch)}&state=merged&per_page=1`);
+      return merged[0]?.web_url ?? null;
     },
     // The latest commit statuses (pipeline jobs and external statuses) named
     // check, normalised to GitHub's check-run fields.
@@ -260,24 +338,6 @@ function gitlabForge({ host, namespace, repo }) {
           url: item?.target_url ?? null, completedAt: item?.finished_at ?? null,
         };
       });
-    },
-    async ensureLabel(root, { name, color, description }) {
-      const labels = await list(root, host, `${project}/labels?search=${encodeURIComponent(name)}&per_page=${PAGE_SIZE}`);
-      if (!labels.some((label) => label.name === name)) {
-        await api(root, host, `${project}/labels`, { name, color: `#${color}`, description });
-      }
-    },
-    async issueTitles(root, label) {
-      const titles = [];
-      for (let page = 1; page <= MAX_PAGES; page += 1) {
-        const issues = await list(root, host, `${project}/issues?labels=${encodeURIComponent(label)}&state=all&per_page=${PAGE_SIZE}&page=${page}`);
-        titles.push(...issues.map((issue) => issue.title));
-        if (issues.length < PAGE_SIZE) break;
-      }
-      return titles;
-    },
-    async createIssue(root, { title, label, body }) {
-      return (await api(root, host, `${project}/issues`, { title, labels: label, description: body })).web_url;
     },
     rawFileUrl(commit, file) {
       return `https://${host}/${namespace}/${repo}/-/raw/${commit}/${encodePath(file)}`;

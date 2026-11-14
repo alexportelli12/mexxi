@@ -1,6 +1,6 @@
 // Claude Code's settings.json belongs to the user, so the installer merges only
 // what it owns: the production deny rules from config.json, the Bash timeout
-// cap, transcript retention and the guard and loop-breaker hooks. A state file
+// cap, transcript retention and the guard and post-tool hooks. A state file
 // records exactly which deny entries, env keys, top-level keys and hook groups
 // were added, so a later config change removes only those, and `install --check` can tell a hand-removed owned entry
 // from the user's own settings.

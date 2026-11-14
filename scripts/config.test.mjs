@@ -29,15 +29,16 @@ test("a missing config.json means every default, with ~ expanded", async (t) => 
   assert.deepEqual(config.hosts, { opencode: true, claude: true, codex: true });
   // Portable defaults: every role inherits the host's model, Playwright picks
   // its own browser, and only publishing, merges and force pushes are denied.
-  assert.deepEqual(config.models.opencode, { general: null, explore: null, uiDesigner: null, reviewer: null, crossFamilyReviewer: null });
+  assert.deepEqual(config.models.opencode, { general: null, explore: null, uiDesigner: null, reviewer: null });
   assert.equal(config.models.claude.reviewer, null);
   assert.equal(config.browser.executablePath, null);
   assert.equal(config.review.tool, "ocr");
   assert.deepEqual(config.guard.deny, ["npm publish", "gh pr merge", "gh release create", "git push --force", "git push -f"]);
   assert.equal(config.workflow.branchPrefix, "agent/");
   assert.deepEqual(config.workflow.viewports, [1440, 768, 390]);
-  assert.equal(config.jev.enabled, false);
-  assert.deepEqual(config.mods, ["run-pane", "command-fixer"]);
+  // Catches: prepare pruning abandoned workspaces after another age, or never.
+  assert.equal(config.workflow.pruneAfterDays, 14);
+  assert.deepEqual(config.mods, ["run-pane"]);
 });
 
 test("a user sets only what differs: objects merge, arrays and null replace", async () => {
@@ -64,8 +65,7 @@ test("validation names every invalid key", async () => {
     paths: { worktreeRoot: "relative" },
     hosts: { opencode: "yes" },
     models: { claude: { explore: "haiku" } },
-    workflow: { branchPrefix: "agent", viewports: [100], ports: { last: 70000 } },
-    jev: { maxPayloadBytes: 1.5 },
+    workflow: { branchPrefix: "agent", viewports: [100], ports: { last: 70000, blockSize: 1.5 }, pruneAfterDays: 0 },
     mods: ["unknown"],
     review: { tool: "codex" },
     browser: { executablePath: "chromium" },
@@ -80,8 +80,9 @@ test("validation names every invalid key", async () => {
       /config\.workflow\.branchPrefix: does not match/,
       /config\.workflow\.viewports\[0\]: below 200/,
       /config\.workflow\.ports\.last: above 65535/,
-      /config\.jev\.maxPayloadBytes: expected integer, got number/,
-      /config\.mods\[0\]: expected one of run-pane, command-fixer/,
+      /config\.workflow\.ports\.blockSize: expected integer, got number/,
+      /config\.workflow\.pruneAfterDays: below 1/,
+      /config\.mods\[0\]: expected one of run-pane$/m,
       /config\.review\.tool: expected one of ocr, none/,
       /config\.browser\.executablePath: does not match/,
       /config\.extra: unknown key/,
@@ -103,15 +104,6 @@ test("the first-run file records only the clone's location", async (t) => {
   const { exists, config } = await loadConfig({ file, home });
   assert.equal(exists, true);
   assert.equal(config.paths.checkout, path.join(home, "code/mexxi"));
-});
-
-test("Jev's endpoint, which receives the API key, must be HTTPS unless it is on loopback", async () => {
-  for (const endpoint of ["http://openrouter.ai/api/alpha/decisions", "http://localhost.example.com/x", "http://127.0.0.1.example.com/x", "ftp://openrouter.ai/x"]) {
-    await assert.rejects(resolveConfig({ jev: { endpoint } }, { home }), /config\.jev\.endpoint: does not match/, endpoint);
-  }
-  for (const endpoint of ["https://openrouter.ai/api/alpha/decisions", "http://127.0.0.1:4100/api/alpha/decisions", "http://localhost/x", "http://[::1]:8080/x"]) {
-    assert.equal((await resolveConfig({ jev: { endpoint } }, { home })).jev.endpoint, endpoint);
-  }
 });
 
 test("workflow.ports must not be empty, counting the defaults", async () => {
@@ -142,4 +134,21 @@ test("forge.hosts maps any hostname to github or gitlab, and nothing else", asyn
     return true;
   });
   await assert.rejects(resolveConfig({ forge: { hosts: { "git.example.com": 1 } } }, { home }), /config\.forge\.hosts\.git\.example\.com: expected string, got integer/);
+});
+
+// Break caught: an upgrade that makes a config with retired keys (decisions 0021
+// and 0022) fail to load, or drops them without naming each one to delete.
+test("a config with keys retired by 0021 and 0022 still loads, ignores them and names each one", async (t) => {
+  const file = await temporaryFile(t, JSON.stringify({
+    jev: { enabled: true },
+    models: { claude: { reviewer: "opus", crossFamilyReviewer: "gpt" }, opencode: { crossFamilyReviewer: "x/y" } },
+    guard: { blockUnquotedGlobs: true, deny: ["npm publish"] },
+    mods: ["run-pane", "command-fixer"],
+  }));
+  const { config, retired } = await loadConfig({ file, home });
+  assert.deepEqual(retired.sort(), ["guard.blockUnquotedGlobs", "jev", "models.claude.crossFamilyReviewer", "models.opencode.crossFamilyReviewer", 'mods: "command-fixer"'].sort());
+  assert.equal(config.models.claude.reviewer, "opus");
+  assert.deepEqual(config.guard.deny, ["npm publish"]);
+  assert.deepEqual(config.mods, ["run-pane"]);
+  assert.equal("jev" in config, false);
 });

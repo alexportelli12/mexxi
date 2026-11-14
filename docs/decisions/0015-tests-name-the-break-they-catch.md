@@ -1,5 +1,5 @@
 ---
-status: Accepted
+status: Accepted; extended by 0025
 date: 2026-10-23
 ---
 

@@ -12,8 +12,7 @@ sources:
   - docs/decisions/*.md
   - config.schema.json
   - scripts/ibni/commands/record-evidence.mjs
-  - scripts/ibni/commands/cross-review.mjs
-reviewed: 2026-10-25
+reviewed: 2026-11-14
 ---
 
 # The ideas behind mexxi
@@ -60,9 +59,9 @@ You get before and after screenshots near the top of the pull request, and what 
 
 The author grading their own work is not a review. An agent that reviews its own change tends to approve it, and one that also fixes what it finds turns review into more building.
 
-For substantial changes, a separate reviewer agent judges the finished work; the building agent decides what counts, and a one-line fix skips it. The reviewer cannot edit code, so it only reports. If you set it up, it runs on a model from another [model family](glossary.md#model-family), such as an OpenAI model when Claude wrote the code. Then it does not share the builder's blind spots. The review itself always runs for substantial changes; only the cross-family model is off by default. On Claude Code it needs Codex installed and `models.claude.crossFamilyReviewer` set; on OpenCode, `models.opencode.crossFamilyReviewer`. On Codex the review is always from the same family. [Configuration](configuration/index.md#get-a-reviewer-from-another-model-family) shows how to set it up. The proof is still your checks and the browser; the review is an extra opinion on top.
+For substantial changes, a separate reviewer agent judges the finished work; the building agent decides what counts, and a one-line fix skips it. The reviewer cannot edit code, so it only reports. It works from the diff and a short note of the requirements, never the builder's reasoning. Each finding carries a grade, and a serious one has to show its proof, such as an input that breaks. The run fixes the proven defects, and small points only on lines it already changed. The rest wait in a short list in the pull request, so review does not turn into endless polish. The proof is still your checks and the browser; the review is an extra opinion on top.
 
-The evidence shows `review ✓`, with a note when the reviewer came from the same model family as the builder. When no review ran, the evidence says so and the merge call is marked "(self-assessed)". [Decision 0007](decisions/0007-implementers-implement-reviewers-judge.md)
+The evidence shows `review ✓`. When no review ran, the evidence says so and the merge call is marked "(self-assessed)". [Decision 0007](decisions/0007-implementers-implement-reviewers-judge.md) and [decision 0022](decisions/0022-retire-jev-and-cross-family-review.md)
 
 ## The pull request's first screen does the explaining
 
@@ -76,6 +75,6 @@ Most people can review the pull request in about a minute. [Reviewing a mexxi pu
 
 An agent that gets stuck occasionally does something destructive: a force push, a merge, a retry of the same failing command twenty times.
 
-The rules forbid merging, force pushing and pushing to the default branch. A [guard](glossary.md#guard) hook backs some of them up by blocking those commands. The [loop breaker](glossary.md#loop-breaker) tells the agent to stop and rethink when the same command fails a third time. The rules still bind where the guard cannot see.
+The rules forbid merging, force pushing and pushing to the default branch. A [guard](glossary.md#guard) hook backs some of them up by blocking those commands. It backs up the everyday shell rules too: a command that would fail for an avoidable reason comes back with the corrected command, never silently rewritten. The [loop breaker](glossary.md#loop-breaker) tells the agent to stop and rethink when the same command fails a third time. The rules still bind where the guard cannot see.
 
-Mostly you notice nothing: the agent never merges, never pushes to your main branch, and stops to report rather than forcing its way through. [Decision 0006](decisions/0006-rules-stay-rules-guard-backs-up.md)
+Mostly you notice nothing: the agent never merges, never pushes to your main branch, and stops to report rather than forcing its way through. [Decision 0006](decisions/0006-rules-stay-rules-guard-backs-up.md) and [decision 0021](decisions/0021-hooks-refuse-with-the-fix.md)

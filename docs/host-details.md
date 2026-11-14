@@ -5,7 +5,7 @@ sources:
   - scripts/lib/claude-mods.mjs
   - scripts/lib/browser.mjs
   - scripts/lib/host-hooks.mjs
-reviewed: 2026-10-24
+reviewed: 2026-11-14
 ---
 
 # Host details
@@ -13,7 +13,7 @@ reviewed: 2026-10-24
 mexxi works with the coding agent you already use, so you need not switch tools to get it. The installer sets up Claude Code, Codex and OpenCode from the same shared files, so a change to the workflow reaches all three. What differs is what each one adds, how it takes its settings, and the step or two you take after installing.
 
 - **OpenCode** reads the shared commands, skills and agents. Its config is rendered from yours.
-- **Claude Code** adds a pane beside the chat that shows where the run stands, and fixes shell commands that would otherwise fail, such as unquoted globs.
+- **Claude Code** adds a pane beside the chat that shows where the run stands.
 - **Codex** runs commands as `$mexxi-…` skills, with a reviewer that can only read.
 
 ## Claude Code
@@ -45,4 +45,9 @@ The output directory stays the worktree root, not a folder inside it. The server
 
 Claude Code and Codex run `scripts/hooks/guard.mjs` before every shell command, and OpenCode runs the same code through a plugin. Codex runs it only once you trust it in `/hooks`. The rules in `AGENTS.md` are what bind the agent; the guard is a backup for some of them, not a substitute. A command it lets through is not thereby allowed. A refusal reaches the agent as the tool's error, with the reason.
 
-A second hook, the [loop breaker](glossary.md#loop-breaker), tells the agent to re-diagnose when the same shell command fails a third time.
+The guard also backs up the everyday shell rules. A command that would fail or mislead for an avoidable reason comes back with the corrected command, and the guard never rewrites one itself. [Decision 0021](decisions/0021-hooks-refuse-with-the-fix.md) explains why. The installer names the host in the guard's command, `--host claude` or `--host codex`, and OpenCode's plugin passes `opencode`. Two of these refusals depend on the host:
+
+- A foreground `until` or `while` loop around `sleep` is refused only on Claude Code, which can run the loop in the background or stream with Monitor.
+- Reading a worktree file with `cat`, `head`, `tail` or `sed -n` is refused on Claude Code and OpenCode, which have a read tool. Codex has none, so it keeps using the shell.
+
+A second hook, `post-tool.mjs`, runs after each tool call. Its [loop breaker](glossary.md#loop-breaker) tells the agent to re-diagnose when the same shell command fails a third time. The first time a session edits a test file, it tells the agent to load `test-design`, because runs often skipped it ([decision 0025](decisions/0025-test-design-loads-on-first-test-edit.md)).

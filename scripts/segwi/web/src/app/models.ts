@@ -47,7 +47,7 @@ export interface IbniSnapshot {
   createdAt?: string;
   steps: { step: string; outcome: string; durationMs?: number; endedAt?: string }[];
   verify?: { attempts: number; passed: number; failed: number; history: { outcome: string; at?: string }[] };
-  review?: { rounds: number; findings: number; byReviewer?: { cross?: { rounds: number } } };
+  review?: { rounds: number; findings: number };
   qa?: { rounds: number; findings: number };
   /** Set when the workspace tool stopped answering after the run had a workspace. */
   error?: string;

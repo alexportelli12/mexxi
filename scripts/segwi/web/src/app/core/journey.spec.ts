@@ -21,7 +21,7 @@ describe('journey view', () => {
     expect(view.onStage).toBe('12m on Build the change');
   });
 
-  it('reads a red verify as needing attention, and a cross-family review from the server\'s byReviewer', () => {
+  it('reads a red verify as needing attention, and a review as its passes and findings', () => {
     const verify = { attempts: 2, passed: 1, failed: 1, history: [{ outcome: 'pass', at: '2026-01-01T10:05:00Z' }, { outcome: 'fail', at: '2026-01-01T10:09:00Z' }] };
     const red = journeyView('r1', { ...base, verify }, at('2026-01-01T10:10:00Z'))!;
     expect(red.headline).toEqual({ label: 'NEEDS ATTENTION', tone: 'error' });
@@ -29,9 +29,9 @@ describe('journey view', () => {
 
     const reviewed = journeyView('r1', {
       ...base, verify: { ...verify, history: [...verify.history, { outcome: 'pass', at: '2026-01-01T10:20:00Z' }] },
-      review: { rounds: 1, findings: 2, byReviewer: { cross: { rounds: 1 } } },
+      review: { rounds: 1, findings: 2 },
     }, at('2026-01-01T10:30:00Z'))!;
-    expect(reviewed.stages.find((stage) => stage.key === 'review')?.detail).toBe('1 pass · 2 findings · cross-family');
+    expect(reviewed.stages.find((stage) => stage.key === 'review')?.detail).toBe('1 pass · 2 findings');
   });
 
   it('says the workspace tool is offline when the server could not reach it', () => {

@@ -68,7 +68,6 @@ Coding agents load their instructions as *commands* you type, *agents* they can 
 - **`ibni`**, which takes each task's worktree from `prepare` to `publish`, with step timings.
 - **Guardrails**: rules forbid force pushes and merges, and a guard hook backs them up. When one command fails a third time, the agent must stop and rethink.
 - **Retrospectives**: `/irrifletti` measures how recent sessions went, privately, on your machine.
-- **One experiment**: Jev triage, which asks an outside model which checks a task needs and only records the answer. It sends metadata, never code, and is off unless you turn it on.
 
 The same files serve Claude Code, Codex and OpenCode; [Host details](https://alexportelli12.github.io/mexxi/docs/host-details.html) says what each one adds.
 

@@ -3,9 +3,8 @@
 // in commands/, and the Git, locking, metadata and config helpers they share in lib/.
 import { pathToFileURL } from "node:url";
 import { adoptWorkspace } from "./commands/adopt.mjs";
+import { DEFAULT_CI_TIMEOUT_MINUTES, waitForCi } from "./commands/ci-wait.mjs";
 import { cleanupWorkspaces } from "./commands/cleanup.mjs";
-import { crossReview } from "./commands/cross-review.mjs";
-import { fileQaChecks } from "./commands/file-qa-checks.mjs";
 import { workspaceInfo } from "./commands/info.mjs";
 import { listWorkspaces } from "./commands/list.mjs";
 import { markPullRequest } from "./commands/mark-pr.mjs";
@@ -16,7 +15,6 @@ import { recordGate } from "./commands/record.mjs";
 import { recordEvidence } from "./commands/record-evidence.mjs";
 import { setupWorkspace } from "./commands/setup.mjs";
 import { workspaceStats } from "./commands/stats.mjs";
-import { triageSession } from "./commands/triage.mjs";
 import { synchronizeWorkspace } from "./commands/sync.mjs";
 import { verifyWorkspace } from "./commands/verify.mjs";
 import { WorkspaceError } from "./lib/errors.mjs";
@@ -25,9 +23,8 @@ import { recordStep } from "./lib/timings.mjs";
 
 export {
   adoptWorkspace,
+  waitForCi,
   cleanupWorkspaces,
-  crossReview,
-  fileQaChecks,
   listWorkspaces,
   markPullRequest,
   prepareWorkspace,
@@ -37,7 +34,6 @@ export {
   recordGate,
   setupWorkspace,
   synchronizeWorkspace,
-  triageSession,
   verifyWorkspace,
   workspaceInfo,
   workspaceStats,
@@ -58,7 +54,8 @@ export const COMMANDS = {
     why: "An agent working in your checkout trips over your own work and over other tasks, so each task starts in its own worktree.",
     details: [
       "Run from the repository's clean primary checkout on its default branch. Fast-forwards it,",
-      "sweeps retained workspaces whose pull requests are proven merged, then creates a locked",
+      "sweeps retained workspaces as ibni cleanup --dry-run false would (merged pull requests, and idle ones",
+      "past workflow.pruneAfterDays), reporting each removal's reason, then creates a locked",
       "worktree, its evidenceDir and a free block of ports (workflow.ports in config.json), chosen under",
       "a machine-wide lock so no two workspaces in any repository share one. port is the block's first;",
       "portEnv is what setup and verify get: PORT, MEXXI_PORT_0..<blockSize-1>, and the variables",
@@ -78,6 +75,7 @@ export const COMMANDS = {
       "run, so the local baseline verify can be skipped; otherwise baseline says why it runs.",
       "forge is github or gitlab, from the push remote's host, forge.hosts in config.json or",
       "\"forge\" in .mexxi.json; null when none is known, and forgeReason then says why.",
+      "The workspace gets a runId, kept across adopt, that names the run in the run log.",
       "Prints sessionId, worktreePath, branch, baseSha, forge, evidenceDir, port, ports, portEnv, verifyCommand, baseline, setup, warmCaches, provisionedEnv and cleanup.",
     ],
     options: {
@@ -114,7 +112,9 @@ export const COMMANDS = {
       "result belongs to one committed tree. Before the first commit the tree is baseSha's, so this is",
       "the baseline run; when prepare reported baseline.reused, that CI run is recorded instead",
       "(reused) and nothing runs. The command gets the workspace's portEnv, and ibni refuses to start it",
-      "while any port of the block is bound, so a test server never fails half-way on a taken port.",
+      "while any port of the block is bound, so a test server never fails half-way on a taken port; the",
+      "refusal names what holds each port (from ss, or lsof where ss cannot see it), as holders [{port, pid,",
+      "command}], or null with the reason when neither can say.",
       "At most workflow.verifySlots setup and verify runs go at once on this machine, in any repository;",
       "the rest wait for a free slot, listed in <worktreeRoot>/.ibni/slots/queue, and report it as queuedMs.",
       "Where systemd-run --user works, the run is a transient scope (workflow.scope: CPUWeight, MemoryMax);",
@@ -139,7 +139,18 @@ export const COMMANDS = {
     usage: "ibni sync --session <id>",
     summary: "Integrate the latest default branch into the session's branch.",
     why: "The default branch moves on while a task runs, so the task's branch has to catch up without losing work; on a conflict it stops and changes nothing.",
-    details: ["Rebases unpublished work, merges into published work, and aborts cleanly on conflict.", SESSION_LOOKUP],
+    details: [
+      "Rebases unpublished work, merges into published work, and aborts cleanly on conflict.",
+      "requiresRevalidation is true only when the integration changed the tree; when it brought in nothing,",
+      "or only what the branch already held, the last verify and evidence still hold.",
+      "For a stacked pull request (its base is another task's branch): once that branch's pull request has",
+      "merged, or the branch is gone, the merge of the default branch above is what takes the lower changes in,",
+      "never a rebase or force push; once that merge is on the remote, the pull request is retargeted at the",
+      "default branch (gh pr edit --base, or the merge request's target branch on GitLab). stack reports it",
+      "(base, retargeted, reason, and nextAction while the merge still needs ibni publish); a pull request that",
+      "is not stacked has no stack field.",
+      SESSION_LOOKUP,
+    ],
     options: { session: "The sessionId from prepare or adopt." },
     timed: true,
     run: (options) => synchronizeWorkspace({ sessionId: options.session }),
@@ -165,6 +176,9 @@ export const COMMANDS = {
       "Returns published: false with a nextAction when evidence is missing or stale, or when",
       "ibni verify has not passed on the tree it would push (requiresVerify: true).",
       "A push failing with an HTTP 5xx from the Git host is retried once.",
+      "When the sync leaves the tree ibni verify passed unchanged (the default branch brought nothing new,",
+      "or only what the branch already held), it pushes on the existing evidence without a second verify.",
+      "After the push, a stacked pull request whose lower one merged is retargeted, as sync describes (stack).",
       SESSION_LOOKUP,
     ],
     options: { session: "The sessionId from prepare or adopt." },
@@ -199,49 +213,37 @@ export const COMMANDS = {
     timed: true,
     run: (options) => markPullRequest({ sessionId: options.session, url: options.url }),
   },
-  "file-qa-checks": {
-    usage: "ibni file-qa-checks --session <id> --from <file>",
-    summary: "File rendered QA's suggested checks as qa-check issues, skipping duplicates.",
-    why: "A browser check that keeps finding the same kind of problem should become an automated test, not be repeated by hand.",
+  "ci-wait": {
+    usage: "ibni ci-wait --session <id> [--timeout-minutes <n>]",
+    summary: "Wait for the pull request's CI checks and report green, or each failure with the end of its log.",
+    why: "A run is done only when CI passes on its pull request, so the agent waits for the checks and fixes what fails instead of leaving that to you.",
     details: [
-      "The file lists one check per line (a leading list marker is dropped); each is an issue title.",
-      "Creates the qa-check label if the repository lacks it, then an issue per check whose title",
-      "(case-insensitive) is not already open or closed under that label. Safe to repeat.",
-      "Prints created (title, url) and skipped titles. Needs an authenticated gh (GitHub) or glab (GitLab).",
+      "Run in the background after mark-pr. Reads the session's recorded pull request and first checks that",
+      "the pull request's head, the remote branch and local HEAD are all the recorded publication; otherwise",
+      "state is stale, with a reason and nextAction, and nothing is waited on. Then waits up to --timeout-minutes",
+      "for the checks to register and finish: GitHub through gh pr checks --watch, GitLab by polling the merge",
+      "request's head pipeline through glab api. Holds no lock while it waits.",
+      "state is green, failed, pending (still running at the timeout), none (the forge reports no checks),",
+      "cancelled or stale. failed lists each failed check (name, url, logTail): the last 60 lines of a failed",
+      "GitHub Actions or GitLab job's log, redacted; a check from another service gives only its url.",
+      "Prints one line of JSON with prUrl, headSha, durationMs and, unless green, nextAction; exits 1 unless green.",
+      "Each wait is recorded, and stats reports ci (waits, rounds that failed, the last state). A wait that",
+      "ends green, failed, none or cancelled also adds a line to the run log, <paths.worktreeRoot>/.ibni/runs.jsonl,",
+      "which outlives the workspace.",
       SESSION_LOOKUP,
     ],
     options: {
       session: "The sessionId from prepare or adopt.",
-      from: "File of checks, one per line.",
+      "timeout-minutes": `How long to wait for the checks; defaults to ${DEFAULT_CI_TIMEOUT_MINUTES}.`,
     },
     timed: true,
-    run: (options) => fileQaChecks({ sessionId: options.session, from: options.from }),
-  },
-  "cross-review": {
-    usage: "ibni cross-review --session <id> --mode <discovery|confirmation> --background <file> --target <text>",
-    summary: "Run the code-reviewer through codex exec in a read-only sandbox (Claude Code only).",
-    why: "A reviewer from the builder's own model family shares its blind spots.",
-    details: [
-      "For Claude Code, whose implementer and reviewer would otherwise share a model family. Runs the",
-      "shared code-reviewer instructions with models.claude.crossFamilyReviewer as the Codex model,",
-      "writes the reviewer's final message to evidenceDir/cross-review-<mode>.md and prints it as review.",
-      "Prints delegated: false with a reason when no model is configured or codex is not installed;",
-      "then use the code-reviewer subagent and state the reason in the pull request's Evidence.",
-      SESSION_LOOKUP,
-    ],
-    options: {
-      session: "The sessionId from prepare or adopt.",
-      mode: "discovery or confirmation, as for code-reviewer.",
-      background: "The background file the reviewer reads first (requirements, and for confirmation the ledger and fixes).",
-      target: "The review target, such as workspace changes against HEAD or a branch range.",
-    },
-    timed: true,
-    run: (options) => crossReview({ sessionId: options.session, mode: options.mode, background: options.background, target: options.target }),
+    failed: (result) => result.state !== "green",
+    run: (options) => waitForCi({ sessionId: options.session, timeoutMinutes: options["timeout-minutes"] }),
   },
   adopt: {
     usage: "ibni adopt --pr <pull-request-url>",
-    summary: "Take over the retained workspace of an open pull request from a new session.",
-    why: "When you continue a pull request from a new session, /wettaq runs this to pick up its worktree, and only when the worktree provably belongs to that pull request.",
+    summary: "Take over the retained workspace of an open pull request from a new session, or report a merged one.",
+    why: "Follow-ups start in a new session with /wettaq and the pull request's link; this picks up its worktree, only when the worktree provably belongs to that pull request, and tells the new session what to read first.",
     details: [
       "Finds the workspace that recorded this pull request, then proves the PR is open, its head",
       "branch is the workspace's branch, and its head commit equals the recorded publication, the",
@@ -251,6 +253,18 @@ export const COMMANDS = {
       "Also reports dependencies (whether the worktree's lockfiles match the last recorded setup;",
       "current null when it predates ibni setup) and verified (whether ibni verify passed on HEAD's",
       "tree), each with a nextAction when not. It never reinstalls or verifies on its own.",
+      "For the follow-up it also prints pr (state, baseBranch, headSha, url), checks (the checks as they stand,",
+      "never waited on: state, total, counts, failed) and reviewComments (comments and reviews counts where the",
+      "forge reports them, the commands that read them, and a nextAction to read them before changing anything).",
+      "A merged pull request is never adopted: it prints merged: true, takes nothing over, and nextAction says",
+      "its post-merge steps run from the control checkout on the updated default branch, with no worktree.",
+      "That works even when the workspace is already cleaned up, for a pull request URL on a known forge.",
+      "It settles what a gone session left behind when the outcome is provable, and reports it: of several",
+      "workspaces recording the URL, the one on the PR's head branch, and on that branch's line when more",
+      "than one is, is adopted (passedOver lists the rest, untouched); a clean worktree behind the PR's head",
+      "(someone pushed to it) is fast-forwarded (fastForwarded); a publish interrupted before or after its",
+      "push lands, or a sync that left HEAD where it started, is cleared (settled). It still refuses",
+      "uncommitted work, local commits the PR lacks, diverged history and any outcome it cannot prove.",
     ],
     options: { pr: "The pull request's URL, exactly as recorded by mark-pr." },
     timed: true,
@@ -281,11 +295,11 @@ export const COMMANDS = {
     run: () => listWorkspaces({}),
   },
   record: {
-    usage: "ibni record --session <id> (--verify <pass|fail> | --review <count> [--accepted <count> --reviewer <same|cross>] | --qa <count> | --before-shots <taken|skipped>)",
+    usage: "ibni record --session <id> (--verify <pass|fail> | --review <count> [--accepted <count>] | --qa <count> | --before-shots <taken|skipped>)",
     summary: "Record a verify run, the finding count of a review or QA pass, or the before-shots decision.",
     why: "The agent records each verify run, browser check and review as it finishes, so ibni stats and /irrifletti can show how runs went.",
     details: [
-      "One result per call; stats reports them and compares the gates with Jev's triage.",
+      "One result per call; stats reports them.",
       "ibni verify records its own runs; --verify is for a host that runs the verify command another",
       "way, and never satisfies the record-evidence or publish gate.",
       SESSION_LOOKUP,
@@ -295,7 +309,6 @@ export const COMMANDS = {
       verify: "Outcome of a full run of the repository's verify command: pass or fail.",
       review: "Number of findings an independent review pass returned.",
       accepted: "With --review: how many of those findings you accepted (fixed).",
-      reviewer: "With --review: same if the reviewer shares your model family, cross if it does not (cross-review delegated).",
       qa: "Number of findings a rendered QA pass returned.",
       "before-shots": "Whether before-shots of existing UI were taken or skipped.",
     },
@@ -306,36 +319,11 @@ export const COMMANDS = {
       qa: options.qa,
       beforeShots: options["before-shots"],
       accepted: options.accepted,
-      reviewer: options.reviewer,
     }),
-  },
-  triage: {
-    usage: "ibni triage --session <id> --request-file <file> --contract-file <file>",
-    summary: "Ask Jev which gates the change needs, and record the answers (shadow: nothing changes).",
-    why: "Experimental: it tests whether an outside decision model would choose a task's checks better than the agent, without letting it change anything.",
-    details: [
-      "Sends one batched request to OpenRouter (jev.endpoint, jev.model) with the request text, the",
-      "task contract, the changed paths and diff stats against baseSha; never file contents, diffs,",
-      "logs, env files or command output. Secrets are redacted first, and the request stays below",
-      "jev.maxPayloadBytes by shortening the path list, then the request, then the contract.",
-      "Runs only when jev.enabled is true, the push remote's github.com repository is listed in",
-      "jev.repositories and owned by one of jev.owners, and OPENROUTER_API_KEY is set.",
-      "Always exits 0 once the session is found: a skip, timeout, 429 (retried once), HTTP error or",
-      "malformed answer prints outcome skipped or failed with a reason, and the run carries on.",
-      "Prints the outcome only; the answers go to session metadata, where stats reports them",
-      "beside the agent's own gate choices.",
-      SESSION_LOOKUP,
-    ],
-    options: {
-      session: "The sessionId from prepare or adopt.",
-      "request-file": "File holding the user's request text.",
-      "contract-file": "File holding the active task contract.",
-    },
-    run: (options) => triageSession({ sessionId: options.session, requestFile: options["request-file"], contractFile: options["contract-file"] }),
   },
   stats: {
     usage: "ibni stats --session <id>",
-    summary: "Print the session's step timings, setup, verify attempts, finding counts and Jev triage as JSON.",
+    summary: "Print the session's step timings, setup, verify attempts and finding counts as JSON.",
     why: "You need to see where a run spent its time and how often its checks failed.",
     details: [
       SESSION_LOOKUP,
@@ -346,10 +334,17 @@ export const COMMANDS = {
   },
   cleanup: {
     usage: "ibni cleanup [--dry-run false]",
-    summary: "Remove workspaces whose pull requests have merged into the default branch.",
-    why: "Kept worktrees take disk space once their pull requests have merged.",
+    summary: "Remove workspaces whose pull requests have merged, and idle ones nobody returns to.",
+    why: "Kept worktrees take disk space once their pull requests have merged, or once their pull requests closed or never opened and nobody came back.",
     details: [
-      "A dry run by default. Keeps a workspace whose pull request is still open, whose worktree has uncommitted changes, that has no recorded pull request, or whose merge it cannot confirm.",
+      "A dry run by default. Removes a workspace whose pull request merged into the default branch, and,",
+      "once idle for workflow.pruneAfterDays (default 14), one with no recorded pull request or whose pull",
+      "request closed unmerged; each result says why. It never removes a worktree with uncommitted changes,",
+      "one with a setup or verify run in progress, one locked by hand, one whose pull request is open, or",
+      "one whose state it cannot determine. A pruned workspace's local branch is deleted only when the remote",
+      "holds all its commits; otherwise it is kept and reported as keptBranch.",
+      "Each removal first adds a line to the run log, <paths.worktreeRoot>/.ibni/runs.jsonl (outcome merged,",
+      "closed or abandoned), since the workspace's own metadata goes with it.",
       "unmanaged lists folders under paths.worktreeRoot that ibni did not make; they are reported, never removed.",
     ],
     options: { "dry-run": "false to remove; anything else only reports." },

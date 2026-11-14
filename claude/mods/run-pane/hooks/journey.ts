@@ -19,8 +19,7 @@ export type RunGate = {
   findings: number
 }
 
-// The fields of `ibni info` and `ibni stats` a run is drawn from; triage is
-// Jev's latest answers (stats' triage.answers), null until one is answered.
+// The fields of `ibni info` and `ibni stats` a run is drawn from.
 export type RunSnapshot = {
   sessionId: string
   branch?: string
@@ -31,9 +30,9 @@ export type RunSnapshot = {
   createdAt?: string
   steps: RunStep[]
   verify?: { attempts: number; passed: number; failed: number; history: { outcome: string; at?: string }[] }
-  review?: RunGate & { crossRounds?: number }
+  review?: RunGate
   qa?: RunGate
-  triage?: Record<string, unknown> | null
+  ci?: { waits: number; rounds: number; state: string | null }
   error?: string
 }
 
@@ -44,13 +43,12 @@ export function record(value: unknown): Json {
 }
 
 // One snapshot from both answers; stats wins where both carry a field, since
-// it is read second. Triage rows are stats' latest Jev answers, absent until
-// a triage call is answered.
+// it is read second.
 export function snapshotFrom(sessionId: string, info: unknown, stats: unknown): RunSnapshot {
   const merged: Json = { ...record(info), ...record(stats) }
   const steps = Array.isArray(merged['steps']) ? merged['steps'].map(record) : []
-  const triage = record(record(stats)['triage'])['answers']
   const review = record(merged['review'])
+  const ci = record(merged['ci'])
   return {
     sessionId,
     branch: typeof merged['branch'] === 'string' ? merged['branch'] : undefined,
@@ -70,11 +68,16 @@ export function snapshotFrom(sessionId: string, info: unknown, stats: unknown): 
       ? {
           rounds: Number(review['rounds'] ?? 0),
           findings: Number(review['findings'] ?? 0),
-          crossRounds: Number(record(record(review['byReviewer'])['cross'])['rounds'] ?? 0),
         }
       : undefined,
     qa: merged['qa'] as RunSnapshot['qa'],
-    triage: triage && typeof triage === 'object' ? (triage as Record<string, unknown>) : null,
+    ci: merged['ci']
+      ? {
+          waits: Number(ci['waits'] ?? 0),
+          rounds: Number(ci['rounds'] ?? 0),
+          state: typeof ci['state'] === 'string' ? ci['state'] : null,
+        }
+      : undefined,
   }
 }
 
@@ -97,9 +100,9 @@ export function journey(run: RunSnapshot): Stage[] {
   const lastVerify = verify?.history.at(-1)?.outcome
   const lastDelivery = [...run.steps].reverse().find(step => step.step === 'publish' || step.step === 'mark-pr')
   const ready = run.steps.some(step => (step.step === 'prepare' || step.step === 'adopt') && step.outcome === 'succeeded') || Boolean(run.worktreePath)
-  const gate = (key: string, label: string, gateRun: RunSnapshot['qa'], extra = ''): Stage =>
+  const gate = (key: string, label: string, gateRun: RunSnapshot['qa']): Stage =>
     gateRun && gateRun.rounds > 0
-      ? { key, label, state: 'done', detail: `${plural(gateRun.rounds, 'pass')} · ${plural(gateRun.findings, 'finding')}${extra}` }
+      ? { key, label, state: 'done', detail: `${plural(gateRun.rounds, 'pass')} · ${plural(gateRun.findings, 'finding')}` }
       : { key, label, state: delivered ? 'skipped' : 'pending', detail: delivered ? 'not run' : undefined }
 
   const stages: Stage[] = [
@@ -114,7 +117,7 @@ export function journey(run: RunSnapshot): Stage[] {
         }
       : { key: 'verify', label: 'Verify', state: 'pending' },
     gate('qa', 'Rendered QA', run.qa),
-    gate('review', 'Independent review', run.review, run.review?.crossRounds ? ' · cross-family' : ''),
+    gate('review', 'Independent review', run.review),
     run.prUrl
       ? { key: 'pr', label: 'Pull request', state: 'done', detail: `#${run.prUrl.split('/').at(-1)} open` }
       : lastDelivery && lastDelivery.outcome !== 'succeeded'

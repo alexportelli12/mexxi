@@ -1,7 +1,7 @@
 ---
 sources:
   - scripts/install.mjs
-reviewed: 2026-10-25
+reviewed: 2026-11-14
 ---
 
 # Migrating from coding-agent-config

@@ -3,10 +3,36 @@ import { canonicalPath } from "../lib/fs.mjs";
 import { workspaceConfig } from "../lib/config.mjs";
 import { changeRequestForge, detectForge } from "../lib/forge.mjs";
 import { cleanOutput, fetchBranch, git, isAncestor, refExists, remoteBranchSha, repositoryAt } from "../lib/git.mjs";
-import { withRepositoryLock } from "../lib/lock.mjs";
+import { activeRunSessions, withRepositoryLock } from "../lib/lock.mjs";
 import { MEDIA_BRANCH, updateMediaBranch } from "../lib/media.mjs";
 import { evidenceDirectoryFor, inspectImplementationWorktrees, workspaceSummary } from "../lib/metadata.mjs";
+import { appendRunLog, runLogEntry } from "../lib/run-log.mjs";
 import { unmanagedFolders } from "../lib/session.mjs";
+
+const DAY_MS = 86_400_000;
+// ibni locks every worktree it makes with this reason; any other lock was
+// set by a person, and cleanup leaves that worktree alone.
+const IBNI_LOCK_REASON = "Coding agent implementation";
+
+// Days since anything happened in the workspace: its last lifecycle change,
+// step or record. NaN when the metadata holds no readable time.
+function idleDays(metadata, now = Date.now()) {
+  const times = [metadata.updatedAt, metadata.createdAt, ...(metadata.steps ?? []).map((step) => step.endedAt), ...(metadata.records ?? []).map((record) => record.at)]
+    .map((value) => Date.parse(value)).filter(Number.isFinite);
+  return times.length ? (now - Math.max(...times)) / DAY_MS : Number.NaN;
+}
+
+// Each worktree's lock reason, from git worktree list ("locked" alone has none).
+async function worktreeLocks(root) {
+  const result = await git(root, ["worktree", "list", "--porcelain"]);
+  const locks = new Map();
+  let current = null;
+  for (const line of result.stdout.split("\n")) {
+    if (line.startsWith("worktree ")) current = line.slice("worktree ".length);
+    else if (current && (line === "locked" || line.startsWith("locked "))) locks.set(current, line.slice("locked".length).trim());
+  }
+  return locks;
+}
 
 // The pull request's state and merge commit from its forge, or a diagnostic.
 async function pullRequestState(root, metadata, config) {
@@ -49,7 +75,7 @@ async function currentInvocationWorktree() {
   return { invocationRoot, gitDirectory: repository.gitDirectory };
 }
 
-async function cleanupStatus(entry, activeGitDirectory, repositoryRoot, config) {
+async function cleanupStatus(entry, activeGitDirectory, repositoryRoot, config, context) {
   const base = { worktreePath: entry.worktreePath };
   if (!entry.worktreeExists) {
     return { ...base, decision: "protect", reason: `worktree path is inaccessible: ${entry.error || "missing directory"}` };
@@ -65,6 +91,13 @@ async function cleanupStatus(entry, activeGitDirectory, repositoryRoot, config) 
   if (metadata.pendingOperation) {
     return { ...base, summary, decision: "protect", reason: `incomplete ${metadata.pendingOperation.type} lifecycle operation` };
   }
+  if (context.activeSessions.has(metadata.sessionId)) {
+    return { ...base, summary, decision: "protect", reason: "a setup or verify run of this session is in progress" };
+  }
+  const lockReason = context.locks.get(entry.worktreePath);
+  if (lockReason !== undefined && !lockReason.startsWith(IBNI_LOCK_REASON)) {
+    return { ...base, summary, decision: "protect", reason: `the worktree was locked by hand${lockReason ? `: ${lockReason}` : ""}` };
+  }
   const statusResult = await git(entry.worktreePath, ["status", "--porcelain=v1", "--untracked-files=all"], {
     allowedExitCodes: [0, 1, 128],
   });
@@ -74,9 +107,17 @@ async function cleanupStatus(entry, activeGitDirectory, repositoryRoot, config) 
   if (statusResult.stdout.length > 0) {
     return { ...base, summary, decision: "protect", reason: "contains uncommitted or untracked work" };
   }
-  if (!metadata.prUrl) {
-    return { ...base, summary, decision: "protect", reason: "no recorded pull request" };
-  }
+  // A workspace nobody returns to is pruned after workflow.pruneAfterDays:
+  // one that never recorded a pull request, or whose pull request closed
+  // unmerged. Its branch is kept when it holds commits on no remote.
+  const graceDays = config.workflow.pruneAfterDays;
+  const idle = idleDays(metadata);
+  const prune = (why, outcome) => {
+    if (!Number.isFinite(idle)) return { ...base, summary, decision: "protect", reason: `${why}, and its age cannot be read from its metadata` };
+    if (idle < graceDays) return { ...base, summary, decision: "protect", reason: `${why}; pruned once idle for ${graceDays} days (workflow.pruneAfterDays), idle ${Math.floor(idle)} so far` };
+    return { ...base, summary, decision: "remove", prune: true, outcome, reason: `${why} and idle for ${Math.floor(idle)} days (workflow.pruneAfterDays is ${graceDays})` };
+  };
+  if (!metadata.prUrl) return prune("no recorded pull request", "abandoned");
 
   const { state, mergeCommit, diagnostic } = await pullRequestState(repositoryRoot, metadata, config);
   if (!state) {
@@ -100,9 +141,12 @@ async function cleanupStatus(entry, activeGitDirectory, repositoryRoot, config) 
   const candidateSha = state === "MERGED" && mergeCommit ? mergeCommit : branchHead;
   const consumption = await verifyBranchConsumed(repositoryRoot, metadata, candidateSha);
   if (!consumption.established) {
-    return { ...base, summary, decision: "protect", reason: `pull request ${state.toLowerCase()} but its history could not be established as consumed: ${consumption.diagnostic}` };
+    const why = `pull request ${state.toLowerCase()} but its history could not be established as consumed: ${consumption.diagnostic}`;
+    // A closed pull request's branch is kept below when only it holds the
+    // commits; a merged one whose merge cannot be proven stays protected.
+    return state === "CLOSED" ? { ...prune(why, "closed"), prState: state } : { ...base, summary, decision: "protect", reason: why };
   }
-  return { ...base, summary, decision: "remove", reason: `pull request ${state.toLowerCase()} and its history is confirmed consumed by the remote default branch`, prState: state };
+  return { ...base, summary, decision: "remove", reason: `pull request ${state.toLowerCase()} and its history is confirmed consumed by the remote default branch`, prState: state, outcome: state === "MERGED" ? "merged" : "closed" };
 }
 
 // Best-effort: removes the media folders of removed workspaces in one additive
@@ -131,7 +175,28 @@ async function removeWorkspaceMedia(root, removedEntries) {
   return results;
 }
 
-async function removeWorkspace(root, status) {
+// True when the remote branch holds every commit of the local one, so deleting
+// the local branch loses nothing.
+async function branchOnRemote(root, metadata, branch) {
+  try {
+    const remoteSha = await remoteBranchSha(root, metadata.pushUrl, branch);
+    if (!remoteSha) return false;
+    const localSha = cleanOutput(await git(root, ["rev-parse", "--verify", `refs/heads/${branch}^{commit}`]));
+    return localSha === remoteSha || await isAncestor(root, localSha, remoteSha);
+  } catch {
+    return false;
+  }
+}
+
+async function removeWorkspace(root, status, metadata, config) {
+  // The metadata goes with the worktree, so the run log is written first.
+  if (metadata) {
+    try {
+      await appendRunLog(config.paths.worktreeRoot, runLogEntry(metadata, { event: "removed", outcome: status.outcome }));
+    } catch (error) {
+      status.runLogError = error.message;
+    }
+  }
   await git(root, ["worktree", "unlock", status.worktreePath], {
     allowedExitCodes: [0, 128],
   });
@@ -139,7 +204,10 @@ async function removeWorkspace(root, status) {
   status.removed = true;
   await rm(evidenceDirectoryFor(status.worktreePath), { recursive: true, force: true });
   const branch = status.summary?.branch;
-  if (branch) {
+  if (branch && status.prune && await branchOnRemote(root, metadata, branch)) {
+    await git(root, ["branch", "-D", branch]);
+    status.branchDeleted = true;
+  } else if (branch) {
     // `-d` refuses branches with unmerged local commits, keeping them.
     const branchDelete = await git(root, ["branch", "-d", branch], {
       allowedExitCodes: [0, 1],
@@ -148,6 +216,7 @@ async function removeWorkspace(root, status) {
       status.branchDeleted = true;
     } else {
       status.branchRetained = true;
+      status.keptBranch = branch;
       status.branchDiagnostic = branchDelete.stderr.trim();
     }
   }
@@ -157,10 +226,11 @@ async function removeWorkspace(root, status) {
 // a kept workspace so one unreadable entry never blocks the others.
 async function cleanupUnlocked(repository, { dryRun, activeGitDirectory, config }) {
   const inspected = await inspectImplementationWorktrees(repository.commonDirectory);
+  const context = { activeSessions: await activeRunSessions(config.paths.worktreeRoot), locks: await worktreeLocks(repository.root) };
   const statuses = [];
   for (const entry of inspected) {
     try {
-      statuses.push(await cleanupStatus(entry, activeGitDirectory, repository.root, config));
+      statuses.push(await cleanupStatus(entry, activeGitDirectory, repository.root, config, context));
     } catch (error) {
       statuses.push({
         worktreePath: entry.worktreePath,
@@ -176,7 +246,8 @@ async function cleanupUnlocked(repository, { dryRun, activeGitDirectory, config 
   if (!dryRun) {
     for (const status of deletable) {
       try {
-        await removeWorkspace(repository.root, status);
+        const metadata = inspected.find((entry) => entry.worktreePath === status.worktreePath)?.metadata;
+        await removeWorkspace(repository.root, status, metadata, config);
       } catch (error) {
         status.removalError = error.message;
       }
@@ -219,8 +290,11 @@ export async function sweepConsumedWorkspaces(repository, config) {
       removed: owned.filter((status) => status.removed).map((status) => ({
         worktreePath: status.worktreePath,
         branch: status.summary.branch,
+        reason: status.reason,
+        outcome: status.outcome,
+        ...(status.prune ? { pruned: true } : {}),
         branchDeleted: Boolean(status.branchDeleted),
-        ...(status.branchRetained ? { branchRetainedReason: status.branchDiagnostic || "branch has unmerged local commits" } : {}),
+        ...(status.branchRetained ? { keptBranch: status.keptBranch, branchRetainedReason: status.branchDiagnostic || "branch has unmerged local commits" } : {}),
       })),
       kept: owned.filter((status) => !status.removed).map((status) => ({
         worktreePath: status.worktreePath,

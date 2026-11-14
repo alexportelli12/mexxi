@@ -63,7 +63,8 @@ security, error handling, performance, tests and repository conventions. When
 the change adds or changes tests, or adds behaviour that should have one, load
 `test-design` and judge the tests by its review section: each must go red when
 the behaviour it claims breaks, and stay green when only the internals change.
-For meaningful user-facing changes, also judge frontend implementation,
+For each new test, name the bug it catches; a test with no nameable bug is a
+finding. For meaningful user-facing changes, also judge frontend implementation,
 accessibility, responsive behaviour, interaction and UX consistency against
 acceptance criteria, product UX principles, established design patterns, and
 the supplied rendered-QA evidence. Load `ui-designer` and its relevant review
@@ -77,7 +78,18 @@ against the current code and relevant rendered behaviour, then inspect the fixes
 This is not a new broad discovery pass. Report a new blocking issue only for a
 serious regression caused or exposed by remediation, a correctness or safety
 issue, or a genuinely blocking requirement failure. Do not promote unchanged
-lows or seek extra polish.
+minors or seek extra polish.
+
+Grade every finding with this rubric:
+
+- `blocker`: a verified wrong result, security hole or data loss.
+- `major`: a real defect with limited reach, or a missing test.
+- `minor`: an unproven edge case, naming, or small duplication.
+- `nit`: style.
+
+A `blocker` or `major` must show its proof: an input, a call path or a failing
+test. Without one, grade it `minor`. Say for each finding whether it sits on
+lines the change touched.
 
 Every discovery and confirmation result includes a merge-danger call, each
 part with a one-line justification:
@@ -94,7 +106,8 @@ danger, selection (with `ocr`, its `total_files`, `reviewable_count`,
 `excluded_count` and reasons; with `none`, the changed paths and any skipped
 with reasons), selected entries reviewed or skipped with reasons, material
 coverage limits, each blocking ledger item's confirmation status when applicable, and
-evidence-based findings with severity (`critical`, `high`, `medium`, `low`),
-category, path/line or rendered evidence, impact, and bounded recommendation.
-The orchestrator alone triages applicability and owns remediation and the
+evidence-based findings with severity (`blocker`, `major`, `minor`, `nit`),
+its proof, category, path/line or rendered evidence, whether the line was
+changed, impact, and bounded recommendation.
+The orchestrator alone judges applicability and owns remediation and the
 decision to continue.

@@ -1,10 +1,49 @@
+import { pullRequestForge } from "../lib/checks.mjs";
 import { WorkspaceError } from "../lib/errors.mjs";
-import { assertClean, assertNoGitOperation, cleanOutput, fetchBranch, git, isAncestor } from "../lib/git.mjs";
+import { assertClean, assertNoGitOperation, cleanOutput, fetchBranch, git, isAncestor, remoteBranchSha } from "../lib/git.mjs";
 import { withRepositoryLock } from "../lib/lock.mjs";
 import { updateMetadata } from "../lib/metadata.mjs";
 import { ownedSession, validatePublication, validateRemote } from "../lib/session.mjs";
 
-export async function synchronizeUnlocked(cwd, sessionId) {
+// A stacked pull request targets another task's branch. Once that lower pull
+// request merges (or its branch is gone), this one is retargeted at the
+// default branch (decision 0026): never by rebase or force push, only after
+// the default branch was merged into this branch and that merge is on the
+// remote, so the retargeted pull request never shows the lower one's changes
+// again. null when the pull request is not stacked; every forge failure is
+// reported, never thrown, since a sync must not fail on it.
+export async function retargetStack(session, latestDefaultSha) {
+  const { repository: { root }, metadata } = session;
+  if (!metadata.prUrl) return null;
+  try {
+    const forge = await pullRequestForge(root, metadata, metadata.prUrl, "retargeting a stacked pull request");
+    const request = await forge.changeRequest(root, metadata.prUrl);
+    if (request.state !== "OPEN" || !request.baseBranch || request.baseBranch === metadata.defaultBranch) return null;
+    const base = request.baseBranch;
+    const baseGone = !await remoteBranchSha(root, metadata.pushUrl, base);
+    const lower = baseGone ? null : await forge.mergedRequestFor(root, base);
+    if (!baseGone && !lower) return { base, retargeted: false, reason: `the pull request into ${base} has not merged yet` };
+    const remoteSha = await remoteBranchSha(root, metadata.pushUrl, metadata.branch);
+    if (!remoteSha || !await isAncestor(root, latestDefaultSha, remoteSha)) {
+      return {
+        base, retargeted: false,
+        reason: `${base} ${baseGone ? "is gone" : `merged (${lower})`}, but the merge of ${metadata.defaultBranch} into this branch is not published yet`,
+        nextAction: `Run ibni publish --session ${metadata.sessionId}; it retargets the pull request at ${metadata.defaultBranch} once the merge is pushed.`,
+      };
+    }
+    await forge.retarget(root, metadata.prUrl, metadata.defaultBranch);
+    return { base, retargeted: true, to: metadata.defaultBranch, reason: baseGone ? `${base} is gone` : `${lower} merged` };
+  } catch (error) {
+    return { retargeted: false, checked: false, reason: `could not check whether the pull request is stacked: ${error.message.split("\n")[0]}` };
+  }
+}
+
+const withStack = (result, stack) => (stack ? { ...result, stack } : result);
+const stackOf = (session, latestDefaultSha, checkStack) => (checkStack ? retargetStack(session, latestDefaultSha) : null);
+
+// publish checks the stack itself once it has pushed, so it passes
+// checkStack false.
+export async function synchronizeUnlocked(cwd, sessionId, { checkStack = true } = {}) {
   const session = await ownedSession(cwd, sessionId);
   const { repository, metadata } = session;
   await assertClean(repository.root, "the implementation worktree");
@@ -29,7 +68,7 @@ export async function synchronizeUnlocked(cwd, sessionId) {
     if (latestDefaultSha !== metadata.baseSha) {
       await updateMetadata(session, { baseSha: latestDefaultSha });
     }
-    return {
+    return withStack({
       operation: "sync",
       synchronized: true,
       strategy: latestDefaultSha === metadata.baseSha ? "unchanged" : "already-contained",
@@ -38,7 +77,7 @@ export async function synchronizeUnlocked(cwd, sessionId) {
       headSha: head,
       branch: metadata.branch,
       defaultBranch: metadata.defaultBranch,
-    };
+    }, await stackOf(session, latestDefaultSha, checkStack));
   }
 
   let strategy;
@@ -145,7 +184,7 @@ export async function synchronizeUnlocked(cwd, sessionId) {
     evidenceRecordedAt: requiresRevalidation ? null : session.metadata.evidenceRecordedAt,
     pendingOperation: null,
   });
-  return {
+  return withStack({
     operation: "sync",
     synchronized: true,
     strategy,
@@ -154,7 +193,7 @@ export async function synchronizeUnlocked(cwd, sessionId) {
     headSha,
     branch: metadata.branch,
     defaultBranch: metadata.defaultBranch,
-  };
+  }, await stackOf(session, latestDefaultSha, checkStack));
 }
 
 export async function synchronizeWorkspace({ cwd = process.cwd(), sessionId }) {

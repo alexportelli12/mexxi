@@ -190,3 +190,27 @@ export async function withRunSlot(worktreeRoot, slots, about, operation) {
     await releaseRepositoryLock(lock);
   }
 }
+
+// The sessions with a setup or verify run holding or waiting for a slot on
+// this machine, so cleanup never prunes a workspace while it is in use.
+export async function activeRunSessions(worktreeRoot) {
+  const directory = path.join(worktreeRoot, MACHINE_STATE_DIRECTORY, "slots");
+  const owners = [];
+  for (const name of await readdir(directory).catch(() => [])) {
+    if (name.startsWith("slot-")) owners.push(path.join(directory, name, "owner.json"));
+  }
+  for (const name of await readdir(path.join(directory, "queue")).catch(() => [])) {
+    if (name.endsWith(".json")) owners.push(path.join(directory, "queue", name));
+  }
+  const sessions = new Set();
+  for (const file of owners) {
+    let owner;
+    try {
+      owner = JSON.parse(await readFile(file, "utf8"));
+    } catch {
+      continue;
+    }
+    if (owner?.sessionId && owner.hostname === os.hostname() && Number.isInteger(owner.pid) && processIsAlive(owner.pid)) sessions.add(owner.sessionId);
+  }
+  return sessions;
+}

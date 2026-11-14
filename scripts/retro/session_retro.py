@@ -3,7 +3,9 @@
 
 Reads ~/.claude/projects/*/*.jsonl (top-level sessions only; subagent
 transcripts in nested directories are counted but not analysed) and writes
-aggregate counts to a JSON file. Raw transcript content never leaves this
+aggregate counts to a JSON file. Only interactive sessions are analysed:
+skill-creator's eval runs and sessions run under a temporary directory (segwi
+canaries, throwaway probes) are counted by category and otherwise skipped. Raw transcript content never leaves this
 script except as short, redacted snippets (<= SNIPPET_LEN chars), so the
 output can go to a private location after a final human check; it must never
 be committed to a public repository. retro.mjs is the entry point that picks
@@ -23,6 +25,7 @@ import glob
 import json
 import os
 import re
+import tempfile
 from datetime import datetime, timedelta, timezone
 
 SNIPPET_LEN = 100
@@ -39,7 +42,7 @@ SLOW_TOOL_SECONDS = 120
 GAP_SECONDS = 300
 
 def load_secret_patterns(path: str):
-    """The patterns ibni's Jev triage also redacts with; one file for both."""
+    """The patterns ibni's redactor also uses; one file for both."""
     with open(path, encoding="utf-8") as fh:
         source = json.load(fh)
     # The same flag letters JavaScript reads: i, m and s.
@@ -109,6 +112,31 @@ WAIT_LOOP_RE = re.compile(r"\b(?:until|while)\b[^\n]*\bsleep\b")
 BARE_SLEEP_RE = re.compile(r"^\s*(?:\w+=\S+\s+)*sleep\s+\d")
 POLL_RE = re.compile(r"^(sleep \d+[;&]+\s*)?(tail|cat|head|grep|ls)\b|until |while |gh (pr|run) (checks|view|watch)")
 ERRORISH_RE = re.compile(r"(?i)error|fail|not found|denied|cannot|can't|unable|invalid|refus|missing|exceeded|no such|not a |fatal")
+
+
+# skill-creator's run_eval writes a throwaway command named <skill>-skill-<8 hex>
+# and runs `claude -p` (entrypoint "sdk-cli") beside it, so an eval session lists
+# that command among its skills. Print mode alone is not enough: other front
+# ends drive long interactive sessions through it too, and an interactive
+# session can still list a stale eval command an interrupted run left behind.
+EVAL_COMMAND_RE = re.compile(r"-skill-[0-9a-f]{8}$")
+PRINT_MODE_ENTRYPOINT = "sdk-cli"
+TEMP_ROOTS = sorted({os.path.realpath(root) for root in ("/tmp", "/var/tmp", tempfile.gettempdir())})
+
+
+def under_temp_dir(path: str) -> bool:
+    path = os.path.realpath(path)
+    return any(path == root or path.startswith(root.rstrip("/") + "/") for root in TEMP_ROOTS)
+
+
+def non_interactive_reason(session) -> str | None:
+    """Why a session is not an interactive one, or None if it is."""
+    if PRINT_MODE_ENTRYPOINT in session.entrypoints and session.lists_eval_command:
+        return "skill_eval"
+    # Project directory names encode the cwd, so "-tmp-" stands in when no line had one.
+    if under_temp_dir(session.cwd) if session.cwd else session.dirname.startswith("-tmp-"):
+        return "temp_directory"
+    return None
 
 
 def redact(text: str) -> str:
@@ -210,6 +238,8 @@ class Session:
         self.events = []  # ordered: ("use", id) / ("result", id, is_error, text, ts) / ("prompt", text) / ("compact",)
         self.titles = []
         self.seen = set()
+        self.entrypoints = set()
+        self.lists_eval_command = False
 
     def load(self):
         with open(self.path, encoding="utf-8", errors="replace") as fh:
@@ -233,6 +263,12 @@ class Session:
             self.end = ts if self.end is None or ts > self.end else self.end
         if entry.get("cwd") and not self.cwd:
             self.cwd = entry["cwd"]
+        if entry.get("entrypoint"):
+            self.entrypoints.add(entry["entrypoint"])
+        attachment = entry.get("attachment")
+        if isinstance(attachment, dict) and isinstance(attachment.get("names"), list):
+            if any(isinstance(name, str) and EVAL_COMMAND_RE.search(name) for name in attachment["names"]):
+                self.lists_eval_command = True
         etype = entry.get("type")
         if etype == "ai-title" and entry.get("aiTitle"):
             self.titles.append(entry["aiTitle"])
@@ -624,6 +660,15 @@ def main():
     dir_cwd = {s.dirname: s.cwd for s in sessions if s.cwd}
     for s in sessions:
         s.cwd = s.cwd or dir_cwd.get(s.dirname)
+    excluded = collections.Counter()
+    interactive = []
+    for s in sessions:
+        reason = non_interactive_reason(s)
+        if reason:
+            excluded[reason] += 1
+        else:
+            interactive.append(s)
+    sessions = interactive
     starts = [s.start for s in sessions if s.start]
     ends = [s.end for s in sessions if s.end]
     projects = collections.Counter(project_label(s.cwd, s.dirname) for s in sessions)
@@ -632,6 +677,8 @@ def main():
         "inventory": {
             "sessions": len(sessions),
             "excluded_session_prefixes": args.exclude,
+            # Sessions in the window that are not interactive, by reason; counts only.
+            "excluded_non_interactive": {reason: excluded[reason] for reason in ("skill_eval", "temp_directory")},
             "window": {"since": since.isoformat() if since else None, "until": until.isoformat() if until else None},
             "undated_sessions_outside_window": undated,
             "sessions_with_tool_calls": sum(1 for s in sessions if s.tool_uses),

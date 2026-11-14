@@ -1,5 +1,5 @@
 ---
-status: Accepted
+status: Accepted; amended by 0022; extended by 0023 and 0024
 date: 2026-10-21
 ---
 

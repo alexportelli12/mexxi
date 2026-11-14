@@ -14,8 +14,7 @@ export type RunPaneGate = {
   findings: number
 }
 
-// The fields of `ibni info` and `ibni stats` the pane draws; triage is Jev's
-// latest answers (stats' triage.answers), null until a triage call is answered.
+// The fields of `ibni info` and `ibni stats` the pane draws.
 export type RunPaneSnapshot = {
   sessionId: string
   branch?: string
@@ -26,9 +25,11 @@ export type RunPaneSnapshot = {
   createdAt?: string
   steps: RunPaneStep[]
   verify?: { attempts: number; passed: number; failed: number; history: { outcome: string }[] }
-  review?: RunPaneGate & { crossRounds?: number }
+  review?: RunPaneGate
   qa?: RunPaneGate
-  triage?: Record<string, unknown> | null
+  // The last ibni ci-wait: state is green, failed, pending, none, cancelled
+  // or stale, null before any wait; rounds counts the waits that failed.
+  ci?: { waits: number; rounds: number; state: string | null }
   error?: string
 }
 

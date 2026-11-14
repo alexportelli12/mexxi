@@ -15,7 +15,7 @@ export const IBNI_FIELDS = {
   stats: [
     "verify.history", "verify.history.0.at", "verify.attempts", "verify.passed", "verify.failed",
     "steps.0.step", "steps.0.outcome", "steps.0.durationMs", "steps.0.endedAt",
-    "review.rounds", "review.findings", "review.byReviewer.cross.rounds", "qa.rounds", "qa.findings",
+    "review.rounds", "review.findings", "qa.rounds", "qa.findings",
   ],
 };
 
@@ -56,7 +56,7 @@ export function ibniSnapshot(info, stats) {
         history: (Array.isArray(verify.history) ? verify.history : []).map(object).filter(Boolean).map((entry) => ({ outcome: String(entry.outcome ?? "?"), ...(text(entry.at) ? { at: entry.at } : {}) })),
       },
     } : {}),
-    ...(review ? { review: { rounds: count(review.rounds), findings: count(review.findings), byReviewer: { cross: { rounds: count(object(object(review.byReviewer)?.cross)?.rounds) } } } } : {}),
+    ...(review ? { review: { rounds: count(review.rounds), findings: count(review.findings) } } : {}),
     ...(qa ? { qa: { rounds: count(qa.rounds), findings: count(qa.findings) } } : {}),
   };
 }

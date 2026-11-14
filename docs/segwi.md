@@ -9,7 +9,7 @@ sources:
   - docs/decisions/0013-segwi-run-browser-and-hosts.md
   - docs/decisions/0016-segwi-runs-trusted-like-own-sessions.md
   - docs/decisions/0020-segwi-local-extensions.md
-reviewed: 2026-10-25
+reviewed: 2026-11-14
 ---
 
 # segwi

@@ -4,12 +4,12 @@ import { withRepositoryLock } from "../lib/lock.mjs";
 import { sessionVerifyCommand, updateMetadata } from "../lib/metadata.mjs";
 import { ownedSession } from "../lib/session.mjs";
 import { verifyRefusal } from "../lib/verification.mjs";
-import { synchronizeUnlocked } from "./sync.mjs";
+import { retargetStack, synchronizeUnlocked } from "./sync.mjs";
 
 export async function publishWorkspace({ cwd = process.cwd(), sessionId }) {
   const initial = await ownedSession(cwd, sessionId);
   return withRepositoryLock(initial.repository.commonDirectory, async () => {
-    const synchronization = await synchronizeUnlocked(cwd, sessionId);
+    const synchronization = await synchronizeUnlocked(cwd, sessionId, { checkStack: false });
     if (synchronization.requiresRevalidation) {
       return {
         ...synchronization,
@@ -116,8 +116,10 @@ export async function publishWorkspace({ cwd = process.cwd(), sessionId }) {
       publishedSha: headSha,
       pendingOperation: null,
     });
+    const stack = await retargetStack(session, synchronization.baseSha);
     return {
       ...synchronization,
+      ...(stack ? { stack } : {}),
       operation: "publish",
       published: true,
       requiresEvidence: false,

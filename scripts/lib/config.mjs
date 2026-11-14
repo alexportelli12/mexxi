@@ -105,18 +105,64 @@ const RETIRED_REPOSITORY_KEYS = ["permissions", "allowedDomains"];
 const isObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 const omit = (value, keys) => Object.fromEntries(Object.entries(value).filter(([key]) => !keys.includes(key)));
 
-/** The retired keys `value` still sets, as paths to delete, and `value` without them. */
-export function withoutRetiredKeys(value) {
+// Jev triage and cross-family review, retired by decision 0022. The same shim applies: an old config still
+// loads, the keys are dropped, and the installer names each one to delete. Remove after 2027-01-15.
+const RETIRED_MODEL_KEYS = ["crossFamilyReviewer"];
+
+function withoutRetiredSegwiKeys(value, retired) {
   const segwi = isObject(value) ? value.segwi : undefined;
-  if (!isObject(segwi)) return { value, retired: [] };
-  const retired = RETIRED_SEGWI_KEYS.filter((key) => key in segwi).map((key) => `segwi.${key}`);
+  if (!isObject(segwi)) return value;
+  const before = retired.length;
+  retired.push(...RETIRED_SEGWI_KEYS.filter((key) => key in segwi).map((key) => `segwi.${key}`));
   const repositories = Array.isArray(segwi.repositories) ? segwi.repositories.map((repository, index) => {
     if (!isObject(repository)) return repository;
     retired.push(...RETIRED_REPOSITORY_KEYS.filter((key) => key in repository).map((key) => `segwi.repositories[${index}].${key}`));
     return omit(repository, RETIRED_REPOSITORY_KEYS);
   }) : segwi.repositories;
-  if (!retired.length) return { value, retired };
-  return { value: { ...value, segwi: { ...omit(segwi, RETIRED_SEGWI_KEYS), ...(repositories ? { repositories } : {}) } }, retired };
+  if (retired.length === before) return value;
+  return { ...value, segwi: { ...omit(segwi, RETIRED_SEGWI_KEYS), ...(repositories ? { repositories } : {}) } };
+}
+
+function withoutRetiredReviewKeys(value, retired) {
+  if (!isObject(value)) return value;
+  let result = value;
+  if ("jev" in result) {
+    retired.push("jev");
+    result = omit(result, ["jev"]);
+  }
+  if (!isObject(result.models)) return result;
+  const models = { ...result.models };
+  for (const [host, roles] of Object.entries(models)) {
+    if (!isObject(roles)) continue;
+    const found = RETIRED_MODEL_KEYS.filter((key) => key in roles);
+    if (!found.length) continue;
+    retired.push(...found.map((key) => `models.${host}.${key}`));
+    models[host] = omit(roles, found);
+  }
+  return { ...result, models };
+}
+
+// The command fixer and its glob switch, retired by decision 0021: the guard now refuses unquoted globs on every
+// host. Same shim and removal date as the review keys above.
+function withoutRetiredCommandFixerKeys(value, retired) {
+  if (!isObject(value)) return value;
+  let result = value;
+  if (isObject(result.guard) && "blockUnquotedGlobs" in result.guard) {
+    retired.push("guard.blockUnquotedGlobs");
+    result = { ...result, guard: omit(result.guard, ["blockUnquotedGlobs"]) };
+  }
+  if (Array.isArray(result.mods) && result.mods.includes("command-fixer")) {
+    retired.push('mods: "command-fixer"');
+    result = { ...result, mods: result.mods.filter((mod) => mod !== "command-fixer") };
+  }
+  return result;
+}
+
+/** The retired keys `value` still sets, as paths to delete, and `value` without them. */
+export function withoutRetiredKeys(value) {
+  const retired = [];
+  const cleaned = withoutRetiredCommandFixerKeys(withoutRetiredReviewKeys(withoutRetiredSegwiKeys(value, retired), retired), retired);
+  return { value: retired.length ? cleaned : value, retired };
 }
 
 export async function resolveConfig(input, { home = os.homedir(), source = "config" } = {}) {

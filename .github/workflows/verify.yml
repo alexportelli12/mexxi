@@ -51,3 +51,9 @@ jobs:
       # from the npx cache of the pinned @playwright/mcp or from the repository root,
       # and CI has neither, whatever Chromium is installed.
       - run: npm run verify
+      # verifika keeps each check's full output in its own log and shows only a
+      # short preview here, which cuts assertion diffs off. Print the failed
+      # checks' logs (such as `vfk logs workspace`) so the Actions log, and the
+      # tail `ibni ci-wait` hands an agent, say what actually differed.
+      - if: failure()
+        run: npx vfk logs --failed

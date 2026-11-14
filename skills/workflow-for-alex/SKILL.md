@@ -192,13 +192,15 @@ the feature workspace. Each invocation must receive a distinct owned linked
 worktree before repository work begins, and all subsequent feature operations
 remain there. The tool must fail closed rather than stash user state, reuse an
 ambiguously owned worktree, rewrite shared history, or guess through conflicts.
-Retain the workspace after pull-request creation so the owning session can make
-follow-up changes, or a later session can take it over with `ibni adopt`, which
-moves ownership only after proving the open pull request's head matches the
-workspace. Each `prepare` sweeps retained workspaces: PR-state-driven
-cleanup decides from authoritative forge state plus deterministic Git evidence
-that the implementation history is consumed by the remote default branch,
-protecting open, dirty, metadata-less, or unproven workspaces fail-closed.
+A run owns its pull request until CI is green, then ends. Retain the
+workspace so a fresh follow-up session can take it over with `ibni adopt`,
+which moves ownership only after proving the open pull request's head matches
+the workspace. Each `prepare` sweeps retained workspaces: merged ones go once
+forge state and Git evidence prove the remote default branch holds their
+history, and ones whose pull request closed unmerged, or that never recorded
+one, go after `workflow.pruneAfterDays` idle. Open, dirty, active or unproven
+workspaces stay, and a branch with commits no remote holds is kept. Each run
+appends a line to a run log under `paths.worktreeRoot` that outlives cleanup.
 
 Transient evidence is not deliverable work. Screenshots, recordings,
 rendered-inspection output, review background, and temporary reports go to the

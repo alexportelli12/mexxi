@@ -2,11 +2,11 @@
 sources:
   - scripts/retro/retro.mjs
   - scripts/hooks/loop-breaker.mjs
-  - claude/mods/command-fixer/hooks/fix.ts
+  - docs/decisions/0021-hooks-refuse-with-the-fix.md
   - config.schema.json
   - docs/decisions/0017-workspace-port-blocks.md
   - docs/decisions/0018-machine-wide-run-slots.md
-reviewed: 2026-10-25
+reviewed: 2026-11-14
 ---
 
 # Where the problems come from
@@ -15,10 +15,12 @@ The problems mexxi solves were measured, not guessed. This page keeps the number
 
 Across 89 of my sessions, from 26 September to 20 October, agents hit 386 zsh glob aborts in 77 sessions. They tried 72 edits before reading the file, ran into the 10-minute Bash cap 27 times, and hid 247 exit statuses behind pipes. I sent 15 follow-up prompts asking for rework, and 28 sessions compacted their context mid-pull request.
 
-Several of mexxi's parts answer these numbers. On Claude Code, the command fixer quotes globs and keeps pipe failures visible. The [loop breaker](glossary.md#loop-breaker) stops repeated failures, [`claude.bashMaxTimeoutMs`](configuration/index.md#claude) raises the Bash cap, and the pull request's first screen aims to cut the rework prompts. [`/irrifletti`](../commands/irrifletti.md), which looks back at recent sessions privately, is how these numbers are measured again after a change.
+Several of mexxi's parts answer these numbers. The [guard](glossary.md#guard) backs up the shell rules: an unquoted glob or a hidden pipe failure comes back with the corrected command. The [loop breaker](glossary.md#loop-breaker) stops repeated failures, [`claude.bashMaxTimeoutMs`](configuration/index.md#claude) raises the Bash cap, and the pull request's first screen aims to cut the rework prompts. [`/irrifletti`](../commands/irrifletti.md), which looks back at recent sessions privately, is how these numbers are measured again after a change.
 
 segwi's first two real runs, on 23 October, stopped four times to wait for an approval on a phone. Every one was harmless: a `cd` chained with `ls`, a pull request body with a heading, and two `ibni` chains. That is why segwi's runs moved to auto mode.
 
 A later segwi run in an Angular repository ran its verify command on an untouched main, and four of seven checks failed only because of the sandbox. Chromium couldn't start, the build couldn't fetch Google Fonts, and Firebase's emulators couldn't reach each other. Each fix loosened the sandbox or added machinery, so [segwi runs are now trusted like your own sessions](decisions/0016-segwi-runs-trusted-like-own-sessions.md), with no sandbox at all.
 
 Running several sessions side by side on one 8-core machine had its own problems, measured on 25 October. Two verify runs at once in a web app repository both failed, because its browser tests' servers wanted the same fixed ports. Transcripts showed the same error in eight sessions since 2 October. With distinct ports, two runs passed and took 29% longer. Three at once made unit tests time out under load. That is why each workspace gets a [port block](glossary.md#port-block), checks wait for a [run slot](glossary.md#run-slot), and each check runs in a [scope](glossary.md#scope). Every session also held about 230 MiB for a browser server it might never use, half of it in `npx`'s wrapper, so the server now runs with `node`.
+
+Two retros over 88 `/wettaq` runs, from 21 October to 14 November, found the next round. A Claude Code mod that rewrote commands, rather than refusing them, forced 217 retries, because auto mode had approved the command before it changed. Runs still piped test output into `tail` without keeping its exit status 184 times. They held the foreground with 351 `sleep` loops, and read files through the shell before editing them, causing 72 of 79 refused edits. So every mexxi hook now refuses with the fix instead of rewriting ([decision 0021](decisions/0021-hooks-refuse-with-the-fix.md)).

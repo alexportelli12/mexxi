@@ -37,59 +37,41 @@ export function since(iso: string | undefined, now: number): string | undefined 
   return hours < 24 ? `${hours}h ${minutes % 60}m ago` : `${Math.floor(hours / 24)}d ago`
 }
 
-// Jev's answers, most confident first, each with the question asked in plain
-// words and its confidence as a percentage. Questions Jev did not answer, or
-// answered without a confidence, are left out.
-// Each question as a short label, so the panel stays narrow.
-const QUESTIONS: Record<string, string> = {
-  oneWayDoor: '1-way',
-  userFacing: 'users',
-  existingUi: 'UI',
-  size: 'size',
-  reviewValue: 'review',
-}
-
-export type TriageRow = { key: string; question: string; answer: string; percent: number }
-
-export function triageRanking(run: RunPaneSnapshot): TriageRow[] {
-  const answers = run.triage ?? {}
-  return Object.entries(answers)
-    .map(([key, value]) => {
-      const item = record(value)
-      const confidence = Number(item.confidence)
-      if (!('answer' in item) || !Number.isFinite(confidence)) return null
-      return { key, question: QUESTIONS[key] ?? key, answer: String(item.answer), percent: Math.round(Math.min(1, Math.max(0, confidence)) * 100) }
-    })
-    .filter((row): row is TriageRow => row !== null)
-    .sort((a, b) => b.percent - a.percent || a.question.localeCompare(b.question))
-}
-
-// A ten-cell bar for a percentage: filled cells, then empty ones.
-export function bar(percent: number, width = 10): { filled: string; empty: string } {
-  const cells = Math.round((Math.min(100, Math.max(0, percent)) / 100) * width)
-  return { filled: '▰'.repeat(cells), empty: '▱'.repeat(width - cells) }
-}
-
-// How sure Jev was, as a theme colour: green when sure, accent when fairly
-// sure, amber when it was close to guessing.
-export function confidenceTone(percent: number): Tone {
-  return percent >= 80 ? 'success' : percent >= 60 ? 'claude' : 'warning'
-}
-
 // The band's one-line hint, or null: a short badge for what happened and
 // what to do about it. Its key changes with the reason, so dismissing one
-// does not silence the next. A new session picks a pull request back up when
-// /wettaq is given its link (it adopts the workspace itself), so the hint
-// names that rather than an ibni command.
+// does not silence the next. A run owns its pull request until CI is green
+// (decision 0026), so a delivered PR shows its CI state; once green the run is
+// done, and follow-ups start in a new session, where /wettaq given the PR's
+// link adopts the workspace itself.
 export type Nudge = { key: string; badge: string; tone: Tone; text: string }
+
+const followUps = (run: RunPaneSnapshot | null) => `start follow-ups in a new session with /wettaq ${run?.prUrl ?? '<PR URL>'}`
+
+const CI_WAITING: Record<string, string> = {
+  pending: 'CI still running',
+  none: 'no CI checks reported',
+  cancelled: 'CI cancelled',
+  stale: 'CI is behind the branch',
+}
 
 export function nudge(run: RunPaneSnapshot | null, percent: number | null, threshold: number): Nudge | null {
   if (run && isDelivered(run)) {
     const pr = run.prUrl ? `PR #${run.prUrl.split('/').at(-1)}` : 'PR'
-    return { key: `delivered:${run.sessionId}`, badge: `✓ ${pr} delivered`, tone: 'success', text: 'Follow-ups go in a fresh session: give /wettaq the PR link.' }
+    const state = run.ci?.state ?? null
+    const key = `ci:${run.sessionId}:${state ?? 'unchecked'}:${run.ci?.waits ?? 0}`
+    if (state === 'green') {
+      return { key, badge: `✓ ${pr} CI green`, tone: 'success', text: `Run done; ${followUps(run)}.` }
+    }
+    if (state === 'failed') {
+      const round = run.ci?.rounds ?? 1
+      return { key, badge: `✗ ${pr} CI failed`, tone: 'error', text: `Round ${round}: this run fixes it before it is done.` }
+    }
+    const waiting = (state && CI_WAITING[state]) ?? 'waiting on CI'
+    return { key, badge: `${pr} · ${waiting}`, tone: 'warning', text: 'The run is done once CI is green.' }
   }
   if (percent !== null && percent >= threshold) {
-    return { key: `context:${threshold}`, badge: `${percent}% context`, tone: 'warning', text: 'Finish this run here, then start the next task in a fresh session.' }
+    const text = `Finish this run here, then ${followUps(run)}.`
+    return { key: `context:${threshold}`, badge: `${percent}% context`, tone: 'warning', text }
   }
   return null
 }

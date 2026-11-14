@@ -114,7 +114,7 @@ test("the build publishes only allowlisted tracked files, and search finds every
     extra: { "scripts/not-allowlisted.md": "TRACKED-BUT-NOT-ALLOWLISTED" },
     untracked: {
       "retro/report.md": "RETRO-SECRET",
-      "config.json": '{"jev":{"key":"CONFIG-SECRET"}}',
+      "config.json": '{"segwi":{"key":"CONFIG-SECRET"}}',
       ".verifika/log.md": "VERIFIKA-SECRET",
       "docs/untracked.md": "UNTRACKED-SECRET",
       "commands/untracked.md": "---\ndescription: UNTRACKED-COMMAND\n---\n# x $ARGUMENTS\n",
@@ -237,7 +237,7 @@ test("a command page leads with its summary and folds the agent instructions; a 
   assert.match(await readFile(path.join(built.out, "public/agents/code-reviewer.md"), "utf8"), /\*\*What it cannot do:\*\* .+\n[\s\S]*::: details Full agent instructions/);
   const configuration = await readFile(path.join(built.out, "public/configuration/index.md"), "utf8");
   assert.ok(configuration.indexOf("## Common changes") < configuration.indexOf("## Settings in config.json"));
-  assert.match(configuration, /### jev\n\n::: info Experimental/);
+  assert.match(configuration, /### segwi\n\n::: info Experimental/);
   assert.match(configuration, /## Settings in \.mexxi\.json[\s\S]*`ciCheck`/);
 
   const bad = await copyRepo({ edit: { "commands/lesti.md": (text) => text.replace(/^summary: >-\n(?: {2}.+\n)+/m, "") } });

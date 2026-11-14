@@ -133,7 +133,7 @@ function ibniSnapshot({ branch, minutesOld, steps, verify = [], review = 0, qa =
     branch, state: prUrl ? "pr-open" : "active", prUrl, createdAt: minutesAgo(minutesOld + 12),
     steps: steps.map(([step, outcome, ago]) => ({ step, outcome, durationMs: 1200, endedAt: minutesAgo(ago) })),
     verify: { attempts: verify.length, passed: outcomes.filter((outcome) => outcome === "pass").length, failed: outcomes.filter((outcome) => outcome === "fail").length, history: verify.map(([outcome, ago]) => ({ outcome, at: minutesAgo(ago) })) },
-    review: { rounds: review, findings: review * 2, byReviewer: { cross: { rounds: review } } },
+    review: { rounds: review, findings: review * 2 },
     qa: { rounds: qa, findings: 0 },
   };
 }

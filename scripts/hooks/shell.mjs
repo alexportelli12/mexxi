@@ -38,8 +38,10 @@ const UNKNOWN_PRODUCER = [];
 // processSubstitution: the word is a <(...) file). A command may carry
 // `stdin`, the text of a heredoc or herestring fed to it; `stdinExpanded`,
 // when the shell expands that text before feeding it; `stdinSubstituted`,
-// when its input is redirected from a process substitution; and `pipedFrom`,
-// the command whose output a `|` feeds it.
+// when its input is redirected from a process substitution; `pipedFrom`,
+// the command whose output a `|` feeds it; `pipesOn`, when its own output
+// feeds a `|`; and `stdoutToFile`, when its standard output is redirected to a
+// file (> out, >> out, &> out, 1> out).
 function read(text, start, nested) {
   const commands = [];
   let words = [];
@@ -67,7 +69,7 @@ function read(text, start, nested) {
     words = [];
     if (!finished.length) {
       // A redirection written before the command (<<<x cmd) still feeds it.
-      for (const key of ["stdin", "stdinExpanded", "stdinSubstituted"]) {
+      for (const key of ["stdin", "stdinExpanded", "stdinSubstituted", "stdoutToFile"]) {
         if (finished[key] !== undefined) words[key] = finished[key];
       }
       return null;
@@ -206,11 +208,13 @@ function read(text, start, nested) {
       finishWord();
       index += text[index + 2] === ">" ? 3 : 2;
       redirect = true;
+      words.stdoutToFile = true;
       continue;
     }
     if (char === "|" && text[index + 1] !== "|") {
       // A pipe (| or |&): the next command reads this one's output.
       pipedFrom = finishCommand() ?? UNKNOWN_PRODUCER;
+      if (pipedFrom !== UNKNOWN_PRODUCER) pipedFrom.pipesOn = true;
       index += text[index + 1] === "&" ? 2 : 1;
       continue;
     }
@@ -226,7 +230,11 @@ function read(text, start, nested) {
     }
     if (char === ">" || char === "<") {
       // A file descriptor written right before the operator (2>) is not a word.
-      if (word && /^\d+$/.test(word.value)) word = null;
+      let descriptor = null;
+      if (word && /^\d+$/.test(word.value)) {
+        descriptor = word.value;
+        word = null;
+      }
       finishWord();
       if (char === "<" && text[index + 1] === "<" && text[index + 2] !== "<") {
         index += 2;
@@ -260,6 +268,7 @@ function read(text, start, nested) {
         }
       }
       redirect = input ? "input" : true;
+      if (char === ">" && (descriptor === null || descriptor === "1")) words.stdoutToFile = true;
       continue;
     }
     if (char === " " || char === "\t") {
@@ -517,7 +526,8 @@ function settledParameters(word, line) {
 }
 
 // Every simple command the text would run, in order, each { argv, globs,
-// expansions, nameExpanded }.
+// expansions, nameExpanded, upstream, pipesOn, stdoutToFile, nested } (see
+// described).
 // Scripts handed to a shell with -c, or to eval, or fed to a shell's standard
 // input, are read in their place. A script the reader cannot see (`curl ... |
 // sh`, `bash < <(curl ...)`, `source <(...)`, `bash -c "$(...)"`) comes back
@@ -549,13 +559,13 @@ export function simpleCommands(text, depth = 0, line = text) {
         if (scriptWord.expanded && (!settledParameters(scriptWord, line) || commands.some((inner) => inner.nameExpanded))) {
           refuse(`-c runs a script built by an expansion ($(...), backticks, or a $VAR set in the line or used as a command) the guard cannot inspect; write the commands out literally`);
         } else found.push(...commands);
-        if (maybeShell) found.push(command);
+        if (maybeShell) found.push(described(command, words, depth));
         continue;
       }
       // Only -c: an expanded name fed a pipe ($PAGER) is no more a shell than
       // any other reader.
       if (maybeShell) {
-        found.push(command);
+        found.push(described(command, words, depth));
         continue;
       }
       const operand = script === -1 ? scriptOperand(args) : null;
@@ -583,7 +593,55 @@ export function simpleCommands(text, depth = 0, line = text) {
       found.push(...simpleCommands(args.join(" "), depth + 1, line));
       continue;
     }
-    found.push(command);
+    found.push(described(command, words, depth));
   }
   return found;
+}
+
+// A command with where its output goes and what feeds it, for the guard's
+// help rules: `upstream` is the argv of each earlier pipeline stage, nearest
+// first; `nested` is whether the command sits in a script another shell reads.
+function described(command, words, depth) {
+  const upstream = [];
+  for (let producer = words.pipedFrom; producer && producer !== UNKNOWN_PRODUCER; producer = producer.pipedFrom) {
+    upstream.push(effectiveArgv(producer).argv);
+  }
+  return { ...command, upstream, pipesOn: Boolean(words.pipesOn), stdoutToFile: Boolean(words.stdoutToFile), nested: depth > 0 };
+}
+
+// The while and until loops in the text whose body runs sleep, each
+// { condition, body }: the argv of every command in its condition and body.
+// Only the text itself is read, not a -c script inside it. Keywords are read
+// at the start of each command, which is enough for the loops agents write.
+export function sleepLoops(text) {
+  const loops = [];
+  const stack = [];
+  const close = (frame) => {
+    if (frame.sleeps) loops.push({ condition: frame.condition, body: frame.body });
+  };
+  for (const words of read(text, 0, false).commands) {
+    let at = 0;
+    let header = false;
+    for (; at < words.length; at += 1) {
+      const keyword = words[at].value;
+      if (keyword === "while" || keyword === "until") stack.push({ waits: true, inBody: false, sleeps: false, condition: [], body: [] });
+      else if (keyword === "for" || keyword === "select") {
+        stack.push({ waits: false, inBody: false });
+        header = true;
+        break;
+      } else if (keyword === "do") {
+        if (stack.length) stack.at(-1).inBody = true;
+      } else if (keyword === "done") {
+        if (stack.length) close(stack.pop());
+      } else if (!RESERVED.has(keyword)) break;
+    }
+    if (header || at >= words.length) continue;
+    const { argv } = effectiveArgv(words.slice(at));
+    if (!argv.length) continue;
+    const loop = stack.findLast((frame) => frame.waits);
+    if (loop) (loop.inBody ? loop.body : loop.condition).push(argv);
+    if (argv[0] === "sleep") for (const frame of stack) if (frame.waits && frame.inBody) frame.sleeps = true;
+  }
+  for (const frame of stack.reverse()) if (frame.waits) close(frame);
+  return loops;
 }

@@ -30,11 +30,9 @@ async function sharedAgentBody(checkout, name) {
   return body;
 }
 
-// Claude Code's cross-family reviewer is a Codex model run by `ibni cross-review`
-// (the subagent keeps the reviewer model), so only the other hosts render it as
-// the code-reviewer's own model; null falls back to the reviewer's model.
-function modelFor(models, name, { crossFamily = false } = {}) {
-  if (name === "code-reviewer" && crossFamily && models.crossFamilyReviewer) return models.crossFamilyReviewer;
+// Each agent's model is its role's model for the host (code-reviewer uses
+// models.<host>.reviewer); null leaves the host's default.
+function modelFor(models, name) {
   return agentRoles[name] ? models[agentRoles[name]] ?? null : null;
 }
 
@@ -96,7 +94,7 @@ async function renderCodex(checkout, config, files) {
   for (const [name, fields] of Object.entries(metadata)) {
     const body = await sharedAgentBody(checkout, agentName(name));
     const lines = [`name = ${JSON.stringify(name)}`];
-    const model = modelFor(config.models.codex, name, { crossFamily: true });
+    const model = modelFor(config.models.codex, name);
     for (const [key, value] of Object.entries({ ...fields, ...(model ? { model } : {}) })) {
       if (!["description", "sandbox_mode", "model", "model_reasoning_effort"].includes(key) ||
           typeof value !== "string" || value.includes("\n")) throw new Error(`invalid ${name}.${key}`);
@@ -139,7 +137,8 @@ async function renderOpencode(checkout, config, files, home) {
     if (bash && typeof bash === "object") {
       rest.permission = { ...rest.permission, bash: Object.fromEntries(withoutOcrGrants(config, Object.keys(bash)).map((key) => [key, bash[key]])) };
     }
-    agent[name] = { description, mode, ...(modelFor(models, name, { crossFamily: true }) ? { model: modelFor(models, name, { crossFamily: true }) } : {}), prompt, ...rest };
+    const model = modelFor(models, name);
+    agent[name] = { description, mode, ...(model ? { model } : {}), prompt, ...rest };
   }
   const worktreeRoots = [config.paths.worktreeRoot, ...legacyWorktreeRoots];
   const permission = {

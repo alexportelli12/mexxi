@@ -275,6 +275,8 @@ function prepareLocked({ repository, config, slug, branchPrefix }) {
         const now = new Date().toISOString();
         const metadata = {
           version: 1,
+          // Names the run in the run log; unlike sessionId, adopt keeps it.
+          runId: randomBytes(12).toString("hex"),
           sessionId: allocation.sessionId,
           state: "active",
           branch: allocation.branch,

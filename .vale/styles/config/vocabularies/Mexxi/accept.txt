@@ -79,3 +79,7 @@ gzip
 Wiktionary
 [Nn]amespaces?
 seccomp
+rebases?
+retargets?
+formatters?
+compactions?

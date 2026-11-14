@@ -23,12 +23,23 @@ export const RECOMMENDED_TARGET = 44;
 // is an overlay or a wrong selector, not a slow page.
 export const ACTION_TIMEOUT_MS = 5000;
 
+// The axe rules for ARIA and label references: an aria-labelledby or
+// aria-controls naming a missing id, a control with no accessible name, a field
+// with two labels. Review kept finding these by hand (decision 0024), and a
+// script finds them every time. Rules this axe version lacks are skipped.
+export const AXE_RULES = [
+  "aria-valid-attr", "aria-valid-attr-value", "aria-allowed-attr", "aria-required-attr", "aria-hidden-focus",
+  "aria-input-field-name", "aria-toggle-field-name", "aria-command-name", "duplicate-id-aria",
+  "label", "label-title-only", "form-field-multiple-labels", "button-name", "link-name", "select-name",
+];
+
 export const USAGE = `Usage: sweep.mjs --url <url> --out <evidence-dir> [options]
 
 Screenshots <url> at every viewport in workflow.viewports (config.json) and
 reports horizontal overflow, interactive elements smaller than ${RECOMMENDED_TARGET}x${RECOMMENDED_TARGET} CSS px
 (tier "below-${MINIMUM_TARGET}" fails WCAG 2.5.8; "below-${RECOMMENDED_TARGET}" is advisory), a visible
-dev-error overlay and console errors, as JSON on stdout.
+dev-error overlay and console errors, as JSON on stdout. At the first viewport it also
+runs axe's ARIA and label rules and reports their violations as axe.
 
 Options:
   --url <url>          Page to sweep (required).
@@ -161,7 +172,31 @@ export function measurePage({ minimum, recommended }) {
   };
 }
 
+// axe-core is a dependency of the mexxi checkout this script lives in, so it
+// resolves from here whatever repository is being swept.
+export async function axeSource() {
+  try {
+    return await readFile(createRequire(import.meta.url).resolve("axe-core/axe.min.js"), "utf8");
+  } catch (error) {
+    return { skipped: `axe-core could not be loaded (${error.message}); run npm ci in the mexxi checkout` };
+  }
+}
+
+// Runs in the page after axe's source. Kept self-contained: Playwright serialises it.
+export async function runAxe(rules) {
+  const known = new Set(window.axe.getRules().map((rule) => rule.ruleId));
+  const result = await window.axe.run(document, { runOnly: { type: "rule", values: rules.filter((rule) => known.has(rule)) }, resultTypes: ["violations"] });
+  return result.violations.map((violation) => ({
+    rule: violation.id,
+    impact: violation.impact,
+    help: violation.help,
+    nodes: violation.nodes.slice(0, 10).map((node) => ({ target: node.target.join(" "), summary: node.failureSummary })),
+  }));
+}
+
 export async function sweep({ url, out, name, phase = "after", viewports, waitFor, executable, timeout = 15000, playwright }) {
+  const axe = await axeSource();
+  let axeReport = typeof axe === "string" ? null : axe;
   // With no executable, channel chromium is Playwright's own full Chromium,
   // the browser the MCP server's --browser=chromium runs, not the separate
   // headless shell a bare launch would pick.
@@ -186,13 +221,19 @@ export async function sweep({ url, out, name, phase = "after", viewports, waitFo
       const screenshot = path.join(out, screenshotName({ phase, name, width }));
       await tab.screenshot({ path: screenshot, fullPage: true });
       const measured = await tab.evaluate(measurePage, { minimum: MINIMUM_TARGET, recommended: RECOMMENDED_TARGET });
+      if (axeReport === null) {
+        // Evaluated rather than added as a script tag, so a page's
+        // Content-Security-Policy cannot block it.
+        await tab.evaluate(axe);
+        axeReport = { width, violations: await tab.evaluate(runAxe, AXE_RULES) };
+      }
       results.push({ width, height: viewportHeight(width), screenshot, ...measured, consoleErrors });
       await context.close();
     }
   } finally {
     await browser.close();
   }
-  return results;
+  return { viewports: results, axe: axeReport };
 }
 
 export async function main(args = process.argv.slice(2)) {
@@ -207,7 +248,7 @@ export async function main(args = process.argv.slice(2)) {
     const playwright = await import(pathToFileURL(entry).href);
     const viewports = options.viewports ? parseViewports(options.viewports) : config.workflow.viewports;
     const name = options.name ?? routeSlug(options.url);
-    const results = await sweep({
+    const { viewports: results, axe } = await sweep({
       url: options.url,
       out: path.resolve(options.out),
       name,
@@ -218,7 +259,7 @@ export async function main(args = process.argv.slice(2)) {
       timeout: options.timeout ? Number(options.timeout) : undefined,
       playwright: playwright.chromium ? playwright : playwright.default,
     });
-    process.stdout.write(`${JSON.stringify({ url: options.url, viewports: results }, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify({ url: options.url, viewports: results, axe }, null, 2)}\n`);
   } catch (error) {
     process.stderr.write(`sweep: ${error.message}\n`);
     process.exitCode = 2;

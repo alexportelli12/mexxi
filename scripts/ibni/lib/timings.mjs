@@ -19,6 +19,7 @@ export async function appendHistory(cwd, sessionId, field, item) {
 
 function stepOutcome(result, error) {
   if (error) return "failed";
+  if (result?.operation === "ci-wait") return result.state === "green" ? "succeeded" : `ci-${result.state}`;
   if (result?.published === false) return "requires-evidence";
   if (result?.recorded === false) return result.requiresVerify ? "requires-verify" : "not-recorded";
   if (result?.passed === false || (result?.setup?.ran && !result.setup.passed)) return "failed";
@@ -54,18 +55,12 @@ export function summarizeTimings(metadata) {
       history: rounds.map(({ at, findings: count }) => ({ at, findings: count })),
     };
   };
-  // Acceptance is recorded per review, with the reviewer's family; reviews
-  // recorded without it count in the totals above but not here.
+  // Acceptance is optional per review; reviews recorded without it count in
+  // rounds and findings but add nothing to accepted.
   const reviews = records.filter((record) => record.kind === "review");
-  const byReviewer = Object.fromEntries(["same", "cross"].map((reviewer) => {
-    const rounds = reviews.filter((record) => record.reviewer === reviewer);
-    return [reviewer, {
-      rounds: rounds.length,
-      findings: rounds.reduce((total, record) => total + record.findings, 0),
-      accepted: rounds.reduce((total, record) => total + record.accepted, 0),
-    }];
-  }));
+  const accepted = reviews.reduce((total, record) => total + (record.accepted ?? 0), 0);
   const verify = records.filter((record) => record.kind === "verify");
+  const ci = records.filter((record) => record.kind === "ci");
   return {
     steps: (metadata.steps ?? []).map((step) => ({
       ...step,
@@ -78,7 +73,15 @@ export function summarizeTimings(metadata) {
       // What each run cost, where its scope could measure it (decision 0019).
       history: verify.map(({ at, outcome, durationMs, queuedMs, memoryPeakBytes, cpuMs }) => ({ at, outcome, durationMs, queuedMs, memoryPeakBytes, cpuMs })),
     },
-    review: { ...findings("review"), byReviewer },
+    review: { ...findings("review"), accepted },
     qa: findings("qa"),
+    // Each ibni ci-wait; a round is one that ended with a failed check
+    // (decision 0026). state is the last wait's, null before any.
+    ci: {
+      waits: ci.length,
+      rounds: ci.filter((record) => record.state === "failed").length,
+      state: ci.at(-1)?.state ?? null,
+      history: ci.map(({ at, state, headSha, failed, durationMs }) => ({ at, state, headSha, failed, durationMs })),
+    },
   };
 }

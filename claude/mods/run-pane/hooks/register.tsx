@@ -1,7 +1,8 @@
 // The run pane: a pane beside the chat that follows the ibni workspace this
 // session works in, read from `ibni info` and `ibni stats` whenever a Bash
 // call runs ibni and after every turn, plus a band above the prompt once the
-// PR is delivered or the context window runs high (the context nudge).
+// PR is delivered (its CI state, and "done" once green) or the context window
+// runs high (the context nudge).
 // Claude Code only; ibni's metadata stays the record every host shares.
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
@@ -9,7 +10,7 @@ import type { EngineInterface, Register } from 'claude-code'
 import type { RunPaneSnapshot } from '../types'
 import type { StageState } from './journey'
 import { duration, headline, journey, lastEventAt, progress, snapshotFrom } from './journey'
-import { bar, confidenceTone, nudge, nudgePercentFrom, sessionIdFrom, since, taskTitle, triageRanking } from './run'
+import { nudge, nudgePercentFrom, sessionIdFrom, since, taskTitle } from './run'
 
 const PANE = 'run-pane'
 
@@ -108,9 +109,6 @@ export const register: Register = on => {
     const started = since(current.createdAt, now)
     const lastEvent = lastEventAt(current)
     const onCurrent = lastEvent ? duration(now - Date.parse(lastEvent)) : undefined
-    const triage = triageRanking(current)
-    const questionWidth = Math.max(0, ...triage.map(row => row.question.length))
-    const answerWidth = Math.max(0, ...triage.map(row => row.answer.length))
     const port = current.port === null || current.port === undefined ? undefined : `port ${current.port}`
     return (
       <Box flexDirection="column" gap={1}>
@@ -154,32 +152,6 @@ export const register: Register = on => {
               <Text color="success" weight="bold">{'↗ '}</Text>
               <Link href={current.prUrl}>{`Open PR #${current.prUrl.split('/').at(-1)}`}</Link>
             </Text>
-          </Box>
-        ) : null}
-
-        {/* Jev's call, ranked by how sure it was. Shadow only: it is recorded
-            beside the agent's own choices and changes nothing. */}
-        {triage.length > 0 ? (
-          <Box borderStyle="round" borderColor="suggestion" paddingX={1} flexDirection="column" gap={1}>
-            <Text>
-              <Text backgroundColor="suggestion" color="inverseText" weight="bold">{' JEV TRIAGE '}</Text>
-              <Text dimColor>{'  shadow'}</Text>
-            </Text>
-            <Box flexDirection="column">
-              {triage.map(row => {
-                const cells = bar(row.percent)
-                return (
-                  <Text tabular>
-                    <Text>{`${row.question.padEnd(questionWidth)}  `}</Text>
-                    <Text weight="bold">{`${row.answer.padEnd(answerWidth)}  `}</Text>
-                    <Text color={confidenceTone(row.percent)}>{cells.filled}</Text>
-                    <Text dimColor>{cells.empty}</Text>
-                    <Text color={confidenceTone(row.percent)}>{` ${String(row.percent).padStart(3)}%`}</Text>
-                  </Text>
-                )
-              })}
-            </Box>
-            <Text dimColor wrap="wrap">Recorded only; changes nothing.</Text>
           </Box>
         ) : null}
 

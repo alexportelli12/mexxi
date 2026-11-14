@@ -1,6 +1,7 @@
 import net from "node:net";
 import path from "node:path";
 import { WorkspaceError } from "./errors.mjs";
+import { run } from "./git.mjs";
 
 // Only EADDRINUSE means another process holds the port; a host without IPv6
 // reports a different error for "::" and still has the port free.
@@ -88,4 +89,67 @@ export function sessionRunEnvironment(metadata, config, base = process.env) {
   const owned = new Set(["PORT", ...Object.keys(mappedVariables(metadata, config) ?? {})]);
   const inherited = Object.fromEntries(Object.entries(base).filter(([name]) => !owned.has(name) && !/^MEXXI_PORT_\d+$/.test(name)));
   return { ...inherited, ...sessionPortEnvironment(metadata, config) };
+}
+
+// The listening sockets in `ss -ltnpH` output as { port, pid, command }, one
+// per process; pid and command are null when ss may not see the owner (a
+// process of another user).
+export function parseSsListeners(text) {
+  const holders = [];
+  for (const line of text.split("\n")) {
+    const fields = line.trim().split(/\s+/);
+    if (fields.length < 5) continue;
+    const port = Number(fields[3].match(/:(\d+)$/)?.[1]);
+    if (!Number.isInteger(port)) continue;
+    const users = [...line.matchAll(/\("([^"]*)",pid=(\d+)/g)];
+    if (users.length === 0) holders.push({ port, pid: null, command: null });
+    for (const [, command, pid] of users) holders.push({ port, pid: Number(pid), command });
+  }
+  return holders;
+}
+
+// `lsof -Fpc` output: a p<pid> line, then c<command> for that process.
+export function parseLsofListeners(text, port) {
+  const holders = [];
+  for (const line of text.split("\n")) {
+    if (line.startsWith("p")) holders.push({ port, pid: Number(line.slice(1)), command: null });
+    else if (line.startsWith("c") && holders.length) holders.at(-1).command = line.slice(1);
+  }
+  return holders.filter((holder) => Number.isInteger(holder.pid));
+}
+
+const unique = (holders) => [...new Map(holders.map((holder) => [`${holder.port}:${holder.pid}`, holder])).values()];
+
+// Who listens on each busy port, so a refusal can name what to stop: ss on
+// Linux, lsof where ss is missing or cannot see the owner. holders is null,
+// with a reason, when neither tool can say.
+export async function portHolders(ports, { runCommand = run } = {}) {
+  const found = [];
+  const reasons = [];
+  try {
+    const { stdout } = await runCommand("ss", ["-ltnpH"], { timeout: 5_000 });
+    found.push(...parseSsListeners(stdout).filter((holder) => ports.includes(holder.port) && holder.pid !== null));
+  } catch (error) {
+    reasons.push(`ss: ${error.message.split("\n")[0]}`);
+  }
+  for (const port of ports.filter((candidate) => !found.some((holder) => holder.port === candidate))) {
+    try {
+      // lsof exits 1 when it finds nothing.
+      const { stdout } = await runCommand("lsof", ["-nP", `-iTCP:${port}`, "-sTCP:LISTEN", "-Fpc"], { timeout: 5_000, allowedExitCodes: [0, 1] });
+      found.push(...parseLsofListeners(stdout, port));
+    } catch (error) {
+      reasons.push(`lsof: ${error.message.split("\n")[0]}`);
+    }
+  }
+  if (found.length === 0) return { holders: null, reason: reasons.length ? reasons.join("; ") : "neither ss nor lsof could see the process (it may belong to another user)" };
+  return { holders: unique(found), reason: null };
+}
+
+// "port 4551 is held by node (pid 1234)", for each busy port.
+export function describeHolders(busy, holders) {
+  return busy.map((port) => {
+    const owners = (holders ?? []).filter((holder) => holder.port === port);
+    if (owners.length === 0) return `port ${port} is held by a process ibni cannot name`;
+    return `port ${port} is held by ${owners.map((owner) => `${owner.command ?? "an unnamed process"} (pid ${owner.pid})`).join(" and ")}`;
+  }).join("; ");
 }

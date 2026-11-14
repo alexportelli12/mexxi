@@ -8,7 +8,7 @@ import { isDeepStrictEqual } from "node:util";
 import { installPlaywrightMcp, npmInstall, registeredPlaywrightVersions, registrationCommands, registrationDrift } from "./lib/browser.mjs";
 import { applyMods, planMods } from "./lib/claude-mods.mjs";
 import { desiredSettings, planSettingsMerge, writeSettingsMerge } from "./lib/claude-settings.mjs";
-import { ConfigError, abbreviateHome, configPath, loadConfig, minimalConfig, resolveConfig } from "./lib/config.mjs";
+import { ConfigError, abbreviateHome, configPath, loadConfig, minimalConfig, resolveConfig, withoutRetiredKeys } from "./lib/config.mjs";
 import { codexHooks, planCodexHooks, writeCodexHooks } from "./lib/host-hooks.mjs";
 import { codexCommandSkill, renderDrift, renderHostFiles, writeRendered } from "./lib/render.mjs";
 import { applyUnits, commandLine, noSystemctl, planUnits, retiredSegwiLink, segwiLink, serviceSearchPath, userSystemctl } from "./lib/segwi-install.mjs";
@@ -192,8 +192,8 @@ export async function staleLinks({
 // refuses to install from any clone but the one it names, so a stray clone (or
 // the old checkout's post-merge hook during the move) can never repoint the hosts.
 async function installationConfig({ home, checkout, configFile, configSource }) {
-  const { config, exists } = await loadConfig({ file: configFile, home });
-  let installed = { config, exists, write: null };
+  const { config, exists, retired } = await loadConfig({ file: configFile, home });
+  let installed = { config, exists, write: null, retired };
   if (configSource) {
     let value;
     try {
@@ -206,7 +206,7 @@ async function installationConfig({ home, checkout, configFile, configSource }) 
     if (exists && !isDeepStrictEqual(JSON.parse(await readFile(configFile, "utf8")), value)) {
       throw new ConfigError(`${configFile} already exists and differs from ${configSource}; no changes made. Merge the settings you want into ${configFile} by hand, or move it aside, then run again`);
     }
-    installed = { config: await resolveConfig(value, { home, source: configSource }), exists, write: exists ? null : value };
+    installed = { config: await resolveConfig(value, { home, source: configSource }), exists, write: exists ? null : value, retired: withoutRetiredKeys(value).retired };
   }
   if (installed.config.paths.checkout !== checkout) {
     const fix = installed.exists || configSource
@@ -256,7 +256,7 @@ export async function install(options = {}) {
   const generated = options.generated ?? generatedDirectory(home);
   const migrateFrom = options.migrateFrom ? path.resolve(options.migrateFrom) : null;
   if (migrateFrom && within(checkout, migrateFrom)) throw new Error("--migrate-from must name the old checkout, not this one");
-  const { config, exists, write: configToWrite } = await installationConfig({ home, checkout, configFile, configSource: options.configSource });
+  const { config, exists, write: configToWrite, retired: retiredConfig } = await installationConfig({ home, checkout, configFile, configSource: options.configSource });
   const rendered = await renderHostFiles({ checkout, config, home });
   const linkOptions = { ...options, home, checkout, generated, hosts: config.hosts, segwi: config.segwi.enabled };
   const entries = await links(linkOptions);
@@ -342,7 +342,7 @@ export async function install(options = {}) {
   const settingsPlan = settingsDesired ? await planSettingsMerge({ ...settingsFiles, desired: settingsDesired }) : null;
   conflicts.push(...(settingsPlan?.conflicts ?? []));
   // Codex's hooks.json is shared with the user and other tools (herdr), so
-  // only the guard and loop-breaker groups are merged in, by ownership.
+  // only the guard and post-tool (loop breaker and test-design nudge) groups are merged in, by ownership.
   const codexHooksFiles = {
     hooksFile: path.join(options.codex ?? path.join(home, ".codex"), "hooks.json"),
     stateFile: path.join(home, ".local/share/mexxi/state/codex-hooks.json"),
@@ -476,6 +476,7 @@ export async function install(options = {}) {
     settings: settingsPlan?.drift.length ?? 0, ...(playwrightMcp && { playwrightMcp }), ...(hasUnitWork && { segwi: { ...unitSummary, systemctl: unitOutcome.systemctl, failed: unitOutcome.failed } }), ...modsSummary(modsPlan), ...(modsFailed && { mods: "failed", modsFailed }), registration,
     // Codex skips a new or changed hook until it is trusted in /hooks.
     codexHooksChanged: Boolean(codexHooksPlan?.file),
+    retiredConfig,
   };
 }
 
@@ -528,12 +529,15 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       codex: process.env.CODEX_HOME ? path.resolve(process.env.CODEX_HOME) : undefined,
       configFile: configPath(),
     });
-    const { registration = {}, codexHooksChanged, modsFailed, segwi: segwiUnits, ...summary } = result;
+    const { registration = {}, codexHooksChanged, modsFailed, segwi: segwiUnits, retiredConfig = [], ...summary } = result;
     process.stdout.write(`${JSON.stringify(summary)}\n`);
+    if (retiredConfig.length) {
+      process.stdout.write(`${configPath()} still sets keys mexxi no longer reads, so they were ignored; delete them: ${retiredConfig.join(", ")}\n`);
+    }
     if (result.dryRun) process.stdout.write("Nothing would stop an install, and nothing was changed.\n");
     if (segwiUnits) reportSegwiUnits(segwiUnits);
     if (codexHooksChanged) {
-      process.stdout.write("Codex hooks changed: start codex and trust the mexxi guard and loop breaker once in /hooks (Codex skips untrusted hooks).\n");
+      process.stdout.write("Codex hooks changed: start codex and trust the mexxi guard and post-tool hooks once in /hooks (Codex skips untrusted hooks).\n");
     }
     // The installer never touches a host's MCP registry; these are for you to run.
     // `install --check` fails until each registered server matches them.

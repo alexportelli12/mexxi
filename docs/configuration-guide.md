@@ -11,7 +11,7 @@ sources:
   - scripts/ibni/lib/lock.mjs
   - scripts/ibni/lib/scope.mjs
   - scripts/ibni/lib/caches.mjs
-reviewed: 2026-10-25
+reviewed: 2026-11-14
 ---
 
 # Configuration
@@ -45,15 +45,13 @@ Switch off the agents you do not use. The installer removes what it gave them be
 { "hosts": { "opencode": false, "codex": false } }
 ```
 
-### Get a reviewer from another model family
+### Pick the reviewer's model
 
-A reviewer from the builder's own family shares its blind spots. On Claude Code, with Codex installed, name a Codex model and `ibni cross-review` runs the review on it:
+The reviewer inherits the host's model unless you name one. A different model can catch what the builder's model misses; on OpenCode it can come from another provider:
 
 ```json
-{ "models": { "claude": { "crossFamilyReviewer": "<a Codex model>" } } }
+{ "models": { "claude": { "reviewer": "opus" }, "opencode": { "reviewer": "<provider/model>" } } }
 ```
-
-On OpenCode, set `models.opencode.crossFamilyReviewer` to a `provider/model` from another family. Codex has one family, so its review is always same-family.
 
 ### Run without `ocr`
 
