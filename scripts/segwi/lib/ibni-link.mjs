@@ -15,7 +15,15 @@ export const IBNI_FIELDS = {
   stats: [
     "verify.history", "verify.history.0.at", "verify.attempts", "verify.passed", "verify.failed",
     "steps.0.step", "steps.0.outcome", "steps.0.durationMs", "steps.0.endedAt",
-    "review.rounds", "review.findings", "qa.rounds", "qa.findings",
+    "review.rounds", "review.findings", "review.accepted", "qa.rounds", "qa.findings",
+    // Each review and QA pass, with the grade and open counts of decision 0024 (the get_run snapshot).
+    ...["review", "qa"].flatMap((gate) => [
+      `${gate}.history.0.at`, `${gate}.history.0.findings`, `${gate}.history.0.open`,
+      `${gate}.history.0.severity.blocker`, `${gate}.history.0.severity.major`, `${gate}.history.0.severity.minor`, `${gate}.history.0.severity.nit`,
+    ]),
+    "review.history.0.accepted",
+    // The commit the latest ibni verify run checked.
+    "verification.headSha",
   ],
 };
 
@@ -44,6 +52,8 @@ export function ibniSnapshot(info, stats) {
   const verify = object(merged.verify);
   const review = object(merged.review);
   const qa = object(merged.qa);
+  // The commit ibni's latest verify run checked; only the sha, never the run's log path or command.
+  const verifiedHead = text(object(merged.verification)?.headSha);
   return {
     branch: text(merged.branch), state: text(merged.state), prUrl: text(merged.prUrl) ?? null, createdAt: text(merged.createdAt),
     steps: keptSteps(Array.isArray(merged.steps) ? merged.steps.map(object).filter(Boolean) : []).map((step) => ({
@@ -54,10 +64,30 @@ export function ibniSnapshot(info, stats) {
       verify: {
         attempts: count(verify.attempts), passed: count(verify.passed), failed: count(verify.failed),
         history: (Array.isArray(verify.history) ? verify.history : []).map(object).filter(Boolean).map((entry) => ({ outcome: String(entry.outcome ?? "?"), ...(text(entry.at) ? { at: entry.at } : {}) })),
+        ...(verifiedHead ? { headSha: verifiedHead } : {}),
       },
     } : {}),
-    ...(review ? { review: { rounds: count(review.rounds), findings: count(review.findings) } } : {}),
-    ...(qa ? { qa: { rounds: count(qa.rounds), findings: count(qa.findings) } } : {}),
+    ...(review ? { review: { ...passes(review), ...(typeof review.accepted === "number" ? { accepted: count(review.accepted) } : {}) } } : {}),
+    ...(qa ? { qa: passes(qa) } : {}),
+  };
+}
+
+// The four finding grades of decision 0024, as `ibni record` stores them.
+const SEVERITIES = ["blocker", "major", "minor", "nit"];
+const optionalCount = (name, value) => (typeof value === "number" && Number.isFinite(value) ? { [name]: value } : {});
+
+/** A review or QA gate: its totals and each pass, counts only. A count the pass didn't record stays absent. */
+function passes(gate) {
+  return {
+    rounds: count(gate.rounds), findings: count(gate.findings),
+    history: (Array.isArray(gate.history) ? gate.history : []).map(object).filter(Boolean).map((entry) => {
+      const severity = object(entry.severity);
+      return {
+        ...(text(entry.at) ? { at: entry.at } : {}), findings: count(entry.findings),
+        ...(severity ? { severity: Object.fromEntries(SEVERITIES.map((name) => [name, count(severity[name])])) } : {}),
+        ...optionalCount("open", entry.open), ...optionalCount("accepted", entry.accepted),
+      };
+    }),
   };
 }
 

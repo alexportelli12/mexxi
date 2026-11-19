@@ -9,7 +9,7 @@ sources:
   - docs/decisions/0013-segwi-run-browser-and-hosts.md
   - docs/decisions/0016-segwi-runs-trusted-like-own-sessions.md
   - docs/decisions/0020-segwi-local-extensions.md
-reviewed: 2026-11-14
+reviewed: 2026-11-19
 ---
 
 # segwi
@@ -138,7 +138,18 @@ For a client that reads a JSON file:
 }
 ```
 
-`get_run` also says what a working run waits on, in `waitingOn`. Run output that segwi returns is labelled as untrusted and has secrets removed, because a repository can put text in it that tries to steer your client. Stopping a run takes two calls: the first returns a confirmation token that is valid for two minutes.
+`get_run` also says what a working run waits on, in `waitingOn`.
+
+`get_run` returns `ibni.snapshot` too, so your client can see whether checks and review ran and what they found. It is the same record the app draws a run's journey from, and it is `null` until `ibni` has answered:
+
+- `verify`: the attempts, each run's `outcome` and time in `history`, and `headSha`, the commit the latest `ibni verify` run checked.
+- `review` and `qa`: the number of passes in `rounds`, the total `findings`, and each pass in `history`.
+- Each pass in `history`: its `findings`, and, where the agent recorded them, counts per grade in `severity` (`blocker`, `major`, `minor`, `nit`), how many it left `open` and, for review, how many it `accepted`. A count the pass didn't record is left out rather than shown as zero.
+- `steps`: the latest `ibni` steps with their outcome and duration.
+
+The snapshot holds counts, outcomes, times and commit hashes only. It never carries a file path or the text of a finding. The agent records each pass with `ibni record`; `ibni help record` lists its options.
+
+Run output that segwi returns is labelled as untrusted and has secrets removed, because a repository can put text in it that tries to steer your client. Stopping a run takes two calls: the first returns a confirmation token that is valid for two minutes.
 
 ## Get push notifications
 

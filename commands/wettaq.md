@@ -103,8 +103,10 @@ verification and delivery.
 4. Run the verify command. On failure, diagnose from `logTail` and `logPath`
    (see the `verifika` skill), fix in a new commit and run it again. Never
    weaken a safeguard to pass.
-5. Record each QA and review pass: `ibni record --session "<sessionId>"
-   --qa <findings>` or `--review <findings> --accepted <fixed>`.
+5. Record each QA and review pass with its count per grade and what it left
+   open: `ibni record --session "<sessionId>" --qa <findings>` or `--review
+   <findings> --accepted <fixed>`, plus `--blocker`, `--major`, `--minor`,
+   `--nit` and `--open` counts. Never record finding text.
 6. Re-read the request and contract against the final diff.
 
 ## Rendered QA

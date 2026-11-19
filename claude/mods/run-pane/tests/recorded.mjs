@@ -9,7 +9,9 @@
 // fields when runs moved into systemd scopes (unscoped in that scenario).
 // review.accepted replaced the same/cross split by hand when that was retired.
 // The ci-wait step and ci were added by hand, in that scenario's shape, when
-// ibni began waiting on CI (decision 0026).
+// ibni began waiting on CI (decision 0026). The first review pass's severity,
+// open and accepted counts were added by hand, in that scenario's shape, when
+// ibni record began taking them (decision 0024).
 export const info = {
   "operation": "info",
   "sessionId": "2c026ea35efd82bef78e30b9",
@@ -156,7 +158,15 @@ export const stats = {
     "history": [
       {
         "at": "2026-10-21T02:30:33.169Z",
-        "findings": 3
+        "findings": 3,
+        "severity": {
+          "blocker": 1,
+          "major": 0,
+          "minor": 2,
+          "nit": 0
+        },
+        "open": 1,
+        "accepted": 2
       },
       {
         "at": "2026-10-21T02:30:33.484Z",

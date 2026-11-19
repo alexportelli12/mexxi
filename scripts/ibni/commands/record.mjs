@@ -3,16 +3,34 @@ import { appendHistory } from "../lib/timings.mjs";
 
 const VERIFY_OUTCOMES = new Set(["pass", "fail"]);
 const BEFORE_SHOT_OUTCOMES = new Set(["taken", "skipped"]);
+// The finding grades of decision 0024, in the order they are reported.
+export const SEVERITIES = ["blocker", "major", "minor", "nit"];
 
 function findingCount(kind, value) {
   if (!/^\d+$/.test(value)) throw new WorkspaceError(`--${kind} expects a whole number of findings`);
   return Number(value);
 }
 
-// Records one gate result: a full verify run, the finding count of one review
-// or rendered QA pass, or whether before-shots were taken. A review may also
-// say how many of its findings were accepted. `stats` reports them.
-export async function recordGate({ cwd = process.cwd(), sessionId, verify, review, qa, beforeShots, accepted }) {
+// A pass's counts per grade, or undefined when it gave none. Grades left out
+// count as zero, and the grades must add up to the pass's finding count, so a
+// stored breakdown always accounts for every finding.
+function severityCounts(kind, findings, grades) {
+  const given = SEVERITIES.filter((severity) => grades[severity] !== undefined);
+  if (given.length === 0) return undefined;
+  const severity = Object.fromEntries(SEVERITIES.map((name) => [name, grades[name] === undefined ? 0 : findingCount(name, grades[name])]));
+  const total = SEVERITIES.reduce((sum, name) => sum + severity[name], 0);
+  if (total !== findings) {
+    throw new WorkspaceError(`--blocker, --major, --minor and --nit add up to ${total}, but --${kind} says ${findings} findings; give a count for every grade the pass found`);
+  }
+  return severity;
+}
+
+// Records one gate result: a full verify run, the findings of one review or
+// rendered QA pass, or whether before-shots were taken. A review or QA pass
+// may break its findings down by grade and say how many it left open; a review
+// may also say how many it accepted. Only counts are kept, never finding text.
+// `stats` reports them.
+export async function recordGate({ cwd = process.cwd(), sessionId, verify, review, qa, beforeShots, accepted, open, ...grades }) {
   const given = Object.entries({ verify, review, qa, "before-shots": beforeShots }).filter(([, value]) => value !== undefined);
   if (given.length !== 1) {
     throw new WorkspaceError("record takes exactly one of --verify <pass|fail>, --review <count>, --qa <count>, or --before-shots <taken|skipped>");
@@ -25,14 +43,26 @@ export async function recordGate({ cwd = process.cwd(), sessionId, verify, revie
     throw new WorkspaceError("--before-shots expects taken or skipped");
   }
   if (accepted !== undefined && kind !== "review") throw new WorkspaceError("--accepted applies only to --review");
+  const isPass = kind === "review" || kind === "qa";
+  if (!isPass && (open !== undefined || SEVERITIES.some((name) => grades[name] !== undefined))) {
+    throw new WorkspaceError("--blocker, --major, --minor, --nit and --open apply only to --review or --qa");
+  }
+  const findings = isPass ? findingCount(kind, value) : undefined;
   const acceptedCount = accepted === undefined ? undefined : findingCount("accepted", accepted);
-  if (acceptedCount > Number(value)) throw new WorkspaceError("--accepted cannot exceed the review's finding count");
+  if (acceptedCount > findings) throw new WorkspaceError("--accepted cannot exceed the review's finding count");
+  const openCount = open === undefined ? undefined : findingCount("open", open);
+  if ((acceptedCount ?? 0) + (openCount ?? 0) > findings) {
+    throw new WorkspaceError(`--open${acceptedCount === undefined ? "" : " and --accepted together"} cannot exceed the pass's finding count`);
+  }
+  const severity = isPass ? severityCounts(kind, findings, grades) : undefined;
   const record = {
     kind,
     at: new Date().toISOString(),
     sessionId,
-    ...(kind === "verify" || kind === "before-shots" ? { outcome: value } : { findings: findingCount(kind, value) }),
+    ...(isPass ? { findings } : { outcome: value }),
     ...(acceptedCount === undefined ? {} : { accepted: acceptedCount }),
+    ...(severity === undefined ? {} : { severity }),
+    ...(openCount === undefined ? {} : { open: openCount }),
   };
   await appendHistory(cwd, sessionId, "records", record);
   return { operation: "record", ...record };
