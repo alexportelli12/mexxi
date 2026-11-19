@@ -103,7 +103,7 @@ test("list, start, read output, send input and stop work end to end, each with a
   // Once ibni has answered, get_run returns the snapshot the app draws, as stored.
   const snapshot = {
     branch: "agent/thing", state: "published", prUrl: null, createdAt: "2026-11-19T10:00:00.000Z", steps: [{ step: "verify", outcome: "succeeded" }],
-    verify: { attempts: 1, passed: 1, failed: 0, history: [{ outcome: "pass", at: "2026-11-19T10:05:00.000Z" }], headSha: "a".repeat(40) },
+    verify: { attempts: 1, passed: 1, failed: 0, history: [{ outcome: "pass", at: "2026-11-19T10:05:00.000Z" }], headSha: "a".repeat(40), headPassed: true },
     review: { rounds: 1, findings: 2, accepted: 1, history: [{ at: "2026-11-19T10:06:00.000Z", findings: 2, severity: { blocker: 0, major: 1, minor: 1, nit: 0 }, open: 1, accepted: 1 }] },
   };
   server.store.updateRun(started.id, { snapshot });

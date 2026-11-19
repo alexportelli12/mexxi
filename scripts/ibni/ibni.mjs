@@ -321,7 +321,7 @@ export const COMMANDS = {
       major: "With --review or --qa: how many findings were graded major.",
       minor: "With --review or --qa: how many findings were graded minor.",
       nit: "With --review or --qa: how many findings were graded nit.",
-      open: "With --review or --qa: how many findings the run left unresolved after this pass.",
+      open: "With --review or --qa: how many of this pass's findings were left unresolved.",
       "before-shots": "Whether before-shots of existing UI were taken or skipped.",
     },
     run: (options) => recordGate({

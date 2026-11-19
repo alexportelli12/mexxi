@@ -22,8 +22,8 @@ export const IBNI_FIELDS = {
       `${gate}.history.0.severity.blocker`, `${gate}.history.0.severity.major`, `${gate}.history.0.severity.minor`, `${gate}.history.0.severity.nit`,
     ]),
     "review.history.0.accepted",
-    // The commit the latest ibni verify run checked.
-    "verification.headSha",
+    // The commit the latest ibni verify run checked, and whether it passed.
+    "verification.headSha", "verification.passed",
   ],
 };
 
@@ -52,8 +52,9 @@ export function ibniSnapshot(info, stats) {
   const verify = object(merged.verify);
   const review = object(merged.review);
   const qa = object(merged.qa);
-  // The commit ibni's latest verify run checked; only the sha, never the run's log path or command.
-  const verifiedHead = text(object(merged.verification)?.headSha);
+  // The commit ibni's latest verify run checked and whether it passed; never the run's log path or command.
+  const verification = object(merged.verification);
+  const verifiedHead = text(verification?.headSha);
   return {
     branch: text(merged.branch), state: text(merged.state), prUrl: text(merged.prUrl) ?? null, createdAt: text(merged.createdAt),
     steps: keptSteps(Array.isArray(merged.steps) ? merged.steps.map(object).filter(Boolean) : []).map((step) => ({
@@ -64,7 +65,7 @@ export function ibniSnapshot(info, stats) {
       verify: {
         attempts: count(verify.attempts), passed: count(verify.passed), failed: count(verify.failed),
         history: (Array.isArray(verify.history) ? verify.history : []).map(object).filter(Boolean).map((entry) => ({ outcome: String(entry.outcome ?? "?"), ...(text(entry.at) ? { at: entry.at } : {}) })),
-        ...(verifiedHead ? { headSha: verifiedHead } : {}),
+        ...(verifiedHead ? { headSha: verifiedHead, headPassed: verification.passed === true } : {}),
       },
     } : {}),
     ...(review ? { review: { ...passes(review), ...(typeof review.accepted === "number" ? { accepted: count(review.accepted) } : {}) } } : {}),
@@ -72,7 +73,8 @@ export function ibniSnapshot(info, stats) {
   };
 }
 
-// The four finding grades of decision 0024, as `ibni record` stores them.
+// The four finding grades of decision 0024, as `ibni record` stores them. A copy on purpose: segwi reads ibni
+// only through its JSON, and the contract test fails if the two lists drift apart.
 const SEVERITIES = ["blocker", "major", "minor", "nit"];
 const optionalCount = (name, value) => (typeof value === "number" && Number.isFinite(value) ? { [name]: value } : {});
 

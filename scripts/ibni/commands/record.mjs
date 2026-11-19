@@ -4,7 +4,7 @@ import { appendHistory } from "../lib/timings.mjs";
 const VERIFY_OUTCOMES = new Set(["pass", "fail"]);
 const BEFORE_SHOT_OUTCOMES = new Set(["taken", "skipped"]);
 // The finding grades of decision 0024, in the order they are reported.
-export const SEVERITIES = ["blocker", "major", "minor", "nit"];
+const SEVERITIES = ["blocker", "major", "minor", "nit"];
 
 function findingCount(kind, value) {
   if (!/^\d+$/.test(value)) throw new WorkspaceError(`--${kind} expects a whole number of findings`);
