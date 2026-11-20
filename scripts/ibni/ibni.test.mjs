@@ -1743,12 +1743,16 @@ test("lifecycle steps, verify attempts and finding counts are recorded and repor
   const prepared = await lifecycle(fixture, fixture.control, "prepare", { slug: "timed" });
   const { sessionId, worktreePath } = prepared.json;
   await commit(worktreePath, "feature.txt", "feature\n", "feature");
-  for (const options of [{ "before-shots": "skipped" }, { verify: "fail" }, { verify: "pass" }, { review: "3", accepted: "2" }, { qa: "0" }, { review: "1" }]) {
+  for (const options of [{ "before-shots": "skipped" }, { verify: "fail" }, { verify: "pass" }, { review: "3", blocker: "1", minor: "2", open: "1", accepted: "2" },
+    { qa: "0" }, { review: "1" }, { qa: "2", major: "1", nit: "1", open: "2" }]) {
     const recorded = await lifecycle(fixture, fixture.control, "record", { session: sessionId, ...options });
     assert.equal(recorded.json.operation, "record");
   }
   for (const options of [{}, { verify: "maybe" }, { review: "-1" }, { verify: "pass", qa: "1" }, { "before-shots": "maybe" },
-    { review: "2", accepted: "3" }, { review: "2", accepted: "one" }, { qa: "2", accepted: "1" }]) {
+    { review: "2", accepted: "3" }, { review: "2", accepted: "one" }, { qa: "2", accepted: "1" },
+    // Grades that don't account for every finding, an open count above the findings, or above what acceptance left.
+    { review: "3", blocker: "1", minor: "1" }, { qa: "1", nit: "2" }, { review: "2", major: "x", minor: "2" }, { qa: "1", open: "2" },
+    { review: "3", accepted: "2", open: "2" }, { verify: "pass", blocker: "0" }, { "before-shots": "taken", open: "0" }]) {
     await lifecycle(fixture, fixture.control, "record", { session: sessionId, ...options }, [2]);
   }
   await lifecycle(fixture, worktreePath, "publish", { session: sessionId });
@@ -1774,7 +1778,16 @@ test("lifecycle steps, verify attempts and finding counts are recorded and repor
   assert.deepEqual(stats.json.verify.history.map((entry) => entry.outcome), ["fail", "pass", "pass"]);
   // A review recorded without --accepted counts in rounds and findings only.
   assert.deepEqual([stats.json.review.rounds, stats.json.review.findings, stats.json.review.accepted], [2, 4, 2]);
-  assert.deepEqual([stats.json.qa.rounds, stats.json.qa.findings], [1, 0]);
+  assert.deepEqual([stats.json.qa.rounds, stats.json.qa.findings], [2, 2]);
+  // Each pass keeps its grade and open counts; a pass recorded without them leaves them out, not zero.
+  assert.deepEqual(stats.json.review.history.map(({ at: _at, ...counts }) => counts), [
+    { findings: 3, severity: { blocker: 1, major: 0, minor: 2, nit: 0 }, open: 1, accepted: 2 },
+    { findings: 1 },
+  ]);
+  assert.deepEqual(stats.json.qa.history.map(({ at: _at, ...counts }) => counts), [
+    { findings: 0 },
+    { findings: 2, severity: { blocker: 0, major: 1, minor: 0, nit: 1 }, open: 2 },
+  ]);
 
   // The run pane mod's tests draw from a recording of this scenario; it must
   // keep the shape ibni prints, or those tests prove nothing.

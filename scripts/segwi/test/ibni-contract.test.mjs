@@ -67,6 +67,9 @@ test("the ibni fields segwi reads exist in prepare, list, info and stats output"
   assert.equal(JSON.parse(verified.stdout).passed, false);
   ibni("record", "--session", prepared.sessionId, "--verify", "fail");
   ibni("record", "--session", prepared.sessionId, "--verify", "pass");
+  // One graded pass of each kind, so every per-pass field segwi reads is there to check.
+  ibni("record", "--session", prepared.sessionId, "--review", "3", "--blocker", "1", "--major", "1", "--nit", "1", "--open", "1", "--accepted", "2");
+  ibni("record", "--session", prepared.sessionId, "--qa", "1", "--minor", "1", "--open", "0");
   const stats = ibni("stats", "--session", prepared.sessionId);
   for (const field of IBNI_FIELDS.stats) assert.ok(hasField(stats, field), `stats shows ${field}`);
   assert.deepEqual(stats.verify.history.map((record) => record.outcome), ["fail", "fail", "pass"]);
@@ -83,9 +86,18 @@ test("the ibni fields segwi reads exist in prepare, list, info and stats output"
   assert.equal(snapshot.createdAt, info.createdAt);
   assert.deepEqual(snapshot.steps.map((step) => [step.step, step.outcome]).slice(0, 2), [["prepare", "succeeded"], ["verify", "failed"]]);
   assert.ok(snapshot.steps.every((step) => typeof step.endedAt === "string" && typeof step.durationMs === "number"));
-  assert.deepEqual({ ...snapshot.verify, history: snapshot.verify.history.map((entry) => entry.outcome) }, { attempts: 3, passed: 1, failed: 2, history: ["fail", "fail", "pass"] });
-  assert.deepEqual(snapshot.review, { rounds: 0, findings: 0 });
-  assert.deepEqual(snapshot.qa, { rounds: 0, findings: 0 });
+  const verifiedHead = execFileSync("git", ["rev-parse", "HEAD"], { cwd: prepared.worktreePath, encoding: "utf8" }).trim();
+  assert.deepEqual({ ...snapshot.verify, history: snapshot.verify.history.map((entry) => entry.outcome) },
+    // The pass in history was recorded by hand; ibni's own run of that commit failed, and headPassed says so.
+    { attempts: 3, passed: 1, failed: 2, history: ["fail", "fail", "pass"], headSha: verifiedHead, headPassed: false });
+  const counts = ({ history, ...gate }) => ({ ...gate, history: history.map(({ at, ...rest }) => (assert.equal(typeof at, "string"), rest)) });
+  assert.deepEqual(counts(snapshot.review), {
+    rounds: 1, findings: 3, accepted: 2,
+    history: [{ findings: 3, severity: { blocker: 1, major: 1, minor: 0, nit: 1 }, open: 1, accepted: 2 }],
+  });
+  assert.deepEqual(counts(snapshot.qa), { rounds: 1, findings: 1, history: [{ findings: 1, severity: { blocker: 0, major: 0, minor: 1, nit: 0 }, open: 0 }] });
+  // stats carries the verify log's path (under the worktree root); the snapshot must not.
+  assert.ok(JSON.stringify(stats.verification).includes(worktrees));
   assert.ok(!JSON.stringify(snapshot).includes(worktrees), "no path reaches the snapshot");
   assert.equal((await link.findNewWorkspace(control, "1970-01-01T00:00:00.000Z", [prepared.worktreePath])), null);
   assert.equal((await link.findNewWorkspace(control, "1970-01-01T00:00:00.000Z"))?.sessionId, prepared.sessionId);
@@ -101,4 +113,10 @@ test("a long run's snapshot keeps its workspace step when older steps are droppe
   assert.equal(kept.at(-1).endedAt, "2026-01-01T10:69:00Z", "the newest steps stay");
   // A short run keeps every step as it is.
   assert.equal(ibniSnapshot({}, { steps: steps.slice(0, 5) }).steps.length, 5);
+});
+
+test("the snapshot says whether ibni's latest verify run passed on its commit, without its log path", () => {
+  const verification = { headSha: "b".repeat(40), passed: true, logPath: "/tmp/worktrees/x.evidence/verify.log", command: "npm run verify" };
+  const { verify } = ibniSnapshot({}, { verify: { attempts: 1, passed: 1, failed: 0, history: [] }, verification });
+  assert.deepEqual(verify, { attempts: 1, passed: 1, failed: 0, history: [], headSha: "b".repeat(40), headPassed: true });
 });

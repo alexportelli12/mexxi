@@ -108,6 +108,9 @@ with reasons), selected entries reviewed or skipped with reasons, material
 coverage limits, each blocking ledger item's confirmation status when applicable, and
 evidence-based findings with severity (`blocker`, `major`, `minor`, `nit`),
 its proof, category, path/line or rendered evidence, whether the line was
-changed, impact, and bounded recommendation.
+changed, impact, and bounded recommendation. End with the count per grade, as
+in `blocker 0, major 1, minor 2, nit 0`; the orchestrator records it with
+`ibni record --review <total> --blocker <n> --major <n> --minor <n> --nit <n>`,
+adding `--accepted` and `--open` once it has acted on the findings.
 The orchestrator alone judges applicability and owns remediation and the
 decision to continue.
