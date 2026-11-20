@@ -55,11 +55,13 @@ export function summarizeTimings(metadata) {
       // Each pass in order. A grade breakdown, the open count and the accepted
       // count appear only where the pass recorded them, so a missing one reads
       // as unknown rather than zero.
-      history: rounds.map(({ at, findings: count, severity, open, accepted: fixed }) => ({
+      // headSha, the commit a review pass looked at, only when its tree was clean.
+      history: rounds.map(({ at, findings: count, severity, open, accepted: fixed, headSha }) => ({
         at, findings: count,
         ...(severity === undefined ? {} : { severity }),
         ...(open === undefined ? {} : { open }),
         ...(fixed === undefined ? {} : { accepted: fixed }),
+        ...(headSha === undefined ? {} : { headSha }),
       })),
     };
   };

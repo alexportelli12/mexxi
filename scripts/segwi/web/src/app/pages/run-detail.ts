@@ -7,7 +7,7 @@ import { latestActivity } from '../core/activity';
 import { now } from '../core/clock';
 import { TONE_CLASS, duration, journeyView, type StageState } from '../core/journey';
 import { absoluteTime } from '../core/time';
-import type { EventMessage, RunDetail, RunMessage, Step } from '../models';
+import type { EventMessage, Readiness, RunDetail, RunMessage, Step } from '../models';
 import { isFinal, statusCopy, waitingLine } from '../status';
 import { ApprovalCard } from '../ui/approval-card';
 import { Banner } from '../ui/banner';
@@ -18,7 +18,7 @@ import { EmptyState } from '../ui/empty-state';
 import { Sheet } from '../ui/sheet';
 import { Skeleton } from '../ui/skeleton';
 import { StatusPill } from '../ui/status-pill';
-import { actionLabels, commandFor, titles } from '../words';
+import { actionLabels, commandFor, readinessLabels, titles } from '../words';
 
 const BOTTOM_SLACK_PX = 160;
 const STEP_LABELS: Record<Step['type'], string> = { edit: 'Edit', command: 'Command', test: 'Test', read: 'Read', message: 'Message', refusal: 'Blocked' };
@@ -125,6 +125,33 @@ export const safeLink = (url: string | null): string | null => (url && /^https:\
           </section>
         }
 
+        @if (prLink()) {
+          <section aria-labelledby="readiness-heading" class="rounded-card border border-border bg-surface p-4" data-testid="readiness">
+            <div class="mb-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <h2 id="readiness-heading" class="text-xs font-semibold tracking-wide uppercase" [class]="readiness()?.ready ? 'text-done' : 'text-accent'" data-testid="readiness-headline">
+                {{ readiness() ? (readiness()!.ready ? 'Ready for you' : 'Not ready yet') : 'Ready for you?' }}
+              </h2>
+              @if (readiness(); as view) { <span class="text-sm text-muted">{{ passing() }} of {{ view.checks.length }} checks pass</span> }
+              <button segwi-button variant="ghost" type="button" class="ml-auto" [disabled]="checking()" (click)="loadReadiness()">{{ checking() ? 'Checking…' : 'Check again' }}</button>
+            </div>
+            @if (readinessError()) { <p class="text-sm text-failed" role="alert">Couldn't check readiness. {{ readinessError() }}</p> }
+            @if (readiness(); as view) {
+              <ul class="flex flex-col gap-1.5 text-sm">
+                @for (check of view.checks; track check.name) {
+                  <li class="flex gap-2" [attr.data-pass]="check.pass">
+                    <span class="w-4 shrink-0 text-center" [class]="check.pass ? 'text-done' : 'text-failed'" aria-hidden="true">{{ check.pass ? '✓' : '✗' }}</span>
+                    <span class="min-w-0 break-words"><span class="sr-only">{{ check.pass ? 'Passes' : 'Fails' }}: </span><span class="font-medium">{{ checkLabel(check.name) }}</span>. <span class="text-muted">{{ check.detail }}</span></span>
+                  </li>
+                }
+              </ul>
+              @if (view.canAccept) {
+                <button segwi-button type="button" class="mt-3" (click)="accepting.set(true)">Accept the gate change…</button>
+              }
+              <p class="mt-2 text-xs text-muted">Advisory only: nothing here merges or approves the pull request.</p>
+            }
+          </section>
+        }
+
         <section aria-labelledby="now-heading" class="rounded-card border border-border bg-surface p-4" data-testid="now">
           <div class="flex items-baseline gap-2">
             <h2 id="now-heading" class="w-18 shrink-0 text-xs font-semibold tracking-wide text-accent uppercase">{{ isFinal() ? 'Last' : 'Now' }}</h2>
@@ -222,6 +249,14 @@ export const safeLink = (url: string | null): string | null => (url && /^https:\
         }
       </div>
 
+      <segwi-sheet [open]="accepting()" heading="Accept this gate change?" (closed)="accepting.set(false)">
+        <p class="text-muted">You accept the gate-weakening changes listed for commit <span class="font-code">{{ shortHead() }}</span> only. A new push needs your acceptance again.</p>
+        <div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
+          <button segwi-button type="button" autofocus (click)="accepting.set(false)">Cancel</button>
+          <button segwi-button variant="primary" type="button" [disabled]="checking()" (click)="accept()">Accept</button>
+        </div>
+      </segwi-sheet>
+
       <segwi-sheet [open]="confirming()" heading="Stop this run?" (closed)="confirming.set(false)">
         <p class="text-muted">The agent stops now; its branch and any open PR stay.</p>
         <div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
@@ -255,6 +290,13 @@ export class RunDetailPage {
   protected readonly taskOpen = signal(false);
   /** The full list of steps is behind "Show activity"; the page leads with the snapshot. */
   protected readonly activityOpen = signal(false);
+  protected readonly readiness = signal<Readiness | null>(null);
+  protected readonly readinessError = signal('');
+  protected readonly checking = signal(false);
+  protected readonly accepting = signal(false);
+  protected readonly passing = computed(() => this.readiness()?.checks.filter((check) => check.pass).length ?? 0);
+  protected readonly shortHead = computed(() => this.readiness()?.headSha?.slice(0, 7) ?? '');
+  protected readonly checkLabel = (name: string): string => readinessLabels[name] ?? name;
 
   protected readonly steps = computed(() => this.run()?.steps ?? []);
   protected readonly isFinal = computed(() => !!this.run() && isFinal(this.run()!.status));
@@ -307,10 +349,40 @@ export class RunDetailPage {
     try {
       this.run.set(await this.api.run(this.id()));
       this.missing.set(false);
+      if (safeLink(this.run()!.prUrl)) void this.loadReadiness();
       this.followIf(wasAtBottom);
     } catch (error) {
       if (error instanceof ApiError && (error.status === 404 || error.status === 400)) this.missing.set(true);
       else this.error.set((error as Error).message);
+    }
+  }
+
+  /** Readiness reads GitHub, so it loads after the run and never holds the page up. */
+  protected async loadReadiness(): Promise<void> {
+    if (this.checking()) return;
+    this.checking.set(true);
+    this.readinessError.set('');
+    try {
+      this.readiness.set(await this.api.readiness(this.id()));
+    } catch (error) {
+      this.readinessError.set((error as Error).message);
+    } finally {
+      this.checking.set(false);
+    }
+  }
+
+  protected async accept(): Promise<void> {
+    const headSha = this.readiness()?.headSha;
+    if (!headSha) return;
+    this.checking.set(true);
+    this.readinessError.set('');
+    try {
+      this.readiness.set(await this.api.acceptGateChange(this.id(), headSha));
+    } catch (error) {
+      this.readinessError.set((error as Error).message);
+    } finally {
+      this.accepting.set(false);
+      this.checking.set(false);
     }
   }
 

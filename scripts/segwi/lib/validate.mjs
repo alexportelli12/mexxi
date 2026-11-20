@@ -30,6 +30,7 @@ export function schemas(settings) {
     audit: z.strictObject({ limit: z.coerce.number().int().min(1).max(200).optional() }),
     listApprovals: z.strictObject({ status: z.enum(["pending", "allowed", "denied", "expired"]).optional() }),
     decideApproval: z.strictObject({ decision: z.enum(["allow", "deny"]) }),
+    acceptGateChange: z.strictObject({ headSha: z.string().regex(/^[0-9a-f]{40}$/) }),
     internalApproval: z.strictObject({
       runId: z.string().min(1).max(64), toolName: z.string().min(1).max(200),
       input: z.record(z.string(), z.unknown()), toolUseId: z.string().min(1).max(200),

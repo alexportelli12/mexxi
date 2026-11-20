@@ -1,4 +1,6 @@
 import { WorkspaceError } from "../lib/errors.mjs";
+import { cleanOutput, git } from "../lib/git.mjs";
+import { sessionWorkspace } from "../lib/session.mjs";
 import { appendHistory } from "../lib/timings.mjs";
 
 const VERIFY_OUTCOMES = new Set(["pass", "fail"]);
@@ -23,6 +25,20 @@ function severityCounts(kind, findings, grades) {
     throw new WorkspaceError(`--blocker, --major, --minor and --nit add up to ${total}, but --${kind} says ${findings} findings; give a count for every grade the pass found`);
   }
   return severity;
+}
+
+// The commit a review pass looked at: the worktree's HEAD, but only when
+// nothing is uncommitted, since a review of a dirty tree saw no single commit.
+// segwi's readiness compares it with the pull request's head (issue #67).
+async function reviewedCommit(cwd, sessionId) {
+  try {
+    const { entry: { worktreePath } } = await sessionWorkspace(cwd, sessionId);
+    if (cleanOutput(await git(worktreePath, ["status", "--porcelain"]))) return undefined;
+    const sha = cleanOutput(await git(worktreePath, ["rev-parse", "HEAD"]));
+    return /^[0-9a-f]{40}$/.test(sha) ? sha : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 // Records one gate result: a full verify run, the findings of one review or
@@ -55,6 +71,7 @@ export async function recordGate({ cwd = process.cwd(), sessionId, verify, revie
     throw new WorkspaceError(`--open${acceptedCount === undefined ? "" : " and --accepted together"} cannot exceed the pass's finding count`);
   }
   const severity = isPass ? severityCounts(kind, findings, grades) : undefined;
+  const headSha = kind === "review" ? await reviewedCommit(cwd, sessionId) : undefined;
   const record = {
     kind,
     at: new Date().toISOString(),
@@ -63,6 +80,7 @@ export async function recordGate({ cwd = process.cwd(), sessionId, verify, revie
     ...(acceptedCount === undefined ? {} : { accepted: acceptedCount }),
     ...(severity === undefined ? {} : { severity }),
     ...(openCount === undefined ? {} : { open: openCount }),
+    ...(headSha === undefined ? {} : { headSha }),
   };
   await appendHistory(cwd, sessionId, "records", record);
   return { operation: "record", ...record };

@@ -63,3 +63,17 @@ export const titles = {
 export function documentTitle(needsYou: number): string {
   return needsYou > 0 ? `(${needsYou}) ${productName}` : productName;
 }
+
+/** The readiness checks (issue #67) in plain words, by the name the server gives each. */
+export const readinessLabels: Record<string, string> = {
+  'run-completed': 'Run finished with a PR',
+  'verify-in-ci': 'Verify ran in CI',
+  'reviewed-head': 'Review saw the latest commit',
+  'review-findings-closed': 'Review findings closed',
+  'ci-green': 'CI green and required',
+  'no-flaky-checks': 'No reruns to go green',
+  'no-merge-conflicts': 'No merge conflicts',
+  'not-draft': 'Open, not a draft',
+  'no-pending-approval': 'No approval waiting',
+  'no-gate-weakening': 'No gate weakened',
+};

@@ -10,7 +10,8 @@ export const FINAL = new Set(["completed", "failed", "stopped", "timed_out"]);
 export const ACTIVE = ["queued", "running", "needs_input", "needs_approval"];
 
 // Version 1 is the p2 schema, version 2 adds approvals (p3), version 3 push subscriptions (p5),
-// version 4 the content a file tool would write, version 5 what a run waits on and its ibni snapshot.
+// version 4 the content a file tool would write, version 5 what a run waits on and its ibni snapshot,
+// version 6 a person's acceptance of a pull request's gate-weakening changes (decision 0027).
 const MIGRATIONS = [
   `CREATE TABLE runs (
      id TEXT PRIMARY KEY, repo TEXT NOT NULL, action TEXT NOT NULL, task TEXT NOT NULL, status TEXT NOT NULL,
@@ -49,6 +50,11 @@ const MIGRATIONS = [
    );`,
   "ALTER TABLE approvals ADD COLUMN content TEXT;",
   "ALTER TABLE runs ADD COLUMN waiting_on TEXT; ALTER TABLE runs ADD COLUMN snapshot TEXT;",
+  // Version 6: one row per run and head commit a person accepted; a new push needs a new row. Never updated.
+  `CREATE TABLE gate_acceptances (
+     run_id TEXT NOT NULL REFERENCES runs (id), head_sha TEXT NOT NULL, accepted_by TEXT NOT NULL, accepted_at TEXT NOT NULL,
+     detail TEXT NOT NULL, PRIMARY KEY (run_id, head_sha)
+   );`,
 ];
 
 const RUN_COLUMNS = {
@@ -135,6 +141,8 @@ export function openStore(file, { now = () => new Date() } = {}) {
     insertSubscription: db.prepare("INSERT INTO push_subscriptions (id, endpoint, p256dh, auth, identity, created_at) VALUES (?, ?, ?, ?, ?, ?)"),
     updateSubscription: db.prepare("UPDATE push_subscriptions SET p256dh = ?, auth = ?, identity = ?, last_error = NULL WHERE id = ?"),
     deleteSubscription: db.prepare("DELETE FROM push_subscriptions WHERE id = ?"),
+    insertAcceptance: db.prepare("INSERT OR IGNORE INTO gate_acceptances (run_id, head_sha, accepted_by, accepted_at, detail) VALUES (?, ?, ?, ?, ?)"),
+    getAcceptance: db.prepare("SELECT * FROM gate_acceptances WHERE run_id = ? AND head_sha = ?"),
     interrupted: db.prepare(`SELECT id FROM runs WHERE status IN (${ACTIVE.map(() => "?").join(",")})`),
   };
 
@@ -226,6 +234,15 @@ export function openStore(file, { now = () => new Date() } = {}) {
     markSubscription(id, error = null) {
       if (error) db.prepare("UPDATE push_subscriptions SET last_error = ? WHERE id = ?").run(cleanText(error, 300), id);
       else db.prepare("UPDATE push_subscriptions SET last_ok_at = ?, last_error = NULL WHERE id = ?").run(stamp(), id);
+    },
+
+    /** A person accepted the gate-weakening changes of `headSha`; the first acceptance of a commit stands. */
+    acceptGateChange({ runId, headSha, acceptedBy, detail }) {
+      statements.insertAcceptance.run(runId, headSha, cleanText(acceptedBy, 200), stamp(), cleanText(detail, 2000));
+    },
+    gateAcceptance(runId, headSha) {
+      const row = statements.getAcceptance.get(runId, headSha);
+      return row ? { runId: row.run_id, headSha: row.head_sha, acceptedBy: row.accepted_by, acceptedAt: row.accepted_at, detail: row.detail } : null;
     },
 
     addAudit({ actor, origin, action, target = "", outcome, detail = "" }) {

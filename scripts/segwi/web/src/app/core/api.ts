@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import type { Action } from '../words';
-import type { Approval, Health, AuditRow, Extension, Repo, Run, RunDetail } from '../models';
+import type { Approval, Health, AuditRow, Extension, Readiness, Repo, Run, RunDetail } from '../models';
 
 /** A failed request: the status and the server's own words. */
 export class ApiError extends Error {
@@ -45,6 +45,15 @@ export class ApiService {
 
   async run(id: string): Promise<RunDetail> {
     return (await this.call<{ run: RunDetail }>('GET', `/api/runs/${encodeURIComponent(id)}`)).run;
+  }
+
+  async readiness(id: string): Promise<Readiness> {
+    return (await this.call<{ readiness: Readiness }>('GET', `/api/runs/${encodeURIComponent(id)}/readiness`)).readiness;
+  }
+
+  /** You accept the pull request's gate-weakening changes for the head commit you saw. */
+  async acceptGateChange(id: string, headSha: string): Promise<Readiness> {
+    return (await this.call<{ readiness: Readiness }>('POST', `/api/runs/${encodeURIComponent(id)}/readiness/accept`, { headSha })).readiness;
   }
 
   health(): Promise<Health> {

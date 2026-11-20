@@ -71,7 +71,7 @@ test("tools/list holds exactly the eight tools, none can decide an approval, and
   if (process.env.UPDATE_SNAPSHOT) writeFileSync(SNAPSHOT, `${JSON.stringify(pinned, null, 2)}\n`);
   assert.deepEqual(pinned, JSON.parse(readFileSync(SNAPSHOT, "utf8")), "a tool change must update test/fixtures/mcp-tools.json on purpose");
   assert.equal(client.getServerVersion().name, "segwi");
-  assert.equal(client.getServerVersion().version, "1.2.0");
+  assert.equal(client.getServerVersion().version, "1.3.0");
   await assert.rejects(call(client, "approve_call", { id: "x", decision: "allow" }));
 });
 

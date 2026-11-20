@@ -12,7 +12,7 @@ sources:
   - docs/decisions/*.md
   - config.schema.json
   - scripts/ibni/commands/record-evidence.mjs
-reviewed: 2026-11-19
+reviewed: 2026-11-20
 ---
 
 # The ideas behind mexxi
