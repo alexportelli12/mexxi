@@ -1780,9 +1780,11 @@ test("lifecycle steps, verify attempts and finding counts are recorded and repor
   assert.deepEqual([stats.json.review.rounds, stats.json.review.findings, stats.json.review.accepted], [2, 4, 2]);
   assert.deepEqual([stats.json.qa.rounds, stats.json.qa.findings], [2, 2]);
   // Each pass keeps its grade and open counts; a pass recorded without them leaves them out, not zero.
+  // A review recorded on a clean worktree keeps the commit it looked at.
+  const reviewed = (await git(worktreePath, "rev-parse", "HEAD")).stdout.trim();
   assert.deepEqual(stats.json.review.history.map(({ at: _at, ...counts }) => counts), [
-    { findings: 3, severity: { blocker: 1, major: 0, minor: 2, nit: 0 }, open: 1, accepted: 2 },
-    { findings: 1 },
+    { findings: 3, severity: { blocker: 1, major: 0, minor: 2, nit: 0 }, open: 1, accepted: 2, headSha: reviewed },
+    { findings: 1, headSha: reviewed },
   ]);
   assert.deepEqual(stats.json.qa.history.map(({ at: _at, ...counts }) => counts), [
     { findings: 0 },

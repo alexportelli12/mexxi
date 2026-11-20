@@ -27,6 +27,11 @@ export const COMMANDS = {
     summary: "Create the keys push notifications are signed with.",
     why: "Your phone can only trust a push that is signed, so segwi needs its own key pair.",
   },
+  "github-token": {
+    implemented: true,
+    summary: "Store or remove the read-only GitHub token that readiness reads pull requests with.",
+    why: "Whether a pull request is ready depends on CI and its state on GitHub, which segwi can only read with a token you choose.",
+  },
   canary: {
     implemented: true,
     summary: "Run a small real task to check the coding agent still behaves as segwi expects.",
@@ -36,8 +41,9 @@ export const COMMANDS = {
 
 export function help() {
   const lines = ["Usage: segwi <command>", "", "Commands:"];
+  const width = Math.max(...Object.keys(COMMANDS).map((name) => name.length)) + 2;
   for (const [name, { summary, why, implemented }] of Object.entries(COMMANDS)) {
-    lines.push(`  ${name.padEnd(9)}${summary}${implemented ? "" : " (not yet implemented)"}`, `${" ".repeat(11)}Why: ${why}`);
+    lines.push(`  ${name.padEnd(width)}${summary}${implemented ? "" : " (not yet implemented)"}`, `${" ".repeat(width + 2)}Why: ${why}`);
   }
   return lines.join("\n");
 }
@@ -103,6 +109,7 @@ export async function main(args = process.argv.slice(2)) {
   if (first === "serve") return serve(args.slice(1));
   if (first === "approver") return (await import("./lib/approver.mjs")).runApprover(args.slice(1));
   if (first === "vapid") return (await import("./lib/vapid-cli.mjs")).runVapid(args.slice(1));
+  if (first === "github-token") return (await import("./lib/github-token-cli.mjs")).runGithubToken(args.slice(1));
   if (first === "token") return (await import("./lib/token-cli.mjs")).runToken(args.slice(1));
   if (first === "canary") return void (await (await import("./lib/canary-cli.mjs")).runCanaryCommand(args.slice(1)));
   process.stderr.write(`segwi ${first}: not yet implemented\n`);

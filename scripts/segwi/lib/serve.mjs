@@ -15,6 +15,7 @@ import { createIbniLink } from "./ibni-link.mjs";
 import { createMcpHandler } from "./mcp.mjs";
 import { createPushService } from "./push.mjs";
 import { ensurePrivateDir, stateDir as defaultStateDir } from "./paths.mjs";
+import { createReadinessService } from "./readiness.mjs";
 import { createRunService } from "./runs.mjs";
 import { createBroker } from "./sse.mjs";
 import { openStore } from "./store.mjs";
@@ -25,10 +26,10 @@ const DEFAULT_STATIC = path.join(here, "..", "web", "dist", "web", "browser");
 const version = JSON.parse(readFileSync(path.join(here, "..", "..", "..", "package.json"), "utf8")).version ?? "0.0.0";
 
 /**
- * @param {{ settings: object, dataDir: string, runner?: object, ibni?: object, staticRoot?: string|null, approvalTimeoutMs?: number, settleMs?: number, stateDir?: string, mcpConfirmTtlMs?: number, pushOptions?: { allowEndpoint?: Function, agent?: object, send?: Function } }} options
- *   `runner`, `ibni`, `approvalTimeoutMs`, `settleMs`, `stateDir`, `mcpConfirmTtlMs` and `pushOptions` are injected by tests; the CLI uses the configured runner and the real ibni.
+ * @param {{ settings: object, dataDir: string, runner?: object, ibni?: object, staticRoot?: string|null, approvalTimeoutMs?: number, settleMs?: number, stateDir?: string, mcpConfirmTtlMs?: number, pushOptions?: { allowEndpoint?: Function, agent?: object, send?: Function }, githubFetch?: typeof fetch }} options
+ *   `runner`, `ibni`, `approvalTimeoutMs`, `settleMs`, `stateDir`, `mcpConfirmTtlMs`, `pushOptions` and `githubFetch` are injected by tests; the CLI uses the configured runner and the real ibni.
  */
-export async function startServer({ settings, dataDir, runner, ibni = createIbniLink(), staticRoot = DEFAULT_STATIC, approvalTimeoutMs, settleMs, stateDir = defaultStateDir(), mcpConfirmTtlMs, pushOptions = {} }) {
+export async function startServer({ settings, dataDir, runner, ibni = createIbniLink(), staticRoot = DEFAULT_STATIC, approvalTimeoutMs, settleMs, stateDir = defaultStateDir(), mcpConfirmTtlMs, pushOptions = {}, githubFetch = globalThis.fetch }) {
   ensurePrivateDir(dataDir);
   const store = openStore(path.join(dataDir, "segwi.db"));
   const { bind, auth, runner: runnerId } = settings.segwi;
@@ -46,14 +47,15 @@ export async function startServer({ settings, dataDir, runner, ibni = createIbni
   let serverUrl = "";
   const runs = createRunService({ store, settings, runner: theRunner, ibni, broker, serverUrl: () => serverUrl, settleMs });
   const approvals = createApprovalService({ store, settings, runs, broker, timeoutMs: approvalTimeoutMs });
+  const readiness = createReadinessService({ store, settings, stateDir, fetch: githubFetch });
   const push = createPushService({ store, settings, stateDir, ...pushOptions });
   runs.onStatus((status, run) => push.notify(status, run));
   runs.recover();
   const extensions = await loadExtensions(settings.segwi.extensions ?? [], { dataDir, settings });
   const handler = createHandler({ extensions,
-    store, settings, authenticate: createAuthenticator(auth.web), runs, approvals, broker, push,
+    store, settings, authenticate: createAuthenticator(auth.web), runs, approvals, readiness, broker, push,
     staticRoot: staticRoot && readableDir(staticRoot) ? staticRoot : null, version, stateDir,
-    mcp: createMcpHandler({ store, settings, runs, approvals, stateDir, confirmTtlMs: mcpConfirmTtlMs }),
+    mcp: createMcpHandler({ store, settings, runs, approvals, readiness, stateDir, confirmTtlMs: mcpConfirmTtlMs }),
   });
   // A request still running when the server closes may find the store shut; it has nobody left to answer.
   const server = http.createServer((req, res) => void handler(req, res).catch(() => res.destroy()));

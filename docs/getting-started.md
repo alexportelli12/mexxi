@@ -10,7 +10,7 @@ sources:
   - skills/rendered-qa/SKILL.md
   - scripts/lib/browser.mjs
   - scripts/ibni/lib/scope.mjs
-reviewed: 2026-11-19
+reviewed: 2026-11-20
 ---
 
 # Getting started

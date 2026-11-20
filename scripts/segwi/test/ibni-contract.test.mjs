@@ -70,6 +70,9 @@ test("the ibni fields segwi reads exist in prepare, list, info and stats output"
   // One graded pass of each kind, so every per-pass field segwi reads is there to check.
   ibni("record", "--session", prepared.sessionId, "--review", "3", "--blocker", "1", "--major", "1", "--nit", "1", "--open", "1", "--accepted", "2");
   ibni("record", "--session", prepared.sessionId, "--qa", "1", "--minor", "1", "--open", "0");
+  // A pass recorded over uncommitted changes saw no single commit, so it keeps none.
+  writeFileSync(path.join(prepared.worktreePath, "draft.txt"), "uncommitted\n");
+  ibni("record", "--session", prepared.sessionId, "--review", "0");
   const stats = ibni("stats", "--session", prepared.sessionId);
   for (const field of IBNI_FIELDS.stats) assert.ok(hasField(stats, field), `stats shows ${field}`);
   assert.deepEqual(stats.verify.history.map((record) => record.outcome), ["fail", "fail", "pass"]);
@@ -92,8 +95,8 @@ test("the ibni fields segwi reads exist in prepare, list, info and stats output"
     { attempts: 3, passed: 1, failed: 2, history: ["fail", "fail", "pass"], headSha: verifiedHead, headPassed: false });
   const counts = ({ history, ...gate }) => ({ ...gate, history: history.map(({ at, ...rest }) => (assert.equal(typeof at, "string"), rest)) });
   assert.deepEqual(counts(snapshot.review), {
-    rounds: 1, findings: 3, accepted: 2,
-    history: [{ findings: 3, severity: { blocker: 1, major: 1, minor: 0, nit: 1 }, open: 1, accepted: 2 }],
+    rounds: 2, findings: 3, accepted: 2,
+    history: [{ findings: 3, severity: { blocker: 1, major: 1, minor: 0, nit: 1 }, open: 1, accepted: 2, headSha: verifiedHead }, { findings: 0 }],
   });
   assert.deepEqual(counts(snapshot.qa), { rounds: 1, findings: 1, history: [{ findings: 1, severity: { blocker: 0, major: 0, minor: 1, nit: 0 }, open: 0 }] });
   // stats carries the verify log's path (under the worktree root); the snapshot must not.
