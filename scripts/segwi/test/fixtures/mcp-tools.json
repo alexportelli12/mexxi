@@ -35,7 +35,7 @@
   },
   {
     "name": "get_run",
-    "description": "Shows one run: its status, the latest steps and the branch, pull request and verify result.",
+    "description": "Shows one run: its status, the latest steps, the branch, pull request and verify result, and ibni's snapshot of verify runs and review and QA passes.",
     "inputSchema": {
       "type": "object",
       "properties": {
