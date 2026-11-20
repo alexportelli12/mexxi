@@ -53,6 +53,17 @@ export interface IbniSnapshot {
   error?: string;
 }
 
+/** Whether a run's pull request is ready for you to look at: advisory, and fail-closed (a check it can't tell fails). */
+export interface Readiness {
+  ready: boolean;
+  checks: { name: string; pass: boolean; detail: string }[];
+  /** The pull request's head commit, which an acceptance applies to; null when it couldn't be read. */
+  headSha: string | null;
+  /** True when the diff weakens a gate and nobody has accepted that for this head yet. */
+  canAccept: boolean;
+  checkedAt: string;
+}
+
 export interface RunDetail extends Run {
   steps: Step[];
 }

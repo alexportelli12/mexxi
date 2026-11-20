@@ -22,6 +22,8 @@ export const IBNI_FIELDS = {
       `${gate}.history.0.severity.blocker`, `${gate}.history.0.severity.major`, `${gate}.history.0.severity.minor`, `${gate}.history.0.severity.nit`,
     ]),
     "review.history.0.accepted",
+    // The commit a review pass looked at, which readiness compares with the pull request's head.
+    "review.history.0.headSha",
     // The commit the latest ibni verify run checked, and whether it passed.
     "verification.headSha", "verification.passed",
   ],
@@ -88,6 +90,7 @@ function passes(gate) {
         ...(text(entry.at) ? { at: entry.at } : {}), findings: count(entry.findings),
         ...(severity ? { severity: Object.fromEntries(SEVERITIES.map((name) => [name, count(severity[name])])) } : {}),
         ...optionalCount("open", entry.open), ...optionalCount("accepted", entry.accepted),
+        ...(typeof entry.headSha === "string" && /^[0-9a-f]{40}$/.test(entry.headSha) ? { headSha: entry.headSha } : {}),
       };
     }),
   };

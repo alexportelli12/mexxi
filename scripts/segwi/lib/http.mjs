@@ -91,9 +91,9 @@ async function serveStatic(res, root, pathname) {
 }
 
 /**
- * @param {{ store: object, settings: object, authenticate: Function, runs: object, approvals: object, broker: object, push: object, staticRoot: string|null, version: string, mcp?: Function|null, stateDir?: string|null }} deps
+ * @param {{ store: object, settings: object, authenticate: Function, runs: object, approvals: object, readiness: object, broker: object, push: object, staticRoot: string|null, version: string, mcp?: Function|null, stateDir?: string|null }} deps
  */
-export function createHandler({ store, settings, authenticate, runs, approvals, broker, push, staticRoot, version, mcp = null, stateDir = null, extensions = [] }) {
+export function createHandler({ store, settings, authenticate, runs, approvals, readiness, broker, push, staticRoot, version, mcp = null, stateDir = null, extensions = [] }) {
   const parsers = schemasFor(settings);
   const routes = [
     ["GET", "/api/health", "none", async () => ({ ...(await runs.health(version)), canary: canaryHealth(stateDir) })],
@@ -104,6 +104,12 @@ export function createHandler({ store, settings, authenticate, runs, approvals, 
       return { status: created ? 201 : 200, body: { run } };
     }],
     ["GET", "/api/runs/:id", "none", async ({ params }) => ({ run: runs.get(params.id) })],
+    ["GET", "/api/runs/:id/readiness", "none", async ({ params }) => ({ readiness: await readiness.get(params.id) })],
+    // Only a person accepts a gate-weakening change, here in the web app: no MCP tool reaches this (decision 0027).
+    // As with approvals, a command a run runs could reach this port as you can (decision 0016).
+    ["POST", "/api/runs/:id/readiness/accept", "acceptGateChange", async ({ params, body, identity }) => ({
+      body: { readiness: await readiness.accept(params.id, body.headSha, identity) }, detail: `accepted ${body.headSha.slice(0, 12)}`,
+    })],
     ["GET", "/api/runs/:id/events", "events", async ({ params, query }) => ({ events: runs.events(params.id, query.since) })],
     ["POST", "/api/runs/:id/input", "input", async ({ params, body }) => ({ run: runs.send(params.id, body.text) })],
     ["POST", "/api/runs/:id/stop", "stop", async ({ params }) => ({ run: runs.stop(params.id) })],

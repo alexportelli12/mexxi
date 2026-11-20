@@ -392,6 +392,22 @@ e2e("a run that ends its turn while its background command runs stays Working, l
   await close();
 });
 
+e2e("a run with a pull request shows each readiness check, and without the GitHub data source it says not ready and why", async () => {
+  const target = await runWith("Fix the flaky date test");
+  const { page, close } = await open(`/runs/${target.id}`);
+  const section = page.getByTestId("readiness");
+  await section.locator("li").first().waitFor();
+  assert.equal((await page.getByTestId("readiness-headline").textContent()).trim(), "Not ready yet");
+  assert.equal(await section.locator("li").count(), 10);
+  assert.equal(await section.locator("li[data-pass=true]").count(), 2, "only what segwi recorded itself can pass: the run finished with a PR, and no approval waits");
+  // The one cause behind most of the failures is said once, above the list, not on every row.
+  assert.match(await page.getByTestId("readiness-shared").textContent(), /^Can't tell: The GitHub data source isn't set up/);
+  assert.match(await section.textContent(), /CI green and required\. Can't tell, for the reason above\./);
+  assert.match(await section.textContent(), /Review findings closed\. No review round ran\./, "a reason of its own stays on its row");
+  assert.equal(await section.getByRole("button", { name: /Accept/ }).count(), 0, "nothing to accept without a diff");
+  await close();
+});
+
 e2e("deep links load directly, and an unknown page says so", async () => {
   const target = await runWith("Fix the flaky date test");
   const direct = await open(`/runs/${target.id}`);

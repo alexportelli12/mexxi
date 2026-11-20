@@ -35,7 +35,7 @@
   },
   {
     "name": "get_run",
-    "description": "Shows one run: its status, the latest steps, the branch, pull request and verify result, and ibni's snapshot of verify runs and review and QA passes.",
+    "description": "Shows one run: its status, the latest steps, the branch, pull request and verify result, ibni's snapshot of verify runs and review and QA passes, and readiness: whether the pull request is ready for the person to look at, check by check. Readiness is advisory; no tool can set or override it.",
     "inputSchema": {
       "type": "object",
       "properties": {

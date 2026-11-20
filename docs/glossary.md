@@ -11,7 +11,7 @@ sources:
   - docs/decisions/0019-runs-in-a-systemd-scope.md
   - docs/decisions/0020-segwi-local-extensions.md
   - docs/decisions/0021-hooks-refuse-with-the-fix.md
-reviewed: 2026-11-19
+reviewed: 2026-11-20
 ---
 
 # Glossary
