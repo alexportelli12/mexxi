@@ -209,6 +209,7 @@ test("only a person in the web app accepts a gate-weakening change, for the head
   assert.equal(accepted.status, 200, accepted.text);
   assert.equal(accepted.json.readiness.ready, true);
   assert.match(detailOf(accepted.json.readiness, "no-gate-weakening"), /^local accepted these on ccccccc/);
+  assert.match(server.store.gateAcceptance(id, HEAD).detail, /a skipped or focused test \(src\/b\.mjs\)/, "the record says what was accepted");
   assert.ok(server.store.listAudit(50).some((row) => row.action === "POST /api/runs/:id/readiness/accept" && row.actor === "local" && row.outcome === "ok" && row.target === id));
 
   // A push moves the head: the acceptance was for the old commit only.

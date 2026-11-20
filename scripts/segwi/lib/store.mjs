@@ -238,7 +238,8 @@ export function openStore(file, { now = () => new Date() } = {}) {
 
     /** A person accepted the gate-weakening changes of `headSha`; the first acceptance of a commit stands. */
     acceptGateChange({ runId, headSha, acceptedBy, detail }) {
-      statements.insertAcceptance.run(runId, headSha, cleanText(acceptedBy, 200), stamp(), cleanText(detail, 2000));
+      // The whole list of flags the person saw: the cap is far above any real diff's, so the record says all of it.
+      statements.insertAcceptance.run(runId, headSha, cleanText(acceptedBy, 200), stamp(), cleanText(detail, 50_000));
     },
     gateAcceptance(runId, headSha) {
       const row = statements.getAcceptance.get(runId, headSha);

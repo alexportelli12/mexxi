@@ -400,7 +400,10 @@ e2e("a run with a pull request shows each readiness check, and without the GitHu
   assert.equal((await page.getByTestId("readiness-headline").textContent()).trim(), "Not ready yet");
   assert.equal(await section.locator("li").count(), 10);
   assert.equal(await section.locator("li[data-pass=true]").count(), 2, "only what segwi recorded itself can pass: the run finished with a PR, and no approval waits");
-  assert.match(await section.textContent(), /CI green and required\. Can't tell: The GitHub data source isn't set up/);
+  // The one cause behind most of the failures is said once, above the list, not on every row.
+  assert.match(await page.getByTestId("readiness-shared").textContent(), /^Can't tell: The GitHub data source isn't set up/);
+  assert.match(await section.textContent(), /CI green and required\. Can't tell, for the reason above\./);
+  assert.match(await section.textContent(), /Review findings closed\. No review round ran\./, "a reason of its own stays on its row");
   assert.equal(await section.getByRole("button", { name: /Accept/ }).count(), 0, "nothing to accept without a diff");
   await close();
 });

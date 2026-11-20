@@ -5,6 +5,7 @@ import { ApiError, ApiService } from '../core/api';
 import { LiveService } from '../core/live';
 import { latestActivity } from '../core/activity';
 import { now } from '../core/clock';
+import { sharedReason } from '../core/readiness';
 import { TONE_CLASS, duration, journeyView, type StageState } from '../core/journey';
 import { absoluteTime } from '../core/time';
 import type { EventMessage, Readiness, RunDetail, RunMessage, Step } from '../models';
@@ -132,23 +133,26 @@ export const safeLink = (url: string | null): string | null => (url && /^https:\
                 {{ readiness() ? (readiness()!.ready ? 'Ready for you' : 'Not ready yet') : 'Ready for you?' }}
               </h2>
               @if (readiness(); as view) { <span class="text-sm text-muted">{{ passing() }} of {{ view.checks.length }} checks pass</span> }
-              <button segwi-button variant="ghost" type="button" class="ml-auto" [disabled]="checking()" (click)="loadReadiness()">{{ checking() ? 'Checking…' : 'Check again' }}</button>
             </div>
             @if (readinessError()) { <p class="text-sm text-failed" role="alert">Couldn't check readiness. {{ readinessError() }}</p> }
             @if (readiness(); as view) {
+              @if (shared(); as reason) { <p class="mb-2 text-sm break-words" data-testid="readiness-shared">{{ reason }}</p> }
               <ul class="flex flex-col gap-1.5 text-sm">
                 @for (check of view.checks; track check.name) {
                   <li class="flex gap-2" [attr.data-pass]="check.pass">
                     <span class="w-4 shrink-0 text-center" [class]="check.pass ? 'text-done' : 'text-failed'" aria-hidden="true">{{ check.pass ? '✓' : '✗' }}</span>
-                    <span class="min-w-0 break-words"><span class="sr-only">{{ check.pass ? 'Passes' : 'Fails' }}: </span><span class="font-medium">{{ checkLabel(check.name) }}</span>. <span class="text-muted">{{ check.detail }}</span></span>
+                    <span class="min-w-0 break-words"><span class="sr-only">{{ check.pass ? 'Passes' : 'Fails' }}: </span><span class="font-medium">{{ checkLabel(check.name) }}</span>. <span class="text-muted">{{ !check.pass && check.detail === shared() ? "Can't tell, for the reason above." : check.detail }}</span></span>
                   </li>
                 }
               </ul>
-              @if (view.canAccept) {
-                <button segwi-button type="button" class="mt-3" (click)="accepting.set(true)">Accept the gate change…</button>
-              }
-              <p class="mt-2 text-xs text-muted">Advisory only: nothing here merges or approves the pull request.</p>
             }
+            <div class="mt-3 flex flex-wrap items-center gap-2">
+              @if (readiness()?.canAccept) {
+                <button segwi-button type="button" (click)="accepting.set(true)">Accept the gate change…</button>
+              }
+              <button segwi-button variant="ghost" type="button" [disabled]="checking()" (click)="loadReadiness()">{{ checking() ? 'Checking…' : 'Check again' }}</button>
+            </div>
+            @if (readiness()) { <p class="mt-1 text-xs text-muted">Advisory only: nothing here merges or approves the pull request.</p> }
           </section>
         }
 
@@ -251,7 +255,7 @@ export const safeLink = (url: string | null): string | null => (url && /^https:\
 
       <segwi-sheet [open]="accepting()" heading="Accept this gate change?" (closed)="accepting.set(false)">
         <p class="text-muted">You accept these changes for commit <span class="font-code">{{ shortHead() }}</span> only. A new push needs your acceptance again.</p>
-        <p class="max-h-48 overflow-auto rounded-card bg-bg p-3 text-sm break-words" tabindex="0" data-testid="gate-flags">{{ gateDetail() }}</p>
+        <p class="max-h-48 overflow-auto rounded-card bg-bg p-3 text-sm break-words" tabindex="0" aria-label="The changes you would accept" data-testid="gate-flags">{{ gateDetail() }}</p>
         <div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
           <button segwi-button type="button" autofocus (click)="accepting.set(false)">Cancel</button>
           <button segwi-button variant="primary" type="button" [disabled]="checking()" (click)="accept()">Accept</button>
@@ -296,6 +300,7 @@ export class RunDetailPage {
   protected readonly checking = signal(false);
   protected readonly accepting = signal(false);
   protected readonly passing = computed(() => this.readiness()?.checks.filter((check) => check.pass).length ?? 0);
+  protected readonly shared = computed(() => (this.readiness() ? sharedReason(this.readiness()!.checks) : null));
   protected readonly gateDetail = computed(() => this.readiness()?.checks.find((check) => check.name === 'no-gate-weakening')?.detail ?? '');
   protected readonly shortHead = computed(() => this.readiness()?.headSha?.slice(0, 7) ?? '');
   protected readonly checkLabel = (name: string): string => readinessLabels[name] ?? name;
