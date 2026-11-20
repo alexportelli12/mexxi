@@ -9,7 +9,7 @@ sources:
   - docs/decisions/0013-segwi-run-browser-and-hosts.md
   - docs/decisions/0016-segwi-runs-trusted-like-own-sessions.md
   - docs/decisions/0020-segwi-local-extensions.md
-reviewed: 2026-11-14
+reviewed: 2026-11-20
 ---
 
 # segwi
@@ -139,6 +139,47 @@ For a client that reads a JSON file:
 ```
 
 `get_run` also says what a working run waits on, in `waitingOn`. Run output that segwi returns is labelled as untrusted and has secrets removed, because a repository can put text in it that tries to steer your client. Stopping a run takes two calls: the first returns a confirmation token that is valid for two minutes.
+
+### Remote MCP clients
+
+A client on another machine or in a container, such as a bot, depends on two separate things. When either breaks, it can look like the same "can't connect" error, so set up and check each on its own:
+
+- **The tailnet path** carries the request. segwi listens only on loopback and refuses any other address, so a remote client reaches it through `tailscale serve` on the segwi machine, which forwards to `127.0.0.1:<port>`. Set it up as in [Reach it from your phone](#reach-it-from-your-phone). The client must be a device on your tailnet.
+- **The bearer token** proves who is calling. `/mcp` ignores the web sign-in and the identity header that `tailscale serve` adds, so it works in either `segwi.auth.web.mode`.
+
+You need both. The token alone does not open a path, and the tailnet alone does not authenticate. Funnel is still unsupported: it would leave the token as the only thing between the open internet and a tool that starts agents.
+
+The client uses the name `tailscale serve status` shows, with the same header:
+
+```bash
+claude mcp add --transport http segwi https://my-machine.example.ts.net/mcp --header "Authorization: Bearer <token>"
+```
+
+segwi refuses a request that carries an `Origin` header naming anything but a loopback address, even with a good token. MCP clients and HTTP libraries normally send none, but a client that sets `Origin` to the tailnet name gets 403.
+
+#### Clients in containers
+
+A container or sandbox often can't run a full Tailscale install, because it has no network device to create. Run `tailscaled` with its own user-space networking there instead, with a SOCKS5 proxy that the client sends its requests through:
+
+```bash
+tailscaled --tun=userspace-networking --socks5-server=localhost:1055 --statedir=/var/lib/tailscale &
+tailscale up --auth-key="$TS_AUTHKEY" --hostname=my-bot
+```
+
+Point the client at the proxy, for example with `ALL_PROXY=socks5h://localhost:1055`. The `h` makes the proxy look up the tailnet name, which the container itself can't resolve.
+
+- **Use a tagged, reusable authentication key** (`TS_AUTHKEY` above). A tag makes the node a service rather than a device tied to your login, and lets your tailnet's access rules limit it to the segwi machine. Reusable lets the container join again after a rebuild.
+- **Keep the state directory on a persistent volume.** It holds the node's identity. Without it, every rebuild joins as a new device, and the old ones pile up in your tailnet.
+
+#### Fail loudly
+
+A wrapper that reports only "connection refused" sends you hunting in the wrong place. Before each call, check the layers in order and report the first that fails, by name:
+
+1. **Tailnet path down.** The proxy isn't listening, so connecting to `localhost:1055` is refused, or `tailscale status` doesn't list the segwi machine as online. The token is not the problem; restore `tailscaled`, its state or its key.
+2. **segwi down.** The tailnet path works, but nothing answers behind `tailscale serve`. Tailscale then answers the request itself, usually with 502 Bad Gateway, or refuses the connection if `tailscale serve` isn't set up. Restart segwi or `tailscale serve` on its machine.
+3. **Token rejected.** segwi answers 401 with `WWW-Authenticate: Bearer`. The token is missing, wrong, or was replaced by `segwi token rotate`, which ends the old one at once. Retrying won't help, and each attempt adds a rejected line to the audit log. Get a new token.
+
+segwi checks the token before it checks the request's method. So a `GET` of `/mcp` with the token makes a cheap probe. A 405 means segwi is up and the token works. A 401 means segwi is up but rejects the token. Each probe adds a line to the audit log. An MCP tool error inside a 200 reply is segwi refusing that call, not a connection problem.
 
 ## Get push notifications
 
