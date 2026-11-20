@@ -148,18 +148,33 @@ test("the diff scan flags each kind of gate-weakening change the issue lists", (
     { filename: ".github/workflows/verify.yml", status: "modified", changes: 1, patch: patch(["+      - run: echo"]) },
     { filename: "package.json", status: "modified", changes: 2, patch: patch(["-    \"verify\": \"verifika --all\",", "+    \"verify\": \"true\","]) },
     { filename: "docs/logo.png", status: "added", changes: 0, patch: null },
+    { filename: "tests/test_slow.py", status: "modified", changes: 1, patch: patch(["+@pytest.mark.skip"]) },
+    { filename: "pyproject.toml", status: "modified", changes: 2, patch: patch(["-fail_under = 90", "+fail_under = 60"]) },
   ]);
   assert.deepEqual(flags.sort(), [
     "@ts-ignore (src/a.ts)",
     "a CRAP baseline edit (crap-baseline.json)",
+    "a coverage or CRAP threshold change (pyproject.toml)",
     "a coverage or CRAP threshold change (vitest.config.ts)",
     "a lint or type-check suppression (src/a.ts)",
     "a skipped or focused test (src/a.test.ts)",
+    "a skipped or focused test (tests/test_slow.py)",
     "an any cast (src/a.ts)",
     "an edit to CI configuration (.github/workflows/verify.yml)",
     "an edit to verify configuration (package.json)",
   ]);
   assert.deepEqual(scanDiff([{ filename: "src/b.ts", status: "modified", changes: 3, patch: patch(["-const skip = 1;", "+const skip = 2;", "+test('x', { skip: false }, () => {});"]) }]), [], "ordinary code is not a flag");
+});
+
+test("every flag is listed, however many, so a person accepts only what they were shown", () => {
+  const facts = goodFacts();
+  facts.files = Array.from({ length: 12 }, (_, index) => ({ filename: `src/f${index}.ts`, status: "modified", changes: 1, patch: "@@ -1 +1 @@\n+// @ts-ignore" }));
+  const { detail } = check("no-gate-weakening", facts);
+  for (let index = 0; index < 12; index += 1) assert.ok(detail.includes(`@ts-ignore (src/f${index}.ts)`), `f${index} is listed`);
+});
+
+test("nothing can be accepted while the diff is unknown", () => {
+  assert.equal(evaluateReadiness({ ...goodFacts(), files: unknown("GitHub answered 502.") }).canAccept, false);
 });
 
 test("a text file whose diff GitHub didn't return can't be scanned, so the gate check fails", () => {

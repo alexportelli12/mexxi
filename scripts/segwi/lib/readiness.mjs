@@ -41,7 +41,7 @@ function byContext(statuses) {
 const ADDED_LINE_FLAGS = [
   ["a lint or type-check suppression", /eslint-disable|biome-ignore|oxlint-disable|tslint:disable|\bnoqa\b|pylint:\s*disable|type:\s*ignore|\bnolint\b|rubocop:disable/],
   ["a coverage exclusion", /\b(?:istanbul|c8|v8)\s+ignore\b/],
-  ["a skipped or focused test", /\.(?:skip|only)\s*\(|\b(?:xit|xdescribe|xtest|fit|fdescribe)\s*\(|[{,]\s*(?:skip|only)\s*:\s*(?![\s}]|false\b)/],
+  ["a skipped or focused test", /\.(?:skip|only)\s*\(|\b(?:xit|xdescribe|xtest|fit|fdescribe)\s*\(|@pytest\.mark\.(?:skip|xfail)\b|[{,]\s*(?:skip|only)\s*:\s*(?![\s}]|false\b)/],
   ["@ts-ignore", /@ts-(?:ignore|nocheck|expect-error)/],
   ["an any cast", /\bas\s+any\b|<any>/],
 ];
@@ -51,8 +51,8 @@ const FILE_FLAGS = [
   ["a CRAP baseline edit", /crap/i],
   ["an edit to coverage configuration", /(^|\/)(?:\.c8rc(?:\.json)?|\.nycrc(?:\.json|\.ya?ml)?|\.?codecov\.ya?ml)$/],
 ];
-const CONFIG_FILE = /\.(?:json|ya?ml|toml|cjs|mjs|js|ts)$|rc$/;
-const THRESHOLD_LINE = /\b(?:coverage|thresholds?|crap)\b/i;
+const CONFIG_FILE = /\.(?:json|ya?ml|toml|cfg|ini|cjs|mjs|js|ts)$|rc$/;
+const THRESHOLD_LINE = /\b(?:coverage|thresholds?|crap|fail_under)\b/i;
 // A file GitHub shows no patch for because it is binary carries no suppression; any other missing patch is unknown.
 const BINARY = /\.(?:png|jpe?g|gif|webp|ico|svg|woff2?|ttf|otf|pdf|zip|gz)$/i;
 
@@ -103,7 +103,7 @@ export const RULES = [
   }),
 
   rule("verify-in-ci", ["pr", "ciCheck", "checkRuns"], ({ pr, ciCheck, checkRuns }) => {
-    if (!ciCheck) return fail("The repository's .mexxi.json on its default branch names no ciCheck, so no CI check is known to run the full verify command.");
+    if (!ciCheck) return fail("The repository's .mexxi.json on the pull request's base branch names no ciCheck, so no CI check is known to run the full verify command.");
     const runs = checkRuns.filter((run) => run.name === ciCheck && run.headSha === pr.headSha).sort((a, b) => a.id - b.id);
     const latest = runs.at(-1);
     if (!latest) return fail(`${ciCheck}, the CI check that runs verify, has not run on ${short(pr.headSha)}.`);
@@ -189,8 +189,9 @@ export const RULES = [
     const flags = scanDiff(files);
     if (isUnknown(flags)) return fail(`Can't tell: ${flags.unknown}`);
     if (!flags.length) return pass("The diff weakens no gate.");
-    if (acceptance) return pass(`${acceptance.by} accepted these on ${short(pr.headSha)} at ${acceptance.at}: ${list(flags, 8)}.`);
-    return fail(`The diff weakens a gate, so it needs your acceptance in the web app: ${list(flags, 8)}.`);
+    // Every flag is listed, never cut, so a person accepts only what they were shown and the record says all of it.
+    if (acceptance) return pass(`${acceptance.by} accepted these on ${short(pr.headSha)} at ${acceptance.at}: ${flags.join(", ")}.`);
+    return fail(`The diff weakens a gate, so it needs your acceptance in the web app: ${flags.join(", ")}.`);
   }),
 ];
 

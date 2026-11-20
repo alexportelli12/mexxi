@@ -36,6 +36,8 @@ export function saveGithubToken(stateDir, token) {
   if (problem) throw new Error(`segwi won't store that token: ${problem}.`);
   mkdirSync(stateDir, { recursive: true, mode: 0o700 });
   const file = githubTokenFile(stateDir);
+  // A file left readable by others is replaced, not rewritten in place, so its old mode can't linger.
+  rmSync(file, { force: true });
   writeFileSync(file, `${trimmed}\n`, { mode: 0o600 });
   chmodSync(file, 0o600);
 }
@@ -56,10 +58,16 @@ export function readGithubToken(stateDir) {
   } catch {
     throw new GithubUnavailable("The GitHub data source isn't set up. Run segwi github-token set with a read-only, fine-grained token for the listed repositories.");
   }
+  // The messages name the file generically: they reach MCP clients, which never see a local path.
   if (process.platform !== "win32" && (mode & 0o077) !== 0) {
-    throw new GithubUnavailable(`segwi won't use the GitHub token: ${file} can be read by other users. Run chmod 600 on it.`);
+    throw new GithubUnavailable("segwi won't use the GitHub token: its file in segwi's state directory can be read by other users. Run segwi github-token set again.");
   }
-  const token = readFileSync(file, "utf8").trim();
+  let token;
+  try {
+    token = readFileSync(file, "utf8").trim();
+  } catch {
+    throw new GithubUnavailable("segwi can't read its GitHub token file. Run segwi github-token set again.");
+  }
   const problem = tokenProblem(token);
   if (problem) throw new GithubUnavailable(`segwi won't use the stored GitHub token: ${problem}. Run segwi github-token set again.`);
   return token;

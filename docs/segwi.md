@@ -199,7 +199,7 @@ segwi checks the token before it checks the request's method. So a `GET` of `/mc
 
 ## Is a pull request ready for you?
 
-A run is `completed` once the agent ends its turn with a pull request open. That says nothing about whether CI passed, whether the review saw the latest commit, or whether the diff loosened a check. Without more, you or your bot can only take the agent's word for it. Readiness answers that from facts segwi recorded or fetched from GitHub, never from what the agent says.
+A run is `completed` once the agent ends its turn with a pull request open. That says nothing about whether CI passed, whether the review saw the latest commit, or whether the diff loosened a check. Without more, you or your bot can only take the agent's word for it. Readiness answers from GitHub and from what segwi and `ibni` recorded, not from the agent's messages. The two review checks rest on `ibni record`, which the agent runs, so they are only as sound as its rules.
 
 `get_run` and a run's page return it as `readiness: { ready, checks: [{ name, pass, detail }] }`. It is advisory: nothing merges, approves or marks the PR ready, and no tool changes a repository's required checks. It also fails closed. A check segwi can't decide fails, with `detail` saying why, and `ready` is true only when every check passes. [Decision 0027](decisions/0027-segwi-reads-github-for-readiness.md) explains the choices.
 

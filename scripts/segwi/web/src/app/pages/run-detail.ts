@@ -250,7 +250,8 @@ export const safeLink = (url: string | null): string | null => (url && /^https:\
       </div>
 
       <segwi-sheet [open]="accepting()" heading="Accept this gate change?" (closed)="accepting.set(false)">
-        <p class="text-muted">You accept the gate-weakening changes listed for commit <span class="font-code">{{ shortHead() }}</span> only. A new push needs your acceptance again.</p>
+        <p class="text-muted">You accept these changes for commit <span class="font-code">{{ shortHead() }}</span> only. A new push needs your acceptance again.</p>
+        <p class="max-h-48 overflow-auto rounded-card bg-bg p-3 text-sm break-words" tabindex="0" data-testid="gate-flags">{{ gateDetail() }}</p>
         <div class="flex flex-col gap-2 sm:flex-row sm:justify-end">
           <button segwi-button type="button" autofocus (click)="accepting.set(false)">Cancel</button>
           <button segwi-button variant="primary" type="button" [disabled]="checking()" (click)="accept()">Accept</button>
@@ -295,6 +296,7 @@ export class RunDetailPage {
   protected readonly checking = signal(false);
   protected readonly accepting = signal(false);
   protected readonly passing = computed(() => this.readiness()?.checks.filter((check) => check.pass).length ?? 0);
+  protected readonly gateDetail = computed(() => this.readiness()?.checks.find((check) => check.name === 'no-gate-weakening')?.detail ?? '');
   protected readonly shortHead = computed(() => this.readiness()?.headSha?.slice(0, 7) ?? '');
   protected readonly checkLabel = (name: string): string => readinessLabels[name] ?? name;
 

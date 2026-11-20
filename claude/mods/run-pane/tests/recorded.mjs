@@ -11,7 +11,8 @@
 // The ci-wait step and ci were added by hand, in that scenario's shape, when
 // ibni began waiting on CI (decision 0026). The first review pass's severity,
 // open and accepted counts were added by hand, in that scenario's shape, when
-// ibni record began taking them (decision 0024).
+// ibni record began taking them (decision 0024), and each review pass's headSha
+// when ibni record --review began keeping the reviewed commit (issue #67).
 export const info = {
   "operation": "info",
   "sessionId": "2c026ea35efd82bef78e30b9",
@@ -166,11 +167,13 @@ export const stats = {
           "nit": 0
         },
         "open": 1,
-        "accepted": 2
+        "accepted": 2,
+        "headSha": "5f0c1a9d3e7b2486a1c0d9e8f7b6a5c4d3e2f1a0"
       },
       {
         "at": "2026-10-21T02:30:33.484Z",
-        "findings": 1
+        "findings": 1,
+        "headSha": "5f0c1a9d3e7b2486a1c0d9e8f7b6a5c4d3e2f1a0"
       }
     ],
     "accepted": 2

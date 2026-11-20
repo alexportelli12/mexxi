@@ -5,7 +5,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { chmodSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, statSync, writeFileSync } from "node:fs";
 import { Readable } from "node:stream";
 import test from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -135,8 +135,17 @@ test("a token segwi can't trust is refused before any request: a classic token, 
 
   const open = await boot(t);
   chmodSync(githubTokenFile(open.stateDir), 0o644);
-  assert.match(detailOf(await readinessOf(open.server, completedRun(open.server)), "not-draft"), /can be read by other users/);
+  const openDetail = detailOf(await readinessOf(open.server, completedRun(open.server)), "not-draft");
+  assert.match(openDetail, /can be read by other users/);
+  assert.ok(!openDetail.includes(open.stateDir), "no local path reaches the check's detail");
   assert.equal(open.github.calls.length, 0);
+
+  // A token file segwi can't read is a reason readiness gives, not an error that takes get_run down.
+  const unreadable = await boot(t, { token: null });
+  mkdirSync(githubTokenFile(unreadable.stateDir), { mode: 0o700 });
+  const readiness = await readinessOf(unreadable.server, completedRun(unreadable.server));
+  assert.equal(readiness.ready, false);
+  assert.match(detailOf(readiness, "ci-green"), /can't read its GitHub token file/);
 });
 
 test("the reader never reads a repository segwi doesn't list: a pull request elsewhere can't be determined", async (t) => {
@@ -163,6 +172,21 @@ test("a repository with no .mexxi.json on its base branch names no CI check that
   assert.equal(readiness.ready, false);
   assert.match(detailOf(readiness, "verify-in-ci"), /names no ciCheck, so no CI check is known to run the full verify command/);
   assert.match(detailOf(readiness, "ci-green"), /^Can't tell: without a ciCheck/);
+});
+
+test("an acceptance is refused when there is nothing to accept, so none can be stored ahead of a diff nobody saw", async (t) => {
+  const clean = await boot(t);
+  const id = completedRun(clean.server);
+  const refused = await request(clean.server, "POST", `/api/runs/${id}/readiness/accept`, { body: { headSha: HEAD } });
+  assert.equal(refused.status, 409);
+  assert.match(refused.json.error, /no gate-weakening change to accept/);
+  assert.equal(clean.server.store.gateAcceptance(id, HEAD), null);
+  // GitHub didn't return the diff: there is nothing a person could have seen, so nothing to accept either.
+  const unseen = await boot(t, { github: fakeGithub({ fail: { "/repos/example/my-app/pulls/7/files": 502 } }) });
+  const other = completedRun(unseen.server);
+  assert.equal((await readinessOf(unseen.server, other)).canAccept, false);
+  assert.equal((await request(unseen.server, "POST", `/api/runs/${other}/readiness/accept`, { body: { headSha: HEAD } })).status, 409);
+  assert.equal(unseen.server.store.gateAcceptance(other, HEAD), null);
 });
 
 test("only a person in the web app accepts a gate-weakening change, for the head they saw; a new push needs a new acceptance", async (t) => {
