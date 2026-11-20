@@ -138,7 +138,18 @@ For a client that reads a JSON file:
 }
 ```
 
-`get_run` also says what a working run waits on, in `waitingOn`. Stopping a run takes two calls: the first returns a confirmation token that is valid for two minutes.
+`get_run` also says what a working run waits on, in `waitingOn`.
+
+`get_run` returns `ibni.snapshot` too, so your client can see whether checks and review ran and what they found. It is the same record the app draws a run's journey from, and it is `null` until `ibni` has answered:
+
+- `verify`: the attempts, each run's `outcome` and time in `history`, `headSha`, the commit the latest `ibni verify` run checked, and `headPassed`, whether that run passed.
+- `review` and `qa`: the number of passes in `rounds`, the total `findings`, and each pass in `history`.
+- Each pass in `history`: its `findings`, and, where the agent recorded them, counts per grade in `severity` (`blocker`, `major`, `minor`, `nit`), how many of its own findings were left `open` and, for review, how many it `accepted`. A count the pass didn't record is left out rather than shown as zero.
+- `steps`: the latest `ibni` steps with their outcome and duration.
+
+The snapshot holds counts, outcomes, times and commit hashes only. It never carries a file path or the text of a finding. The agent records each pass with `ibni record`; `ibni help record` lists its options.
+
+Stopping a run takes two calls: the first returns a confirmation token that is valid for two minutes.
 
 ## Using segwi from a bot
 
@@ -151,7 +162,7 @@ A bot that drives segwi through MCP has no person watching each call. Without sh
 - **Answer a question only when the task settles it.** When a run is `needs_input`, read its question with `get_output`. Reply only when the task you started the run with already gives the answer, and hand everything else to the person.
 - **Hand the run to the person** who gave you the task, with the run's id and what it waits on, when any of these happens:
   - The run is `needs_approval`. Only a person in the web app can answer an [approval](glossary.md#approval), and `list_approvals` shows what it waits on.
-  - `get_run` shows a step whose title starts with "Refused:", of type `refusal`. [What keeps a run safe](#what-keeps-a-run-safe) says where refusals come from. `get_output` doesn't include them, and `get_run` shows only the latest 30 steps, so check them each time a run turns `needs_input`.
+  - `get_run` shows a step in its top-level `steps` whose title starts with "Refused:", of type `refusal`. `ibni.snapshot.steps` lists only `ibni`'s own steps, never a refusal. [What keeps a run safe](#what-keeps-a-run-safe) says where refusals come from. `get_output` doesn't include them, and `get_run` shows only the latest 30 steps, so check them each time a run turns `needs_input`.
   - The run needs a product decision, such as what to build or how it should behave, that the task doesn't settle.
   - The next step can't be undone by closing a pull request, such as deleting data, breaking a public API or making a security or privacy choice.
 

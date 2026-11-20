@@ -52,7 +52,15 @@ export function summarizeTimings(metadata) {
     return {
       rounds: rounds.length,
       findings: rounds.reduce((total, record) => total + record.findings, 0),
-      history: rounds.map(({ at, findings: count }) => ({ at, findings: count })),
+      // Each pass in order. A grade breakdown, the open count and the accepted
+      // count appear only where the pass recorded them, so a missing one reads
+      // as unknown rather than zero.
+      history: rounds.map(({ at, findings: count, severity, open, accepted: fixed }) => ({
+        at, findings: count,
+        ...(severity === undefined ? {} : { severity }),
+        ...(open === undefined ? {} : { open }),
+        ...(fixed === undefined ? {} : { accepted: fixed }),
+      })),
     };
   };
   // Acceptance is optional per review; reviews recorded without it count in
