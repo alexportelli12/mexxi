@@ -4,6 +4,8 @@ sources:
   - scripts/lib/segwi-install.mjs
   - scripts/install.mjs
   - config.schema.json
+  - agent/code-reviewer.md
+  - skills/implement-review/SKILL.md
   - docs/decisions/0011-segwi.md
   - docs/decisions/0012-segwi-permission-modes.md
   - docs/decisions/0013-segwi-run-browser-and-hosts.md
@@ -148,6 +150,16 @@ For a client that reads a JSON file:
 - `steps`: the latest `ibni` steps with their outcome and duration.
 
 The snapshot holds counts, outcomes, times and commit hashes only. It never carries a file path or the text of a finding. The agent records each pass with `ibni record`; `ibni help record` lists its options.
+
+A finding's text reaches your client only through `get_output`. After each review pass, the run writes its findings in its reply, one line each, with a grade, a root-cause key and the evidence:
+
+```text
+[major] root-cause: unclassified | evidence: <input, call path or failing test> | changed line: yes
+```
+
+The root-cause key comes from a list your task supplies, or is `unclassified`. A `blocker` or `major` without an input, a call path or a failing test is graded `minor`. [The reviewer agent](../agent/code-reviewer.md) sets these rules.
+
+A bot can keep its own log of findings across runs. One lives outside mexxi, on the bot computer, at `/workspace/verification/findings.jsonl`. mexxi never reads or writes it, and nothing in a run depends on it.
 
 Stopping a run takes two calls: the first returns a confirmation token that is valid for two minutes.
 

@@ -24,7 +24,9 @@ Run rendered QA first when it applies, then invoke `code-reviewer` in
   confirmation the accepted findings and fixes. Never transcripts, reasoning,
   self-review or advocacy;
 - the verify result, the rendered-QA evidence paths, and the `reviewTool` that
-  `ibni info` prints (`ocr` or `none`).
+  `ibni info` prints (`ocr` or `none`);
+- the root-cause list, when the request supplies one. Without one, the
+  reviewer keys every finding `unclassified`.
 
 With `ocr`, when the reviewer reports relevant tests excluded from its
 selection, add narrowly scoped `include` rules to `.opencodereview/rule.json`
@@ -49,8 +51,11 @@ or rewritten test fail. Then fix what the reviewer's rubric proves, and no more:
   rewrote, stop fixing them, and put both findings and both diffs in the pull
   request for the person to decide.
 
-Keep a finding ledger in session context only: severity, proof and
-disposition of each finding.
+Keep a finding ledger in session context only: severity, root-cause key,
+evidence and disposition of each finding. After each reviewer pass, write the
+ledger in your reply in the reviewer's one-line format, so a bot driving the
+run reads it as run output. Never put a finding's text in an `ibni record`
+call or a repository file; `ibni` keeps the counts per grade.
 
 With no verified blocker or major, make any fixes on changed lines, run the
 verify command, and the gate is complete. Otherwise batch the fixes (delegating

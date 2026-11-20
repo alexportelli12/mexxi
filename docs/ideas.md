@@ -12,7 +12,7 @@ sources:
   - docs/decisions/*.md
   - config.schema.json
   - scripts/ibni/commands/record-evidence.mjs
-reviewed: 2026-11-19
+reviewed: 2026-11-20
 ---
 
 # The ideas behind mexxi
@@ -59,7 +59,7 @@ You get before and after screenshots near the top of the pull request, and what 
 
 The author grading their own work is not a review. An agent that reviews its own change tends to approve it, and one that also fixes what it finds turns review into more building.
 
-For substantial changes, a separate reviewer agent judges the finished work; the building agent decides what counts, and a one-line fix skips it. The reviewer cannot edit code, so it only reports. It works from the diff and a short note of the requirements, never the builder's reasoning. Each finding carries a grade, and a serious one has to show its proof, such as an input that breaks. The run fixes the proven defects, and small points only on lines it already changed. The rest wait in a short list in the pull request, so review does not turn into endless polish. The proof is still your checks and the browser; the review is an extra opinion on top.
+For substantial changes, a separate reviewer agent judges the finished work; the building agent decides what counts, and a one-line fix skips it. The reviewer cannot edit code, so it only reports. It works from the diff and a short note of the requirements, never the builder's reasoning. Each finding carries a grade, a root cause and its evidence, and a serious one has to show its proof, such as an input that breaks. The run fixes the proven defects, and small points only on lines it already changed. The rest wait in a short list in the pull request, so review does not turn into endless polish. The proof is still your checks and the browser; the review is an extra opinion on top.
 
 The evidence shows `review ✓`. When no review ran, the evidence says so and the merge call is marked "(self-assessed)". [Decision 0007](decisions/0007-implementers-implement-reviewers-judge.md) and [decision 0022](decisions/0022-retire-jev-and-cross-family-review.md)
 
