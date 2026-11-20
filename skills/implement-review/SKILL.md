@@ -53,8 +53,9 @@ or rewritten test fail. Then fix what the reviewer's rubric proves, and no more:
 
 Keep a finding ledger in session context only: severity, root-cause key,
 evidence and disposition of each finding. After each reviewer pass, write the
-ledger in your reply in the reviewer's one-line format, so a bot driving the
-run reads it as run output. Never put a finding's text in an `ibni record`
+ledger in your reply: the reviewer's line for each finding, followed by
+`| disposition: fixed`, `left for later` or `does not apply`, so a bot driving
+the run reads it as run output. Never put a finding's text in an `ibni record`
 call or a repository file; `ibni` keeps the counts per grade.
 
 With no verified blocker or major, make any fixes on changed lines, run the

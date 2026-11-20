@@ -151,10 +151,10 @@ For a client that reads a JSON file:
 
 The snapshot holds counts, outcomes, times and commit hashes only. It never carries a file path or the text of a finding. The agent records each pass with `ibni record`; `ibni help record` lists its options.
 
-A finding's text reaches your client only through `get_output`. After each review pass, the run writes its findings in its reply, one line each, with a grade, a root-cause key and the evidence:
+Of segwi's tools, only `get_output` returns a finding's text. After each review pass, the run writes its findings in its reply, one line each. Each line carries a grade, a root-cause key, where the defect sits, the evidence and what the run did about it:
 
 ```text
-[major] root-cause: unclassified | evidence: <input, call path or failing test> | changed line: yes
+[major] root-cause: <key or unclassified> | at: <path:line> | evidence: <input, call path or failing test> | changed line: yes | disposition: fixed
 ```
 
 The root-cause key comes from a list your task supplies, or is `unclassified`. A `blocker` or `major` without an input, a call path or a failing test is graded `minor`. [The reviewer agent](../agent/code-reviewer.md) sets these rules.

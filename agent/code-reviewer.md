@@ -116,10 +116,11 @@ danger, selection (with `ocr`, its `total_files`, `reviewable_count`,
 with reasons), selected entries reviewed or skipped with reasons, material
 coverage limits, each blocking ledger item's confirmation status when applicable, and
 the findings. Each finding opens with its fields on one line, then its impact
-and a bounded recommendation:
+and a bounded recommendation. `at` is where the defect sits, a `path:line` or
+rendered evidence:
 
 ```text
-[major] root-cause: unclassified | evidence: <input, call path or failing test> | changed line: yes
+[major] root-cause: <key or unclassified> | at: <path:line> | evidence: <input, call path or failing test> | changed line: yes
 ```
 
 End with the count per grade, as in `blocker 0, major 1, minor 2, nit 0`; the
