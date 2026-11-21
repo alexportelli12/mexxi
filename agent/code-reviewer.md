@@ -87,9 +87,18 @@ Grade every finding with this rubric:
 - `minor`: an unproven edge case, naming, or small duplication.
 - `nit`: style.
 
-A `blocker` or `major` must show its proof: an input, a call path or a failing
-test. Without one, grade it `minor`. Say for each finding whether it sits on
-lines the change touched.
+Every finding carries three fields, so a review loop outside the run can sort
+and count findings without reading their prose:
+
+- **Severity:** one of the four grades above.
+- **Root cause:** a key from the root-cause list the invocation supplies. When
+  it supplies none, or no key fits, write `unclassified`; that is allowed and
+  never a reason to drop a finding. Never invent a key.
+- **Evidence:** for a `blocker` or `major`, its proof: an input, a call path or
+  a failing test. Without one, grade it `minor`. For a `minor` or `nit`, a
+  `path:line`, a URL or the rendered evidence it rests on.
+
+Say for each finding whether it sits on lines the change touched.
 
 Every discovery and confirmation result includes a merge-danger call, each
 part with a one-line justification:
@@ -106,11 +115,18 @@ danger, selection (with `ocr`, its `total_files`, `reviewable_count`,
 `excluded_count` and reasons; with `none`, the changed paths and any skipped
 with reasons), selected entries reviewed or skipped with reasons, material
 coverage limits, each blocking ledger item's confirmation status when applicable, and
-evidence-based findings with severity (`blocker`, `major`, `minor`, `nit`),
-its proof, category, path/line or rendered evidence, whether the line was
-changed, impact, and bounded recommendation. End with the count per grade, as
-in `blocker 0, major 1, minor 2, nit 0`; the orchestrator records it with
-`ibni record --review <total> --blocker <n> --major <n> --minor <n> --nit <n>`,
-adding `--accepted` and `--open` once it has acted on the findings.
+the findings. Each finding opens with its fields on one line, then its impact
+and a bounded recommendation. `at` is where the defect sits, a `path:line` or
+rendered evidence:
+
+```text
+[major] root-cause: <key or unclassified> | at: <path:line> | evidence: <input, call path or failing test> | changed line: yes
+```
+
+End with the count per grade, as in `blocker 0, major 1, minor 2, nit 0`; the
+orchestrator records it with `ibni record --review <total> --blocker <n>
+--major <n> --minor <n> --nit <n>`, adding `--accepted` and `--open` once it
+has acted on the findings. ibni stores those counts only, never a finding's
+text.
 The orchestrator alone judges applicability and owns remediation and the
 decision to continue.
