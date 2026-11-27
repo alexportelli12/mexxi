@@ -23,7 +23,7 @@
     "@angular/compiler-cli": "^22.2.0",
     "@axe-core/playwright": "4.14.0",
     "@tailwindcss/postcss": "^4.1.12",
-    "jsdom": "^30.0.0",
+    "jsdom": "^31.0.1",
     "playwright-core": "1.63.0",
     "postcss": "^8.5.3",
     "tailwindcss": "^4.1.12",
