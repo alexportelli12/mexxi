@@ -1,0 +1,221 @@
+@import "tailwindcss";
+/* The same tokens the landing page and docs read, so the three never drift. The --hares-* set holds the
+   app's own colours; the short names below (--bg, --surface, ...) are the ones this app uses. */
+@import "../../../../site/tokens.css";
+
+/* Schibsted Grotesk, self-hosted (SIL Open Font License, see public/fonts/OFL.txt). The Latin file covers
+   English; the Latin Extended file carries the Maltese letters, such as the h-bar in the product name. */
+@font-face {
+  font-family: "Schibsted Grotesk";
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url("/fonts/schibsted-grotesk-latin-ext-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: "Schibsted Grotesk";
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url("/fonts/schibsted-grotesk-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+:root {
+  --bg: var(--hares-bg);
+  --surface: var(--hares-surface);
+  --raised: var(--hares-raised);
+  --line: var(--hares-line);
+  --strong: var(--hares-strong);
+  --text: var(--hares-text);
+  --muted: var(--hares-muted);
+  --faint: var(--hares-faint);
+  --amber: var(--hares-amber);
+  --amber-text: var(--hares-amber-text);
+  --on-amber: var(--hares-on-amber);
+  --teal: var(--hares-teal);
+  --on-teal: var(--hares-on-teal);
+  --red: var(--hares-red);
+  --on-red: var(--hares-on-red);
+  --glow: var(--hares-glow);
+  --teal-soft: var(--hares-teal-soft);
+  --red-soft: var(--hares-red-soft);
+  --key: var(--hares-key);
+  --font: "Schibsted Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* Code and the terminal only. */
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+  color-scheme: dark;
+}
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+  }
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-line: var(--line);
+  --color-strong: var(--strong);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-faint: var(--faint);
+  --color-amber: var(--amber);
+  --color-amber-text: var(--amber-text);
+  --color-on-amber: var(--on-amber);
+  --color-teal: var(--teal);
+  --color-on-teal: var(--on-teal);
+  --color-red: var(--red);
+  --color-on-red: var(--on-red);
+  --color-glow: var(--glow);
+  --color-teal-soft: var(--teal-soft);
+  --color-red-soft: var(--red-soft);
+  --color-key: var(--key);
+  --font-sans: var(--font);
+  --font-mono: var(--mono);
+}
+
+@layer base {
+  html {
+    background: var(--bg);
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    /* The design asks for tabular figures everywhere, but in this font they also widen commas, colons and
+       full stops ("atlas , and"). They are kept for numbers that line up, with .tnum, and off for running text. */
+    font-feature-settings: "ss01" 1;
+    -webkit-font-smoothing: antialiased;
+  }
+  button,
+  input,
+  textarea {
+    font-family: inherit;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  p {
+    text-wrap: pretty;
+  }
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--faint);
+    opacity: 1;
+  }
+  :focus-visible {
+    outline: 2px solid var(--amber);
+    outline-offset: 3px;
+  }
+}
+
+/* A routed page fills the shell's column with one rhythm: the host element has no layout of its own. */
+@layer base {
+  router-outlet + * {
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+/* The lantern: an amber dot that breathes while a session waits on you. Still under reduced motion. */
+@keyframes breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--amber) 10%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--amber) 22%, transparent);
+  }
+}
+.lantern {
+  animation: breathe 2.8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .lantern {
+    animation: none;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer components {
+/* Numbers that line up in a column: times, counts, positions. */
+.tnum {
+  font-feature-settings: "tnum" 1, "ss01" 1;
+}
+
+/* A section's heading line: the title, then a small note or link, over one hairline. */
+.sect-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+.sect-head > h2 {
+  font-size: 19px;
+  line-height: 1.2;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+}
+
+/* Lists scroll sideways rather than wrapping; the scrollbar stays out of the picture. */
+.scroll-x {
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.scroll-x::-webkit-scrollbar {
+  display: none;
+}
+
+/* A keycap in running text: the keys the cockpit answers to. */
+kbd.key {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  box-sizing: border-box;
+  border-radius: 6px;
+  background: var(--key);
+  border-bottom: 2px solid var(--line);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+/* A row in the session menu: an icon and a word, 56 pixels tall. */
+.menu-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 56px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 14px;
+  background: transparent;
+  color: var(--text);
+  font-size: 16px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+.menu-item:hover {
+  background: var(--raised);
+}
+}

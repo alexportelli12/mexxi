@@ -1,7 +1,7 @@
 // How a run reads, from ibni's own record of it: the snapshot of `ibni info`
 // and `ibni stats`, its journey from workspace to pull request, the headline
 // and how far along it is. Pure and free of Claude Code imports, so the run
-// pane and segwi's web app (scripts/segwi/web) draw a run the same way.
+// pane and hares's web app (scripts/hares/web) draw a run the same way.
 // Index access uses brackets so the web app's stricter compiler accepts it.
 
 // The same shape as RunPaneSnapshot in ../types, which must stay

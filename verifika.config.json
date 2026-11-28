@@ -48,34 +48,43 @@
     },
     "docs-fresh": {
       "command": "node scripts/docs/fresh.mjs",
-      "paths": ["README.md", "AGENTS.md", "docs/**", "site/**", "commands/**", "agent/**", "skills/**", "names.json", "prompts.json", "config.schema.json", "mexxi.schema.json", "config.example.json", "claude/agents.json", "codex/agents.json", "opencode/opencode.json", "scripts/install.mjs", "scripts/ibni/**", "scripts/docs/**", "scripts/lib/**", "scripts/segwi/**"]
+      "paths": ["README.md", "AGENTS.md", "docs/**", "site/**", "commands/**", "agent/**", "skills/**", "names.json", "prompts.json", "config.schema.json", "mexxi.schema.json", "config.example.json", "claude/agents.json", "codex/agents.json", "opencode/opencode.json", "scripts/install.mjs", "scripts/ibni/**", "scripts/docs/**", "scripts/lib/**", "scripts/hares/**"]
     },
     "prose": {
       "command": "npm run --silent prose",
       "paths": ["README.md", "docs/**", "site/index.html", "skills/docs-writing/**", "scripts/docs/vale.mjs", ".vale.ini", ".vale/**"]
     },
-    "segwi": {
-      "command": "node --test scripts/segwi/test/server.test.mjs scripts/segwi/test/config.test.mjs scripts/segwi/test/tokens.test.mjs scripts/segwi/test/check-design.test.mjs scripts/segwi/test/web-check.test.mjs scripts/segwi/test/bundle-size.test.mjs scripts/segwi/test/contract.test.mjs scripts/segwi/test/ibni-contract.test.mjs scripts/segwi/test/security.test.mjs scripts/segwi/test/steps.test.mjs scripts/segwi/test/settings.test.mjs scripts/segwi/test/approver.test.mjs scripts/segwi/test/approvals.test.mjs scripts/segwi/test/risk.test.mjs scripts/segwi/test/mcp.test.mjs scripts/segwi/test/token.test.mjs scripts/segwi/test/push.test.mjs scripts/segwi/test/static.test.mjs scripts/segwi/test/pwa.test.mjs scripts/segwi/test/canary.test.mjs scripts/segwi/test/audit.test.mjs scripts/segwi/test/waiting.test.mjs scripts/segwi/test/extensions.test.mjs scripts/segwi/test/readiness.test.mjs scripts/segwi/test/readiness-github.test.mjs",
-      "paths": ["scripts/segwi/**", "scripts/ibni/**", "scripts/lib/config.mjs", "scripts/lib/redact.mjs", "scripts/lib/browser.mjs", "scripts/lib/secret-patterns.json", "config.schema.json", "site/tokens.css"],
-      "exclude": ["scripts/segwi/web/**"]
+    "hares": {
+      "command": "node --test scripts/hares/test/server.test.mjs scripts/hares/test/config.test.mjs scripts/hares/test/tokens.test.mjs scripts/hares/test/check-design.test.mjs scripts/hares/test/web-check.test.mjs scripts/hares/test/bundle-size.test.mjs scripts/hares/test/contract.test.mjs scripts/hares/test/ibni-contract.test.mjs scripts/hares/test/security.test.mjs scripts/hares/test/steps.test.mjs scripts/hares/test/settings.test.mjs scripts/hares/test/risk.test.mjs scripts/hares/test/mcp.test.mjs scripts/hares/test/mcp-guardrails.test.mjs scripts/hares/test/mcp-new-tools.test.mjs scripts/hares/test/token.test.mjs scripts/hares/test/push.test.mjs scripts/hares/test/static.test.mjs scripts/hares/test/pwa.test.mjs scripts/hares/test/audit.test.mjs scripts/hares/test/extensions.test.mjs scripts/hares/test/notify.test.mjs scripts/hares/test/doctor.test.mjs scripts/hares/test/auth-browser-mark.test.mjs",
+      "paths": ["scripts/hares/**","scripts/ibni/**","scripts/lib/config.mjs","scripts/lib/redact.mjs","scripts/lib/browser.mjs","scripts/lib/secret-patterns.json","config.schema.json","site/tokens.css"],
+      "exclude": ["scripts/hares/web/**"]
     },
-    "segwi-web": {
-      "command": "node scripts/segwi/web-check.mjs",
-      "paths": ["scripts/segwi/web/**", "scripts/segwi/web-check.mjs", "site/tokens.css", "names.json", "claude/mods/run-pane/hooks/journey.ts"]
+    "hares-sessions": {
+      "command": "node --test scripts/hares/test/herdr-client.test.mjs scripts/hares/test/herdr-adapter.test.mjs scripts/hares/test/herdr-guard.test.mjs scripts/hares/test/herdr-screen.test.mjs scripts/hares/test/herdr-static.test.mjs scripts/hares/test/hook.test.mjs scripts/hares/test/install-hook.test.mjs scripts/hares/test/pending.test.mjs scripts/hares/test/transcript.test.mjs scripts/hares/test/sessions.test.mjs scripts/hares/test/sessions-lifecycle.test.mjs scripts/hares/test/run-view.test.mjs scripts/hares/test/links.test.mjs scripts/hares/test/store-migrations.test.mjs scripts/hares/test/approvals.test.mjs",
+      "paths": ["scripts/hares/**", "scripts/lib/host-hooks.mjs", "scripts/lib/config.mjs", "scripts/lib/redact.mjs", "scripts/lib/secret-patterns.json", "config.schema.json"],
+      "exclude": ["scripts/hares/web/**"]
     },
-    "segwi-e2e": {
-      "command": "node --test scripts/segwi/test/web.e2e.mjs",
-      "dependsOn": ["segwi-web"],
-      "paths": ["scripts/segwi/web/**", "scripts/segwi/lib/**", "scripts/segwi/test/web.e2e.mjs", "scripts/segwi/test/web-harness.mjs", "scripts/segwi/test/fixtures/**", "scripts/segwi/runners/**", "site/tokens.css", "claude/mods/run-pane/hooks/journey.ts"]
+    "hares-github": {
+      "command": "node --test scripts/hares/test/github-board.test.mjs scripts/hares/test/github-write.test.mjs scripts/hares/test/html-sanitize.test.mjs scripts/hares/test/readiness.test.mjs scripts/hares/test/readiness-github.test.mjs",
+      "paths": ["scripts/hares/lib/**", "scripts/hares/test/github-*", "scripts/hares/test/html-sanitize.test.mjs", "scripts/hares/test/readiness*", "scripts/hares/test/fixtures/github/**", "scripts/hares/test/helpers.mjs"]
+    },
+    "hares-web": {
+      "command": "node scripts/hares/web-check.mjs",
+      "paths": ["scripts/hares/web/**", "scripts/hares/web-check.mjs", "site/tokens.css", "names.json", "claude/mods/run-pane/hooks/journey.ts"]
+    },
+    "hares-e2e": {
+      "command": "node --test scripts/hares/test/web.e2e.mjs",
+      "dependsOn": ["hares-web"],
+      "paths": ["scripts/hares/web/**", "scripts/hares/lib/**", "scripts/hares/test/web.e2e.mjs", "scripts/hares/test/web-harness.mjs", "scripts/hares/test/fixtures/**", "site/tokens.css", "claude/mods/run-pane/hooks/journey.ts"]
     },
     "design": {
-      "command": "node scripts/segwi/check-design.mjs",
-      "paths": ["site/**", "scripts/docs/vitepress/theme/**", "scripts/segwi/web/src/**", "scripts/segwi/check-design.mjs", "names.json"],
+      "command": "node scripts/hares/check-design.mjs",
+      "paths": ["site/**", "scripts/docs/vitepress/theme/**", "scripts/hares/web/src/**", "scripts/hares/check-design.mjs", "names.json"],
       "exclude": ["site/docs/**"]
     },
     "audit": {
-      "command": "node scripts/segwi/audit.mjs",
-      "paths": ["package.json", "package-lock.json", "scripts/segwi/web/package.json", "scripts/segwi/web/package-lock.json", "scripts/segwi/audit.mjs"]
+      "command": "node scripts/hares/audit.mjs",
+      "paths": ["package.json", "package-lock.json", "scripts/hares/web/package.json", "scripts/hares/web/package-lock.json", "scripts/hares/audit.mjs"]
     },
     "integration": {
       "command": "node --test scripts/integration.test.mjs",

@@ -7,7 +7,7 @@ sources:
   - scripts/ibni/commands/**
   - scripts/ibni/lib/lock.mjs
   - scripts/ibni/lib/scope.mjs
-reviewed: 2026-11-20
+reviewed: 2026-11-28
 ---
 
 # How a run works

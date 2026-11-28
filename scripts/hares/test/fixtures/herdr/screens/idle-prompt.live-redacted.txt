@@ -1,0 +1,16 @@
+  - First point of the summary, kept to one line.
+  - Second point, which lists three things:
+    1. the first thing
+    2. the second thing
+    3. the third thing
+  - Third point. Esc to cancel stays a phrase in the text, not a key hint.
+
+✻ Worked for 1m 40s · done 4:31 PM
+
+※ recap: Neutral recap text standing in for the session's own words, wrapped onto a second line the way the pane wraps it at its
+  width. (turn off recaps in /config)
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on (shift+tab to cycle) · ⧉ review

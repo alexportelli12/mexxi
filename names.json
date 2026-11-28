@@ -16,7 +16,7 @@
     "replaces": "implementation-workspace"
   },
   {
-    "name": "segwi",
+    "name": "hares",
     "kind": "cli",
     "partOfSpeech": "verb",
     "meaning": ["to follow"],

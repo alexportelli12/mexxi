@@ -1,0 +1,15 @@
+● Neutral progress note standing in for the session's words.
+
+● Agent(Neutral background task)
+  ⎿  Backgrounded agent (↓ to manage · ctrl+o to expand)
+
+· Ideating… (1h 10m 51s · ↓ 98.7k tokens)
+  ⎿  Tip: Use /btw to ask a side question without interrupting Claude
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+❯
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  ⏵⏵ auto mode on · 2 background tasks · esc to interrupt · ↓ to manage
+
+  ● main
+  ◯ general-purpose  Neutral subagent label                                                                            9m 30s · ↓ 181.9k tokens

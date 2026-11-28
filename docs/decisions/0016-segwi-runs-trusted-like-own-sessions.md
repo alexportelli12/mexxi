@@ -1,5 +1,5 @@
 ---
-status: Accepted
+status: Accepted; amended by 0028, which replaces its runs and approval tool with herdr sessions and a hook
 date: 2026-10-24
 ---
 

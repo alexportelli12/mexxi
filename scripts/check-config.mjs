@@ -18,8 +18,11 @@ function checkSchema(schema, at = "config") {
   for (const keyword of Object.keys(schema)) assert.ok(supportedKeywords.has(keyword), `${at}: ${keyword} is not supported by lib/config.mjs`);
   for (const [key, property] of Object.entries(schema.properties ?? {})) {
     assert.ok(property.description, `${at}.${key} has no description`);
-    assert.ok("default" in property, `${at}.${key} has no default`);
-    assert.deepEqual(validate(property.default, property, `${at}.${key}`), []);
+    // A deprecated alias is read and renamed by lib/config.mjs, so it has no default of its own.
+    if (!property.deprecated) {
+      assert.ok("default" in property, `${at}.${key} has no default`);
+      assert.deepEqual(validate(property.default, property, `${at}.${key}`), []);
+    }
     checkSchema(property, `${at}.${key}`);
   }
   if (schema.items) checkSchema(schema.items, `${at}[]`);
@@ -153,8 +156,8 @@ export async function check(base = root) {
   }
   const commandFiles = (await readdir(path.join(base, "commands"))).filter((name) => name.endsWith(".md") && !(name in commandAliases));
   assert.deepEqual(names.filter((entry) => entry.kind === "command").map((entry) => `${entry.name}.md`).sort(), commandFiles.sort(), "names.json must list each command, and only commands");
-  // ibni runs a task's worktree; segwi, opt-in, starts and follows runs (decision 0011).
-  assert.deepEqual(names.filter((entry) => entry.kind === "cli").map((entry) => entry.name), ["ibni", "segwi"]);
+  // ibni runs a task's worktree; hares, opt-in, starts and follows runs (decision 0011).
+  assert.deepEqual(names.filter((entry) => entry.kind === "cli").map((entry) => entry.name), ["ibni", "hares"]);
   assert.deepEqual(names.filter((entry) => entry.kind === "repo").map((entry) => entry.name), ["mexxi"]);
   const skillEntries = names.filter((entry) => entry.kind === "skill");
   assert.deepEqual(skillEntries.map((entry) => entry.name), ["ibda"]);

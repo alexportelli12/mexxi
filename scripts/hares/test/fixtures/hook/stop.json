@@ -1,0 +1,8 @@
+{
+  "session_id": "11111111-2222-4333-8444-555555555555",
+  "transcript_path": "/home/user/.claude/projects/-tmp-demo/11111111-2222-4333-8444-555555555555.jsonl",
+  "cwd": "/tmp/demo",
+  "permission_mode": "default",
+  "hook_event_name": "Stop",
+  "stop_hook_active": false
+}

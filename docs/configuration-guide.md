@@ -11,7 +11,7 @@ sources:
   - scripts/ibni/lib/lock.mjs
   - scripts/ibni/lib/scope.mjs
   - scripts/ibni/lib/caches.mjs
-reviewed: 2026-11-14
+reviewed: 2026-11-28
 ---
 
 # Configuration

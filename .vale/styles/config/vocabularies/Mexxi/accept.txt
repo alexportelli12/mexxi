@@ -62,6 +62,9 @@ OpenCodeReview
 [Ll]inters?
 [Ss]ubcommands?(?:'s)?
 [Ff]rontmatter
+hares(?:'s)?
+ħares(?:'s)?
+herdr
 segwi(?:'s)?
 Tailscale
 tailnet

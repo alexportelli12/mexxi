@@ -1,0 +1,45 @@
+
+ ▐▛███▛█   Claude Code v2.1.332
+▝▜██████▀  Opus 5.5 · Claude Max
+ ▝▝   ▝▝   /tmp/hares-gate1/repo
+
+⚠ Code Mode (experimental) is on · this session can be resumed only with Code Mode on
+
+❯ Call the AskUserQuestion tool exactly once with TWO questions in the same call: first question 'Which size?', header 'Size', multiSelect false, options
+  Small (Small one), Large (Large one); second question 'Which shape?', header 'Shape', multiSelect false, options Round (Round one), Square (Square one).
+  After the answers, reply with both answers.
+
+● Working · 35s…
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☐ Size  ☐ Shape  ✔ Submit  →
+
+Which size?
+
+❯ 1. Small
+     Small one
+  2. Large
+     Large one
+  3. Type something.
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · Tab/Arrow keys to navigate · Esc to cancel

@@ -1,0 +1,13 @@
+[
+  {
+    "tool": "Bash",
+    "input": {
+      "command": "git status --short",
+      "description": "Check the tree"
+    },
+    "result": ""
+  },
+  {
+    "say": "Should the new option default to on or off?"
+  }
+]

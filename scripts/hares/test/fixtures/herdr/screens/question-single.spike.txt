@@ -1,0 +1,15 @@
+ ☐ Banner
+
+Which colour should the spike banner be?
+
+❯ 1. Red
+     Red banner
+  2. Green
+     Green banner
+  3. Blue
+     Blue banner
+  4. Type something.
+──────────────────────────────
+  5. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel

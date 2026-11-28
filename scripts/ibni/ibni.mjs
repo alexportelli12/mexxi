@@ -301,14 +301,14 @@ export const COMMANDS = {
   record: {
     usage: "ibni record --session <id> (--verify <pass|fail> | --review <count> [grades] [--open <count>] [--accepted <count>] | --qa <count> [grades] [--open <count>] | --before-shots <taken|skipped>)",
     summary: "Record a verify run, the findings of a review or QA pass, or the before-shots decision.",
-    why: "The agent records each verify run, browser check and review as it finishes, so ibni stats, segwi and /irrifletti can show how runs went.",
+    why: "The agent records each verify run, browser check and review as it finishes, so ibni stats, hares and /irrifletti can show how runs went.",
     details: [
       "One result per call; stats reports them.",
       "grades are --blocker, --major, --minor and --nit (decision 0024), each a count. A grade left out",
       "counts as zero, and the grades must add up to the --review or --qa count. Only counts are kept,",
       "never the findings' text.",
       "A --review pass also keeps the worktree's HEAD commit as headSha when nothing is uncommitted,",
-      "so segwi can tell whether the pull request's head is the commit that was reviewed: record it",
+      "so hares can tell whether the pull request's head is the commit that was reviewed: record it",
       "after committing the work it reviewed.",
       "ibni verify records its own runs; --verify is for a host that runs the verify command another",
       "way, and never satisfies the record-evidence or publish gate.",

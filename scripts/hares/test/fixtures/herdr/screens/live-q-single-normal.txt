@@ -1,0 +1,45 @@
+
+ ▐▛███▛█   Claude Code v2.1.332
+▝▜██████▀  Opus 5.5 · Claude Max
+ ▝▝   ▝▝   /tmp/hares-gate1/repo
+
+
+❯ Call the AskUserQuestion tool exactly once with one question: question 'Which fruit for the gate?', header 'Fruit', multiSelect false, options Apple (An
+  apple), Pear (A pear). After the answer, reply with just the fruit.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ☐ Fruit
+
+Which fruit for the gate?
+
+❯ 1. Apple
+     An apple
+  2. Pear
+     A pear
+  3. Type something.
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel

@@ -1,0 +1,11 @@
+[
+  {
+    "id": 900,
+    "user": {
+      "login": "bob"
+    },
+    "created_at": "2026-11-27T11:00:00Z",
+    "html_url": "https://github.com/example/my-app/pull/1#issuecomment-900",
+    "body_html": "<p>Looks good <b onclick=\"x()\">overall</b></p>"
+  }
+]

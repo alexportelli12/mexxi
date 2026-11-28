@@ -1,0 +1,1223 @@
+{
+  "_about": "Demo data for the GitHub screens. Any string like \"now-40m\", \"now-3h\" or \"now-2d\" is a time that many minutes, hours or days before the request: the demo server turns it into an ISO timestamp when it serves the file. Endpoints: GET /api/prs returns {prs}; GET /api/prs/:repo/:n returns {pr: details[\"<repo>/<n>\"]}; GET /api/issues returns {issues}; GET /api/ci returns {repos: ci}. Writes answer {ok:true}, and POST /api/sessions answers {session:{id}}.",
+  "prs": [
+    {
+      "bot": false,
+      "draft": false,
+      "groups": [
+        "review",
+        "ready"
+      ],
+      "checks": [
+        "pass",
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "failureNote": null,
+      "ciRunId": null,
+      "unresolvedThreads": 0,
+      "bump": null,
+      "docsOnly": false,
+      "commits": 6,
+      "deployWorkflow": "deploy",
+      "session": {
+        "id": "demo-session-jev",
+        "title": "Jev view-picker in shadow mode",
+        "state": "working"
+      },
+      "baseRef": "main",
+      "repo": "eduline-ai-shop",
+      "number": 231,
+      "title": "Jev view-picker spike and rollout plan",
+      "author": "alex",
+      "createdAt": "now-60m",
+      "additions": 412,
+      "deletions": 38,
+      "headSha": "3f2c1a03f2c1a03f2c1a03f2c1a03f2c1a03f2c1",
+      "headRef": "agent/jev-view-picker",
+      "url": "https://github.com/alex/eduline-ai-shop/pull/231"
+    },
+    {
+      "bot": false,
+      "draft": false,
+      "groups": [
+        "review"
+      ],
+      "checks": [
+        "pass",
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "failureNote": null,
+      "ciRunId": null,
+      "unresolvedThreads": 2,
+      "bump": null,
+      "docsOnly": false,
+      "commits": 3,
+      "deployWorkflow": null,
+      "session": null,
+      "baseRef": "main",
+      "repo": "thats-fair",
+      "number": 148,
+      "title": "Listing duplicate detection",
+      "author": "alex",
+      "createdAt": "now-180m",
+      "additions": 186,
+      "deletions": 21,
+      "headSha": "a91b7c2a91b7c2a91b7c2a91b7c2a91b7c2a91b7",
+      "headRef": "agent/listing-duplicates",
+      "url": "https://github.com/alex/thats-fair/pull/148"
+    },
+    {
+      "bot": false,
+      "draft": false,
+      "groups": [
+        "review",
+        "ready"
+      ],
+      "checks": [
+        "pass",
+        "pass"
+      ],
+      "failureNote": null,
+      "ciRunId": null,
+      "unresolvedThreads": 0,
+      "bump": null,
+      "docsOnly": true,
+      "commits": 3,
+      "deployWorkflow": null,
+      "session": null,
+      "baseRef": "main",
+      "repo": "atlas-ops",
+      "number": 3,
+      "title": "Document what herdr’s socket API can do",
+      "author": "alex",
+      "createdAt": "now-40m",
+      "additions": 226,
+      "deletions": 0,
+      "headSha": "5d0e8f45d0e8f45d0e8f45d0e8f45d0e8f45d0e8",
+      "headRef": "agent/herdr-docs",
+      "url": "https://github.com/alex/atlas-ops/pull/3"
+    },
+    {
+      "bot": false,
+      "draft": false,
+      "groups": [
+        "failing"
+      ],
+      "checks": [
+        "pass",
+        "fail",
+        "pass",
+        "pass"
+      ],
+      "failureNote": "verify:ci failed at lint",
+      "ciRunId": 77,
+      "unresolvedThreads": 0,
+      "bump": null,
+      "docsOnly": false,
+      "commits": 3,
+      "deployWorkflow": null,
+      "session": null,
+      "baseRef": "main",
+      "repo": "verifika",
+      "number": 41,
+      "title": "Polish the human TUI",
+      "author": "alex",
+      "createdAt": "now-300m",
+      "additions": 301,
+      "deletions": 97,
+      "headSha": "c4a2b19c4a2b19c4a2b19c4a2b19c4a2b19c4a2b",
+      "headRef": "agent/tui-polish",
+      "url": "https://github.com/alex/verifika/pull/41"
+    },
+    {
+      "bot": true,
+      "draft": false,
+      "groups": [
+        "bumps",
+        "ready"
+      ],
+      "checks": [
+        "pass",
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "failureNote": null,
+      "ciRunId": null,
+      "unresolvedThreads": 0,
+      "bump": "minor",
+      "docsOnly": false,
+      "commits": 1,
+      "deployWorkflow": null,
+      "session": null,
+      "baseRef": "main",
+      "repo": "thats-fair",
+      "number": 150,
+      "title": "Bump vite from 7.1.4 to 7.2.0",
+      "author": "dependabot[bot]",
+      "createdAt": "now-120m",
+      "additions": 12,
+      "deletions": 12,
+      "headSha": "e7f6a35e7f6a35e7f6a35e7f6a35e7f6a35e7f6a",
+      "headRef": "dependabot/npm_and_yarn/vite-7.2.0",
+      "url": "https://github.com/alex/thats-fair/pull/150"
+    },
+    {
+      "bot": true,
+      "draft": false,
+      "groups": [
+        "bumps",
+        "ready"
+      ],
+      "checks": [
+        "pass",
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "failureNote": null,
+      "ciRunId": null,
+      "unresolvedThreads": 0,
+      "bump": "security",
+      "docsOnly": false,
+      "commits": 1,
+      "deployWorkflow": null,
+      "session": null,
+      "baseRef": "main",
+      "repo": "eduline-ai-shop",
+      "number": 233,
+      "title": "Bump next from 16.0.1 to 16.0.3",
+      "author": "dependabot[bot]",
+      "createdAt": "now-300m",
+      "additions": 8,
+      "deletions": 8,
+      "headSha": "b2c3d4eb2c3d4eb2c3d4eb2c3d4eb2c3d4eb2c3d",
+      "headRef": "dependabot/npm_and_yarn/next-16.0.3",
+      "url": "https://github.com/alex/eduline-ai-shop/pull/233"
+    },
+    {
+      "bot": true,
+      "draft": false,
+      "groups": [
+        "bumps",
+        "failing"
+      ],
+      "checks": [
+        "pass",
+        "fail",
+        "fail",
+        "pass"
+      ],
+      "failureNote": "build failing",
+      "ciRunId": null,
+      "unresolvedThreads": 0,
+      "bump": "major",
+      "docsOnly": false,
+      "commits": 1,
+      "deployWorkflow": null,
+      "session": null,
+      "baseRef": "main",
+      "repo": "verifika",
+      "number": 42,
+      "title": "Bump typescript from 5.9 to 7.0",
+      "author": "dependabot[bot]",
+      "createdAt": "now-1d",
+      "additions": 4,
+      "deletions": 4,
+      "headSha": "f1e2d3cf1e2d3cf1e2d3cf1e2d3cf1e2d3cf1e2d",
+      "headRef": "dependabot/npm_and_yarn/typescript-7.0",
+      "url": "https://github.com/alex/verifika/pull/42"
+    }
+  ],
+  "details": {
+    "eduline-ai-shop/231": {
+      "bot": false,
+      "draft": false,
+      "groups": [
+        "review",
+        "ready"
+      ],
+      "checks": [
+        "pass",
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "failureNote": null,
+      "ciRunId": null,
+      "unresolvedThreads": 0,
+      "bump": null,
+      "docsOnly": false,
+      "commits": 6,
+      "deployWorkflow": "deploy",
+      "session": {
+        "id": "demo-session-jev",
+        "title": "Jev view-picker in shadow mode",
+        "state": "working"
+      },
+      "baseRef": "main",
+      "repo": "eduline-ai-shop",
+      "number": 231,
+      "title": "Jev view-picker spike and rollout plan",
+      "author": "alex",
+      "createdAt": "now-60m",
+      "additions": 412,
+      "deletions": 38,
+      "headSha": "3f2c1a03f2c1a03f2c1a03f2c1a03f2c1a03f2c1",
+      "headRef": "agent/jev-view-picker",
+      "state": "open",
+      "changedFiles": 9,
+      "issue": 28,
+      "bodyHtml": "<h2>What this does</h2><p>Adds a shadow-mode spike that asks Jev which view fits each shopper request, and logs its pick next to the view we show today. Shoppers see no change.</p><h2>Rollout plan</h2><ol><li>Run in shadow mode for a week and compare picks.</li><li>Split the React rendering into three smaller PRs.</li><li>Do the owner-only Shopify content tasks first, since the cards depend on them.</li></ol><h2>Checklist</h2><ul class=\"contains-task-list\"><li class=\"task-list-item\"><input type=\"checkbox\" class=\"task-list-item-checkbox\" disabled checked> Unit tests for the picker</li><li class=\"task-list-item\"><input type=\"checkbox\" class=\"task-list-item-checkbox\" disabled checked> Eval on 40 recorded shopper requests</li><li class=\"task-list-item\"><input type=\"checkbox\" class=\"task-list-item-checkbox\" disabled> Your sign-off on the rollout order</li></ul><h2>Eval results</h2><table><thead><tr><th>View</th><th>Jev picked</th><th>Matched today</th></tr></thead><tbody><tr><td>Grid</td><td>18</td><td>15</td></tr><tr><td>Gift picks</td><td>9</td><td>7</td></tr><tr><td>Comparison</td><td>8</td><td>5</td></tr></tbody></table><h2>Try it</h2><p>Set <code>JEV_SHADOW</code> and watch the log:</p><pre><code>JEV_SHADOW=1 npm run dev\n# picks land in logs/jev-shadow.ndjson</code></pre><blockquote><p>The run chose shadow mode because it can be reversed with one flag (decision 0023).</p></blockquote>",
+      "previewUrl": "https://example.com/preview/231",
+      "url": "https://github.com/alex/eduline-ai-shop/pull/231",
+      "checkRuns": [
+        {
+          "name": "verify:ci",
+          "state": "pass",
+          "duration": "4m 12s",
+          "url": "https://github.com/alex/eduline-ai-shop/actions/runs/1"
+        },
+        {
+          "name": "e2e (Playwright)",
+          "state": "pass",
+          "duration": "6m 40s",
+          "url": null
+        },
+        {
+          "name": "Preview deploy",
+          "state": "pass",
+          "duration": "1m 05s",
+          "url": null
+        },
+        {
+          "name": "Security scan",
+          "state": "pass",
+          "duration": "38s",
+          "url": null
+        }
+      ],
+      "files": [
+        {
+          "path": "src/jev/view-picker.ts",
+          "additions": 188,
+          "deletions": 0
+        },
+        {
+          "path": "docs/rollout-plan.md",
+          "additions": 121,
+          "deletions": 0
+        },
+        {
+          "path": "src/chat/route.ts",
+          "additions": 24,
+          "deletions": 11
+        },
+        {
+          "path": "src/jev/view-picker.test.ts",
+          "additions": 61,
+          "deletions": 0
+        },
+        {
+          "path": "package.json",
+          "additions": 2,
+          "deletions": 1
+        }
+      ],
+      "threads": [
+        {
+          "id": 9001,
+          "path": "src/jev/view-picker.ts",
+          "line": 84,
+          "resolved": true,
+          "comments": [
+            {
+              "id": 9001,
+              "author": "alex",
+              "mine": true,
+              "createdAt": "now-1d",
+              "bodyHtml": "<p>Should the shadow log rotate? It will grow fast on a busy day.</p>"
+            },
+            {
+              "id": 9002,
+              "author": "mexxi session",
+              "mine": false,
+              "createdAt": "now-120m",
+              "bodyHtml": "<p>Added a 7-day rotation in <code>3f2c1a0</code>.</p>"
+            }
+          ]
+        },
+        {
+          "id": 9003,
+          "path": null,
+          "line": null,
+          "resolved": false,
+          "comments": [
+            {
+              "id": 9003,
+              "author": "alex",
+              "mine": true,
+              "createdAt": "now-40m",
+              "bodyHtml": "<p>Can the eval include the 6 service requests too?</p>"
+            }
+          ]
+        }
+      ],
+      "readiness": {
+        "ready": true,
+        "checks": [
+          {
+            "name": "ci-green",
+            "pass": true,
+            "detail": "All checks passed"
+          },
+          {
+            "name": "no-pending-approval",
+            "pass": true,
+            "detail": "No permission is waiting"
+          }
+        ]
+      }
+    },
+    "thats-fair/148": {
+      "bot": false,
+      "draft": false,
+      "groups": [
+        "review"
+      ],
+      "checks": [
+        "pass",
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "failureNote": null,
+      "ciRunId": null,
+      "unresolvedThreads": 2,
+      "bump": null,
+      "docsOnly": false,
+      "commits": 3,
+      "deployWorkflow": null,
+      "session": null,
+      "baseRef": "main",
+      "repo": "thats-fair",
+      "number": 148,
+      "title": "Listing duplicate detection",
+      "author": "alex",
+      "createdAt": "now-180m",
+      "additions": 186,
+      "deletions": 21,
+      "headSha": "a91b7c2a91b7c2a91b7c2a91b7c2a91b7c2a91b7",
+      "headRef": "agent/listing-duplicates",
+      "state": "open",
+      "changedFiles": 5,
+      "issue": null,
+      "bodyHtml": "<h2>What this does</h2><p>Flags listings that look like duplicates of one another before they are published.</p>",
+      "previewUrl": null,
+      "url": "https://github.com/alex/thats-fair/pull/148",
+      "checkRuns": [
+        {
+          "name": "verify:ci",
+          "state": "pass",
+          "duration": "4m 12s",
+          "url": null
+        },
+        {
+          "name": "e2e (Playwright)",
+          "state": "pass",
+          "duration": "6m 40s",
+          "url": null
+        },
+        {
+          "name": "Preview deploy",
+          "state": "pass",
+          "duration": "1m 05s",
+          "url": null
+        },
+        {
+          "name": "Security scan",
+          "state": "pass",
+          "duration": "38s",
+          "url": null
+        }
+      ],
+      "files": [
+        {
+          "path": "src/index.ts",
+          "additions": 40,
+          "deletions": 8
+        }
+      ],
+      "threads": [
+        {
+          "id": 9101,
+          "path": "src/listings/dupes.ts",
+          "line": 31,
+          "resolved": false,
+          "comments": [
+            {
+              "id": 9101,
+              "author": "mexxi session",
+              "mine": false,
+              "createdAt": "now-150m",
+              "bodyHtml": "<p>Should two listings with the same address but different prices count as duplicates?</p>"
+            }
+          ]
+        },
+        {
+          "id": 9102,
+          "path": null,
+          "line": null,
+          "resolved": false,
+          "comments": [
+            {
+              "id": 9102,
+              "author": "mexxi session",
+              "mine": false,
+              "createdAt": "now-120m",
+              "bodyHtml": "<p>I used a 0.9 similarity cut-off. Tell me if that is too strict.</p>"
+            }
+          ]
+        }
+      ],
+      "readiness": {
+        "ready": false,
+        "checks": [
+          {
+            "name": "ci-green",
+            "pass": true,
+            "detail": "All checks passed"
+          },
+          {
+            "name": "no-open-threads",
+            "pass": false,
+            "detail": "2 review threads are still open"
+          }
+        ]
+      }
+    },
+    "atlas-ops/3": {
+      "bot": false,
+      "draft": false,
+      "groups": [
+        "review",
+        "ready"
+      ],
+      "checks": [
+        "pass",
+        "pass"
+      ],
+      "failureNote": null,
+      "ciRunId": null,
+      "unresolvedThreads": 0,
+      "bump": null,
+      "docsOnly": true,
+      "commits": 3,
+      "deployWorkflow": null,
+      "session": null,
+      "baseRef": "main",
+      "repo": "atlas-ops",
+      "number": 3,
+      "title": "Document what herdr’s socket API can do",
+      "author": "alex",
+      "createdAt": "now-40m",
+      "additions": 226,
+      "deletions": 0,
+      "headSha": "5d0e8f45d0e8f45d0e8f45d0e8f45d0e8f45d0e8",
+      "headRef": "agent/herdr-docs",
+      "state": "open",
+      "changedFiles": 5,
+      "issue": null,
+      "bodyHtml": "<p>No further notes.</p>",
+      "previewUrl": null,
+      "url": "https://github.com/alex/atlas-ops/pull/3",
+      "checkRuns": [
+        {
+          "name": "verify:ci",
+          "state": "pass",
+          "duration": "4m 12s",
+          "url": null
+        },
+        {
+          "name": "e2e (Playwright)",
+          "state": "pass",
+          "duration": "6m 40s",
+          "url": null
+        }
+      ],
+      "files": [
+        {
+          "path": "src/index.ts",
+          "additions": 40,
+          "deletions": 0
+        }
+      ],
+      "threads": [],
+      "readiness": {
+        "ready": true,
+        "checks": [
+          {
+            "name": "ci-green",
+            "pass": true,
+            "detail": "All checks passed"
+          },
+          {
+            "name": "no-pending-approval",
+            "pass": true,
+            "detail": "No permission is waiting"
+          }
+        ]
+      }
+    },
+    "verifika/41": {
+      "bot": false,
+      "draft": false,
+      "groups": [
+        "failing"
+      ],
+      "checks": [
+        "pass",
+        "fail",
+        "pass",
+        "pass"
+      ],
+      "failureNote": "verify:ci failed at lint",
+      "ciRunId": 77,
+      "unresolvedThreads": 0,
+      "bump": null,
+      "docsOnly": false,
+      "commits": 3,
+      "deployWorkflow": null,
+      "session": null,
+      "baseRef": "main",
+      "repo": "verifika",
+      "number": 41,
+      "title": "Polish the human TUI",
+      "author": "alex",
+      "createdAt": "now-300m",
+      "additions": 301,
+      "deletions": 97,
+      "headSha": "c4a2b19c4a2b19c4a2b19c4a2b19c4a2b19c4a2b",
+      "headRef": "agent/tui-polish",
+      "state": "open",
+      "changedFiles": 5,
+      "issue": null,
+      "bodyHtml": "<p>Tidies the layout of the human TUI.</p>",
+      "previewUrl": null,
+      "url": "https://github.com/alex/verifika/pull/41",
+      "checkRuns": [
+        {
+          "name": "verify:ci",
+          "state": "pass",
+          "duration": "4m 12s",
+          "url": null
+        },
+        {
+          "name": "e2e (Playwright)",
+          "state": "fail",
+          "duration": "6m 40s",
+          "url": null
+        },
+        {
+          "name": "Preview deploy",
+          "state": "pass",
+          "duration": "1m 05s",
+          "url": null
+        },
+        {
+          "name": "Security scan",
+          "state": "pass",
+          "duration": "38s",
+          "url": null
+        }
+      ],
+      "files": [
+        {
+          "path": "src/index.ts",
+          "additions": 40,
+          "deletions": 8
+        }
+      ],
+      "threads": [],
+      "readiness": {
+        "ready": false,
+        "checks": [
+          {
+            "name": "ci-green",
+            "pass": false,
+            "detail": "verify:ci has not passed"
+          },
+          {
+            "name": "no-pending-approval",
+            "pass": true,
+            "detail": "No permission is waiting"
+          }
+        ]
+      }
+    },
+    "thats-fair/150": {
+      "bot": true,
+      "draft": false,
+      "groups": [
+        "bumps",
+        "ready"
+      ],
+      "checks": [
+        "pass",
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "failureNote": null,
+      "ciRunId": null,
+      "unresolvedThreads": 0,
+      "bump": "minor",
+      "docsOnly": false,
+      "commits": 1,
+      "deployWorkflow": null,
+      "session": null,
+      "baseRef": "main",
+      "repo": "thats-fair",
+      "number": 150,
+      "title": "Bump vite from 7.1.4 to 7.2.0",
+      "author": "dependabot[bot]",
+      "createdAt": "now-120m",
+      "additions": 12,
+      "deletions": 12,
+      "headSha": "e7f6a35e7f6a35e7f6a35e7f6a35e7f6a35e7f6a",
+      "headRef": "dependabot/npm_and_yarn/vite-7.2.0",
+      "state": "open",
+      "changedFiles": 5,
+      "issue": null,
+      "bodyHtml": "<p>No further notes.</p>",
+      "previewUrl": null,
+      "url": "https://github.com/alex/thats-fair/pull/150",
+      "checkRuns": [
+        {
+          "name": "verify:ci",
+          "state": "pass",
+          "duration": "4m 12s",
+          "url": null
+        },
+        {
+          "name": "e2e (Playwright)",
+          "state": "pass",
+          "duration": "6m 40s",
+          "url": null
+        },
+        {
+          "name": "Preview deploy",
+          "state": "pass",
+          "duration": "1m 05s",
+          "url": null
+        },
+        {
+          "name": "Security scan",
+          "state": "pass",
+          "duration": "38s",
+          "url": null
+        }
+      ],
+      "files": [
+        {
+          "path": "src/index.ts",
+          "additions": 12,
+          "deletions": 8
+        }
+      ],
+      "threads": [],
+      "readiness": {
+        "ready": true,
+        "checks": [
+          {
+            "name": "ci-green",
+            "pass": true,
+            "detail": "All checks passed"
+          },
+          {
+            "name": "no-pending-approval",
+            "pass": true,
+            "detail": "No permission is waiting"
+          }
+        ]
+      }
+    },
+    "eduline-ai-shop/233": {
+      "bot": true,
+      "draft": false,
+      "groups": [
+        "bumps",
+        "ready"
+      ],
+      "checks": [
+        "pass",
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "failureNote": null,
+      "ciRunId": null,
+      "unresolvedThreads": 0,
+      "bump": "security",
+      "docsOnly": false,
+      "commits": 1,
+      "deployWorkflow": null,
+      "session": null,
+      "baseRef": "main",
+      "repo": "eduline-ai-shop",
+      "number": 233,
+      "title": "Bump next from 16.0.1 to 16.0.3",
+      "author": "dependabot[bot]",
+      "createdAt": "now-300m",
+      "additions": 8,
+      "deletions": 8,
+      "headSha": "b2c3d4eb2c3d4eb2c3d4eb2c3d4eb2c3d4eb2c3d",
+      "headRef": "dependabot/npm_and_yarn/next-16.0.3",
+      "state": "open",
+      "changedFiles": 5,
+      "issue": null,
+      "bodyHtml": "<p>No further notes.</p>",
+      "previewUrl": null,
+      "url": "https://github.com/alex/eduline-ai-shop/pull/233",
+      "checkRuns": [
+        {
+          "name": "verify:ci",
+          "state": "pass",
+          "duration": "4m 12s",
+          "url": null
+        },
+        {
+          "name": "e2e (Playwright)",
+          "state": "pass",
+          "duration": "6m 40s",
+          "url": null
+        },
+        {
+          "name": "Preview deploy",
+          "state": "pass",
+          "duration": "1m 05s",
+          "url": null
+        },
+        {
+          "name": "Security scan",
+          "state": "pass",
+          "duration": "38s",
+          "url": null
+        }
+      ],
+      "files": [
+        {
+          "path": "src/index.ts",
+          "additions": 8,
+          "deletions": 8
+        }
+      ],
+      "threads": [],
+      "readiness": {
+        "ready": true,
+        "checks": [
+          {
+            "name": "ci-green",
+            "pass": true,
+            "detail": "All checks passed"
+          },
+          {
+            "name": "no-pending-approval",
+            "pass": true,
+            "detail": "No permission is waiting"
+          }
+        ]
+      }
+    },
+    "verifika/42": {
+      "bot": true,
+      "draft": false,
+      "groups": [
+        "bumps",
+        "failing"
+      ],
+      "checks": [
+        "pass",
+        "fail",
+        "fail",
+        "pass"
+      ],
+      "failureNote": "build failing",
+      "ciRunId": null,
+      "unresolvedThreads": 0,
+      "bump": "major",
+      "docsOnly": false,
+      "commits": 1,
+      "deployWorkflow": null,
+      "session": null,
+      "baseRef": "main",
+      "repo": "verifika",
+      "number": 42,
+      "title": "Bump typescript from 5.9 to 7.0",
+      "author": "dependabot[bot]",
+      "createdAt": "now-1d",
+      "additions": 4,
+      "deletions": 4,
+      "headSha": "f1e2d3cf1e2d3cf1e2d3cf1e2d3cf1e2d3cf1e2d",
+      "headRef": "dependabot/npm_and_yarn/typescript-7.0",
+      "state": "open",
+      "changedFiles": 5,
+      "issue": null,
+      "bodyHtml": "<p>No further notes.</p>",
+      "previewUrl": null,
+      "url": "https://github.com/alex/verifika/pull/42",
+      "checkRuns": [
+        {
+          "name": "verify:ci",
+          "state": "pass",
+          "duration": "4m 12s",
+          "url": null
+        },
+        {
+          "name": "e2e (Playwright)",
+          "state": "fail",
+          "duration": "6m 40s",
+          "url": null
+        },
+        {
+          "name": "Preview deploy",
+          "state": "fail",
+          "duration": "1m 05s",
+          "url": null
+        },
+        {
+          "name": "Security scan",
+          "state": "pass",
+          "duration": "38s",
+          "url": null
+        }
+      ],
+      "files": [
+        {
+          "path": "src/index.ts",
+          "additions": 4,
+          "deletions": 4
+        }
+      ],
+      "threads": [],
+      "readiness": {
+        "ready": false,
+        "checks": [
+          {
+            "name": "ci-green",
+            "pass": false,
+            "detail": "verify:ci has not passed"
+          },
+          {
+            "name": "no-pending-approval",
+            "pass": true,
+            "detail": "No permission is waiting"
+          }
+        ]
+      }
+    }
+  },
+  "issues": [
+    {
+      "repo": "thats-fair",
+      "number": 149,
+      "title": "OG images for listings",
+      "labels": [
+        "launch blocker"
+      ],
+      "createdAt": "now-30d",
+      "session": null,
+      "url": "https://github.com/alex/thats-fair/issues/149"
+    },
+    {
+      "repo": "thats-fair",
+      "number": 152,
+      "title": "Show price per m² on listing cards",
+      "labels": [],
+      "createdAt": "now-2d",
+      "session": {
+        "id": "demo-session-price",
+        "title": "Price per m² on listing cards",
+        "state": "working"
+      },
+      "url": "https://github.com/alex/thats-fair/issues/152"
+    },
+    {
+      "repo": "thats-fair",
+      "number": 139,
+      "title": "Admin role audit",
+      "labels": [
+        "launch blocker"
+      ],
+      "createdAt": "now-20d",
+      "session": null,
+      "url": "https://github.com/alex/thats-fair/issues/139"
+    },
+    {
+      "repo": "thats-fair",
+      "number": 146,
+      "title": "Map pins overlap on phones",
+      "labels": [
+        "ux"
+      ],
+      "createdAt": "now-3d",
+      "session": null,
+      "url": "https://github.com/alex/thats-fair/issues/146"
+    },
+    {
+      "repo": "eduline-ai-shop",
+      "number": 236,
+      "title": "Remove the UI from the MCP server",
+      "labels": [
+        "refactor"
+      ],
+      "createdAt": "now-12d",
+      "session": null,
+      "url": "https://github.com/alex/eduline-ai-shop/issues/236"
+    },
+    {
+      "repo": "eduline-ai-shop",
+      "number": 229,
+      "title": "Send service requests through Resend",
+      "labels": [
+        "feature"
+      ],
+      "createdAt": "now-15d",
+      "session": null,
+      "url": "https://github.com/alex/eduline-ai-shop/issues/229"
+    },
+    {
+      "repo": "mexxi",
+      "number": 91,
+      "title": "Rename segwi to ħares",
+      "labels": [],
+      "createdAt": "now-5h",
+      "session": null,
+      "url": "https://github.com/alex/mexxi/issues/91"
+    },
+    {
+      "repo": "verifika",
+      "number": 38,
+      "title": "Wrap long check names in the TUI",
+      "labels": [
+        "ux"
+      ],
+      "createdAt": "now-9d",
+      "session": null,
+      "url": "https://github.com/alex/verifika/issues/38"
+    }
+  ],
+  "ci": [
+    {
+      "repo": "verifika",
+      "latest": {
+        "id": 77,
+        "workflow": "verify",
+        "branch": "main",
+        "status": "completed",
+        "conclusion": "failure",
+        "startedAt": "now-40m",
+        "durationSeconds": 112,
+        "jobsDone": null,
+        "jobsTotal": null,
+        "failedJob": "lint",
+        "failedStep": "oxlint",
+        "url": "https://github.com/alex/x/actions/runs/1"
+      },
+      "history": [
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "fail",
+        "fail"
+      ]
+    },
+    {
+      "repo": "thats-fair",
+      "latest": {
+        "id": 90,
+        "workflow": "CI",
+        "branch": "main",
+        "status": "in_progress",
+        "conclusion": null,
+        "startedAt": "now-2m",
+        "durationSeconds": null,
+        "jobsDone": 3,
+        "jobsTotal": 5,
+        "failedJob": null,
+        "failedStep": null,
+        "url": "https://github.com/alex/x/actions/runs/1"
+      },
+      "history": [
+        "pass",
+        "pass",
+        "pass",
+        "fail",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "fail",
+        "pass",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "repo": "eduline-ai-shop",
+      "latest": {
+        "id": 12,
+        "workflow": "verify",
+        "branch": "main",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "now-60m",
+        "durationSeconds": 252,
+        "jobsDone": null,
+        "jobsTotal": null,
+        "failedJob": null,
+        "failedStep": null,
+        "url": "https://github.com/alex/x/actions/runs/1"
+      },
+      "history": [
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "repo": "mexxi",
+      "latest": {
+        "id": 31,
+        "workflow": "verify and docs",
+        "branch": "main",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "now-180m",
+        "durationSeconds": 150,
+        "jobsDone": null,
+        "jobsTotal": null,
+        "failedJob": null,
+        "failedStep": null,
+        "url": "https://github.com/alex/x/actions/runs/1"
+      },
+      "history": [
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "fail",
+        "pass"
+      ]
+    },
+    {
+      "repo": "shopify-tools",
+      "latest": {
+        "id": 8,
+        "workflow": "CI",
+        "branch": "main",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "now-1d",
+        "durationSeconds": 70,
+        "jobsDone": null,
+        "jobsTotal": null,
+        "failedJob": null,
+        "failedStep": null,
+        "url": "https://github.com/alex/x/actions/runs/1"
+      },
+      "history": [
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass",
+        "pass"
+      ]
+    },
+    {
+      "repo": "atlas-ops",
+      "latest": {
+        "id": 5,
+        "workflow": "verify",
+        "branch": "main",
+        "status": "completed",
+        "conclusion": "success",
+        "startedAt": "now-2d",
+        "durationSeconds": 48,
+        "jobsDone": null,
+        "jobsTotal": null,
+        "failedJob": null,
+        "failedStep": null,
+        "url": "https://github.com/alex/x/actions/runs/1"
+      },
+      "history": [
+        "pass",
+        "pass",
+        "pass"
+      ]
+    }
+  ]
+}

@@ -29,7 +29,7 @@ function severityCounts(kind, findings, grades) {
 
 // The commit a review pass looked at: the worktree's HEAD, but only when
 // nothing is uncommitted, since a review of a dirty tree saw no single commit.
-// segwi's readiness compares it with the pull request's head (issue #67).
+// hares's readiness compares it with the pull request's head (issue #67).
 async function reviewedCommit(cwd, sessionId) {
   try {
     const { entry: { worktreePath } } = await sessionWorkspace(cwd, sessionId);

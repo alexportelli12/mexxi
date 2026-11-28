@@ -1,5 +1,5 @@
 /* The design tokens every surface shares: the landing page, the docs site and
-   segwi's web app. Change a colour here and all three follow. Hex values live
+   hares's web app. Change a colour here and all three follow. Hex values live
    only in this file; the design check enforces it. */
 :root {
   --bg: #0a0b0d;
@@ -38,4 +38,88 @@
   --radius: 10px;
   --gutter: 24px;
   --max: 1040px;
+}
+
+/* ħares: the v7 design's colours. The --hares-* names keep the site and the docs as they are; the web
+   app maps them to the short names it uses (--bg, --surface, --raised, ...). Dark is the default;
+   [data-theme="light"] forces light, and with no theme, or "system", the device's setting decides. */
+:root,
+:root[data-theme="dark"] {
+  --hares-bg: #0d1a22;
+  --hares-surface: #13232d;
+  --hares-raised: #1b2f3b;
+  --hares-line: #203646;
+  --hares-strong: #2e4759;
+  --hares-text: #eceae4;
+  --hares-muted: #8fa3ae;
+  /* The design's #6b8290 reaches only 4.0:1 on a card; this reaches 4.8:1 on one and 5.3:1 on the page. */
+  --hares-faint: #7a909c;
+  --hares-amber: #f4b860;
+  --hares-amber-text: #f4b860;
+  --hares-on-amber: #0d1a22;
+  --hares-teal: #62c8b6;
+  --hares-on-teal: #0d1a22;
+  --hares-red: #f07a68;
+  --hares-on-red: #0d1a22;
+  --hares-glow: rgb(244 184 96 / 0.16);
+  --hares-teal-soft: rgb(98 200 182 / 0.12);
+  --hares-red-soft: rgb(240 122 104 / 0.1);
+  --hares-key: #22394a;
+  --hares-key-edge: #c98f3e; /* the lip under a lit key */
+  --hares-term-bg: #081218;
+  --hares-term-fg: #c9d4d9;
+  --hares-scrim: rgb(5 12 16 / 0.6);
+  --hares-knob-shadow: rgb(0 0 0 / 0.25);
+  --hares-card-shadow: rgb(0 0 0 / 0.6);
+}
+:root[data-theme="light"] {
+  --hares-bg: #eef2f3;
+  --hares-surface: #ffffff;
+  --hares-raised: #e3eaed;
+  --hares-line: #d8e1e5;
+  --hares-strong: #b9c8cf;
+  --hares-text: #0f2230;
+  --hares-muted: #506571;
+  /* The design's #6a7e89 reaches only 3.8:1 on the page; this reaches 4.9:1 there and 5.5:1 on a card. */
+  --hares-faint: #586c77;
+  --hares-amber: #f4b860;
+  --hares-amber-text: #8a5300;
+  --hares-on-amber: #0f2230;
+  --hares-teal: #147a6c;
+  --hares-on-teal: #ffffff;
+  --hares-red: #be3b2a;
+  --hares-on-red: #ffffff;
+  --hares-glow: rgb(244 184 96 / 0.26);
+  --hares-teal-soft: rgb(20 122 108 / 0.09);
+  --hares-red-soft: rgb(190 59 42 / 0.07);
+  --hares-key: #d3dde2;
+  --hares-key-edge: #c98f3e;
+  --hares-term-bg: #081218;
+  --hares-term-fg: #c9d4d9;
+  --hares-scrim: rgb(5 12 16 / 0.6);
+  --hares-knob-shadow: rgb(0 0 0 / 0.25);
+  --hares-card-shadow: rgb(0 0 0 / 0.18);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]):not([data-theme="light"]) {
+    --hares-bg: #eef2f3;
+    --hares-surface: #ffffff;
+    --hares-raised: #e3eaed;
+    --hares-line: #d8e1e5;
+    --hares-strong: #b9c8cf;
+    --hares-text: #0f2230;
+    --hares-muted: #506571;
+    --hares-faint: #586c77;
+    --hares-amber-text: #8a5300;
+    --hares-on-amber: #0f2230;
+    --hares-teal: #147a6c;
+    --hares-on-teal: #ffffff;
+    --hares-red: #be3b2a;
+    --hares-on-red: #ffffff;
+    --hares-glow: rgb(244 184 96 / 0.26);
+    --hares-teal-soft: rgb(20 122 108 / 0.09);
+    --hares-red-soft: rgb(190 59 42 / 0.07);
+    --hares-key: #d3dde2;
+    --hares-card-shadow: rgb(0 0 0 / 0.18);
+  }
 }

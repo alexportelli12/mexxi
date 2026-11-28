@@ -1,0 +1,150 @@
+[
+  {
+    "number": 1,
+    "title": "Add search",
+    "html_url": "https://github.com/example/my-app/pull/1",
+    "user": {
+      "login": "alex",
+      "html_url": "https://github.com/alex"
+    },
+    "draft": false,
+    "head": {
+      "sha": "1111111111111111111111111111111111111111",
+      "ref": "branch-1",
+      "repo": {
+        "full_name": "example/my-app"
+      }
+    },
+    "base": {
+      "ref": "main"
+    },
+    "requested_reviewers": [
+      {
+        "login": "bob"
+      }
+    ],
+    "requested_teams": [],
+    "labels": [],
+    "updated_at": "2026-11-27T10:00:00Z"
+  },
+  {
+    "number": 2,
+    "title": "Fix flaky test",
+    "html_url": "https://github.com/example/my-app/pull/2",
+    "user": {
+      "login": "alex",
+      "html_url": "https://github.com/alex"
+    },
+    "draft": false,
+    "head": {
+      "sha": "2222222222222222222222222222222222222222",
+      "ref": "branch-2",
+      "repo": {
+        "full_name": "example/my-app"
+      }
+    },
+    "base": {
+      "ref": "main"
+    },
+    "requested_reviewers": [],
+    "requested_teams": [],
+    "labels": [],
+    "updated_at": "2026-11-27T10:00:00Z"
+  },
+  {
+    "number": 3,
+    "title": "Bump lodash from 4.17.20 to 4.17.21",
+    "html_url": "https://github.com/example/my-app/pull/3",
+    "user": {
+      "login": "dependabot[bot]",
+      "html_url": "https://github.com/dependabot[bot]"
+    },
+    "draft": false,
+    "head": {
+      "sha": "3333333333333333333333333333333333333333",
+      "ref": "branch-3",
+      "repo": {
+        "full_name": "example/my-app"
+      }
+    },
+    "base": {
+      "ref": "main"
+    },
+    "requested_reviewers": [],
+    "requested_teams": [],
+    "labels": [],
+    "updated_at": "2026-11-27T10:00:00Z"
+  },
+  {
+    "number": 4,
+    "title": "Tidy docs",
+    "html_url": "https://github.com/example/my-app/pull/4",
+    "user": {
+      "login": "alex",
+      "html_url": "https://github.com/alex"
+    },
+    "draft": false,
+    "head": {
+      "sha": "4444444444444444444444444444444444444444",
+      "ref": "branch-4",
+      "repo": {
+        "full_name": "example/my-app"
+      }
+    },
+    "base": {
+      "ref": "main"
+    },
+    "requested_reviewers": [],
+    "requested_teams": [],
+    "labels": [],
+    "updated_at": "2026-11-27T10:00:00Z"
+  },
+  {
+    "number": 5,
+    "title": "Draft idea",
+    "html_url": "https://github.com/example/my-app/pull/5",
+    "user": {
+      "login": "alex",
+      "html_url": "https://github.com/alex"
+    },
+    "draft": true,
+    "head": {
+      "sha": "5555555555555555555555555555555555555555",
+      "ref": "branch-5",
+      "repo": {
+        "full_name": "example/my-app"
+      }
+    },
+    "base": {
+      "ref": "main"
+    },
+    "requested_reviewers": [],
+    "requested_teams": [],
+    "labels": [],
+    "updated_at": "2026-11-27T10:00:00Z"
+  },
+  {
+    "number": 6,
+    "title": "Bump axios from 1.6.0 to 1.7.0",
+    "html_url": "https://github.com/example/my-app/pull/6",
+    "user": {
+      "login": "dependabot[bot]",
+      "html_url": "https://github.com/dependabot[bot]"
+    },
+    "draft": false,
+    "head": {
+      "sha": "6666666666666666666666666666666666666666",
+      "ref": "branch-6",
+      "repo": {
+        "full_name": "example/my-app"
+      }
+    },
+    "base": {
+      "ref": "main"
+    },
+    "requested_reviewers": [],
+    "requested_teams": [],
+    "labels": [],
+    "updated_at": "2026-11-27T10:00:00Z"
+  }
+]

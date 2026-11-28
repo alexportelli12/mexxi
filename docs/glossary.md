@@ -11,7 +11,8 @@ sources:
   - docs/decisions/0019-runs-in-a-systemd-scope.md
   - docs/decisions/0020-segwi-local-extensions.md
   - docs/decisions/0021-hooks-refuse-with-the-fix.md
-reviewed: 2026-11-20
+  - docs/decisions/0028-hares-herdr-sessions.md
+reviewed: 2026-11-28
 ---
 
 # Glossary
@@ -24,7 +25,7 @@ A specialist role, such as the code-reviewer, that a coding agent can hand part 
 
 ## approval
 
-A question segwi asks you about one call in a run, when Claude Code's auto mode leaves the decision to you after refusing several calls in a row. It shows the exact command, and only a person can answer it, in the web app. No answer within the time limit counts as a denial, so a run never gets more freedom by waiting. See [segwi](segwi.md).
+A permission, plan or folder-trust question a session asks you, such as "run this command?". ħares shows the exact call. Only a person can decide it, in the web app, and a decision covers that one call unless you confirm "always allow". See [ħares](hares.md#answer-a-session).
 
 ## baseline
 
@@ -52,7 +53,7 @@ The folder where a run keeps screenshots, recordings and notes, outside the repo
 
 ## extension
 
-A folder of your own that segwi serves as an extra page, such as a dashboard of your machine, behind its own sign-in. It saves running and securing a second server. See [segwi](segwi.md#add-your-own-page).
+A folder of your own that ħares serves as an extra page, such as a dashboard of your machine, behind its own sign-in. It saves running and securing a second server. See [ħares](hares.md#add-your-own-page).
 
 ## forge
 
@@ -70,6 +71,10 @@ The hook that backs up the rules by stopping dangerous commands, such as force p
 
 A small program a host runs automatically at a set moment, such as before every shell command. mexxi uses hooks for the guard and the loop breaker, so those protections do not depend on the agent remembering them.
 
+## herdr
+
+The terminal workspace manager your Claude Code sessions run in, with a local socket API. ħares uses it to list sessions, read their screens and send keys, so it needs no second copy of a session. The socket stays on your machine. See [decision 0028](decisions/0028-hares-herdr-sessions.md).
+
 ## host
 
 A coding agent that mexxi installs into: OpenCode, Claude Code or Codex.
@@ -80,7 +85,7 @@ A hook that counts identical failing shell commands. When the same command fails
 
 ## MCP
 
-The Model Context Protocol: a standard way to give a coding agent extra tools. mexxi uses Playwright MCP to let the agent drive a browser. [segwi](#segwi) offers an MCP server too, so other tools can start and follow runs.
+The Model Context Protocol: a standard way to give a coding agent extra tools. mexxi uses Playwright MCP to let the agent drive a browser. [ħares](#hares) offers an MCP server too, so other tools can read sessions, pull requests and CI, answer a question and start a session. It can never decide a permission.
 
 ## merge call
 
@@ -114,13 +119,13 @@ One of the few places, two by default, for an install or a check to run at once 
 
 The systemd group an install or a check runs in on Linux. It gives the run a lower CPU priority than your sessions and a memory limit, and stopping it ends every server or browser the run started. [Decision 0019](decisions/0019-runs-in-a-systemd-scope.md).
 
-## segwi
+## ħares
 
-An opt-in tool that starts, follows and answers mexxi runs from your phone or any MCP client, on a machine you own. It is a launcher and viewer: the workflow, the worktrees and the pull request stay the same. It listens on your own machine only. See [segwi](segwi.md) and [decision 0011](decisions/0011-segwi.md).
+An opt-in, phone-first cockpit over every Claude Code session on your machine, plus its pull requests, issues and CI. It follows sessions that [herdr](#herdr) runs and sends your answers as keystrokes. The workflow, the worktrees and the pull request stay the same. It listens on your own machine only. See [ħares](hares.md) and [decision 0028](decisions/0028-hares-herdr-sessions.md).
 
 ## session
 
-One agent conversation. `ibni` finds a session's workspace from its ID, so a later step never acts on the wrong worktree.
+One agent conversation. `ibni` finds a session's workspace from its ID, so a later step never acts on the wrong worktree. [ħares](#hares) lists every session on the machine.
 
 ## skill
 

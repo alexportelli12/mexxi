@@ -31,13 +31,13 @@ jobs:
       - run: npm ci
       # The mods check validates and tests claude/mods/ with the Claude Code CLI itself.
       - run: npm install -g @anthropic-ai/claude-code@2.1.309
-      # The segwi-e2e check drives the web app in Playwright's Chromium. The browser
+      # The hares-e2e check drives the web app in Playwright's Chromium. The browser
       # must match the playwright-core the web app's lockfile pins, so that version
       # keys the cache and runs the install; npx fetches it on its own, leaving the
-      # web app's dependencies to the segwi-web check, which installs them from its
+      # web app's dependencies to the hares-web check, which installs them from its
       # lockfile during verify.
       - id: playwright
-        run: echo "version=$(node -p 'require("./scripts/segwi/web/package-lock.json").packages["node_modules/playwright-core"].version')" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(node -p 'require("./scripts/hares/web/package-lock.json").packages["node_modules/playwright-core"].version')" >> "$GITHUB_OUTPUT"
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/ms-playwright

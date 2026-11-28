@@ -12,7 +12,7 @@ updates:
       root-minor-and-patch:
         update-types: [minor, patch]
   - package-ecosystem: npm
-    directory: /scripts/segwi/web
+    directory: /scripts/hares/web
     schedule:
       interval: weekly
     groups:

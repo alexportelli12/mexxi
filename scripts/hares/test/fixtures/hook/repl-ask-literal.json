@@ -1,0 +1,12 @@
+{
+  "session_id": "11111111-2222-4333-8444-555555555555",
+  "transcript_path": "/home/user/.claude/projects/-tmp-demo/11111111-2222-4333-8444-555555555555.jsonl",
+  "cwd": "/tmp/demo",
+  "permission_mode": "default",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "REPL",
+  "tool_use_id": "toolu_repl1",
+  "tool_input": {
+    "code": "const answer = await tools.AskUserQuestion({\n  questions: [{\n    header: 'Mode', question: 'Which mode?', multiSelect: true, // pick any\n    options: [{label: 'Fast', description: 'Quick'}, {label: 'Safe', description: \"Careful, 'quoted'\"},],\n  },],\n});\nreturn answer;"
+  }
+}
