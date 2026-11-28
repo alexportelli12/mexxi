@@ -98,7 +98,6 @@ its architecture, and follow them:
 - [0024 Review findings carry a proven severity, and fixes stay bounded](docs/decisions/0024-review-severity-and-bounded-fixes.md)
 - [0025 test-design loads the first time a session edits a test](docs/decisions/0025-test-design-loads-on-first-test-edit.md)
 - [0026 A run owns its pull request until CI is green](docs/decisions/0026-run-owns-its-pr-until-ci-is-green.md)
-- [0028 ħares follows herdr's sessions instead of running its own](docs/decisions/0028-hares-herdr-sessions.md)
 
 To change a decision, add a new record that supersedes it and change only the
 old record's status; never rewrite its reasoning.
