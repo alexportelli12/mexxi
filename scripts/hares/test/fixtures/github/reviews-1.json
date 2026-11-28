@@ -1,0 +1,12 @@
+[
+  {
+    "id": 700,
+    "user": {
+      "login": "bob"
+    },
+    "state": "CHANGES_REQUESTED",
+    "submitted_at": "2026-11-27T12:30:00Z",
+    "html_url": "https://github.com/example/my-app/pull/1#pullrequestreview-700",
+    "body_html": "<p>Two things.</p>"
+  }
+]

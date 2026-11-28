@@ -1,14 +1,25 @@
-// Whether a run's pull request is ready for the person to look at (issue #67).
-// Advisory and fail-closed: computed only from what hares recorded and what the
-// GitHub reader fetched, never from what the agent says, and a check whose facts
-// can't be had fails. Nothing here merges, approves or marks a pull request
-// ready, and no MCP tool can set a check; a person accepts a gate-weakening
-// change in the web app, for one head commit (decision 0027).
+// Whether a pull request is ready for the person to look at (issue #67), keyed by
+// repository and pull request number, with the session that made it when one is
+// linked. Advisory and fail-closed: computed only from what hares recorded and
+// what the GitHub reader fetched, never from what the agent says, and a check
+// whose facts can't be had fails. Nothing here merges, approves or marks a pull
+// request ready, and no MCP tool can set a check; a person accepts a
+// gate-weakening change in the web app, for one head commit (decision 0027).
+//
+// The store this reads and writes is injected (WS3's store.mjs provides it):
+//   sessionForPr(repo, number)            -> sessionId | null   the session linked to the pull request
+//   sessionFacts(sessionId)               -> { state, snapshot, pendingPermissions } | null
+//        state is working|blocked|idle|done|closed; snapshot is ibni's report on the session's workspace (or null);
+//        pendingPermissions is how many permission prompts of that session still wait for the person
+//   gateAcceptance(repo, number, headSha) -> { acceptedBy, acceptedAt, detail } | null
+//   acceptGateChange({ repo, number, headSha, acceptedBy, detail })
 import { HttpError } from "./errors.mjs";
-import { GithubUnavailable, checkoutSlug, githubClient, parsePullUrl, readGithubToken } from "./github.mjs";
+import { GithubUnavailable, githubClient, readGithubToken, slugForRepository } from "./github.mjs";
 
 const CACHE_MS = 30_000;
 const GREEN = new Set(["success", "neutral", "skipped"]);
+// A session that has stopped working on the pull request: waiting for its next prompt, finished, or closed.
+const FINISHED = new Set(["idle", "done", "closed"]);
 // A verdict that a rerun on the same commit can turn green; cancelled is not one (a newer push cancels).
 const RED = new Set(["failure", "timed_out", "startup_failure"]);
 const short = (sha) => String(sha).slice(0, 7);
@@ -95,11 +106,10 @@ const fail = (detail) => ({ pass: false, detail });
 
 /** The ten checks of issue #67, in its order. */
 export const RULES = [
-  rule("run-completed", ["run"], ({ run }) => {
-    if (run.action === "ask") return fail("An ask run changes nothing and opens no pull request.");
-    if (run.status !== "completed") return fail(`The run is ${run.status}, not completed.`);
-    if (!run.prUrl) return fail("The run completed without a pull request.");
-    return pass("The run completed and opened a pull request.");
+  rule("run-completed", ["session"], ({ session }) => {
+    if (!session) return fail("No session is linked to this pull request, so nothing shows it was made and reviewed by a mexxi run.");
+    if (!FINISHED.has(session.state)) return fail(`The linked session is ${session.state}, not finished.`);
+    return pass(`The linked session finished (${session.state}) with this pull request.`);
   }),
 
   rule("verify-in-ci", ["pr", "ciCheck", "checkRuns"], ({ pr, ciCheck, checkRuns }) => {
@@ -181,8 +191,8 @@ export const RULES = [
   }),
 
   rule("no-pending-approval", ["pendingApprovals"], ({ pendingApprovals }) => {
-    if (pendingApprovals > 0) return fail(`${pendingApprovals} approval${pendingApprovals === 1 ? " is" : "s are"} still waiting for you.`);
-    return pass("No approval is waiting for you.");
+    if (pendingApprovals > 0) return fail(`${pendingApprovals} permission${pendingApprovals === 1 ? " is" : "s are"} still waiting for you.`);
+    return pass("No permission is waiting for you.");
   }),
 
   rule("no-gate-weakening", ["pr", "files", "acceptance"], ({ pr, files, acceptance }) => {
@@ -209,26 +219,21 @@ export function evaluateReadiness(facts) {
 }
 
 /** Facts about a pull request on GitHub, each one known or the reason it isn't. */
-async function githubFacts({ run, repository, stateDir, fetch }) {
+async function githubFacts({ repository, number, stateDir, fetch }) {
   const all = (reason) => ({ pr: unknown(reason), ciCheck: unknown(reason), checkRuns: unknown(reason), statuses: unknown(reason), required: unknown(reason), files: unknown(reason) });
-  if (!run.prUrl) return all("the run has no pull request.");
-  if (!repository) return all(`${run.repo} is no longer in hares.repositories.`);
-  const pull = parsePullUrl(run.prUrl);
-  if (!pull) return all("the run's pull request link is not a github.com pull request.");
+  if (!repository) return all("the repository is no longer in hares.repositories.");
   let client;
   try {
     const token = readGithubToken(stateDir);
-    const slug = await checkoutSlug(repository.path);
-    // The reader goes only where the person pointed hares: the repository behind a listed checkout.
-    if (pull.slug.toLowerCase() !== slug.toLowerCase()) return all(`the pull request is in ${pull.slug}, but ${repository.name}'s checkout is ${slug}; hares reads only the listed repositories.`);
-    client = githubClient({ token, slug, fetch });
+    // The reader goes only where the person pointed hares: a listed repository.
+    client = githubClient({ token, slug: await slugForRepository(repository), fetch });
   } catch (error) {
     if (error instanceof GithubUnavailable) return all(error.message);
     throw error;
   }
   let raw;
   try {
-    raw = await client.get(`pulls/${pull.number}`);
+    raw = await client.get(`pulls/${number}`);
   } catch (error) {
     return all(`${error.message}.`);
   }
@@ -273,7 +278,7 @@ async function githubFacts({ run, repository, stateDir, fetch }) {
       ].filter((name) => typeof name === "string"))];
     }),
     settle(async () => {
-      const items = await client.getAll(`pulls/${pull.number}/files?per_page=100`);
+      const items = await client.getAll(`pulls/${number}/files?per_page=100`);
       if (typeof pr.changedFiles === "number" && items.length < pr.changedFiles) throw new Error(`GitHub listed ${items.length} of the pull request's ${pr.changedFiles} files`);
       return items.map((item) => ({ filename: item.filename, previousFilename: item.previous_filename ?? null, status: item.status, changes: item.changes, patch: typeof item.patch === "string" ? item.patch : null }));
     }),
@@ -281,60 +286,73 @@ async function githubFacts({ run, repository, stateDir, fetch }) {
   return { pr, ciCheck, checkRuns, statuses, required, files };
 }
 
-/** Every fact the rules read, for one run. */
-export async function gatherFacts({ run, repository, store, stateDir, fetch }) {
-  const github = await githubFacts({ run, repository, stateDir, fetch });
+/** The session behind a pull request as the rules read it: none, or its state, ibni's report and its waiting permissions. */
+function sessionFactsFor({ store, repo, number, sessionId }) {
+  const id = sessionId ?? store.sessionForPr(repo, number) ?? null;
+  const facts = id ? store.sessionFacts(id) : null;
+  return { id, facts };
+}
+
+/** Every fact the rules read, for one pull request. */
+export async function gatherFacts({ repo, number, sessionId = null, repository, store, stateDir, fetch }) {
+  const github = await githubFacts({ repository, number, stateDir, fetch });
   const headSha = isUnknown(github.pr) ? null : github.pr.headSha;
   let acceptance = unknown("the pull request's head commit is unknown.");
   if (headSha) {
-    const row = store.gateAcceptance(run.id, headSha);
+    const row = store.gateAcceptance(repo, number, headSha);
     acceptance = row ? { by: row.acceptedBy, at: row.acceptedAt } : null;
   }
+  const { facts: session } = sessionFactsFor({ store, repo, number, sessionId });
   return {
-    run: { status: run.status, action: run.action, prUrl: run.prUrl },
-    ibni: run.snapshot ? run.snapshot : unknown("ibni hasn't reported on this run's workspace."),
-    pendingApprovals: store.pendingApprovalsFor(run.id).length,
+    session: session ? { state: session.state } : null,
+    ibni: session?.snapshot ? session.snapshot : unknown(session ? "ibni hasn't reported on this session's workspace." : "no session is linked to this pull request."),
+    pendingApprovals: session?.pendingPermissions ?? 0,
     ...github,
     acceptance,
   };
 }
 
 /**
- * Readiness per run, with a short cache so polling clients don't spend the token's rate limit. `fetch` and `now`
- * are injected by tests.
+ * Readiness per pull request ({repo, number, sessionId?}: repo is the configured repository name), with a short cache so
+ * polling clients don't spend the token's rate limit. `fetch` and `now` are injected by tests.
  */
 export function createReadinessService({ store, settings, stateDir, fetch = globalThis.fetch, now = () => Date.now() }) {
   const cache = new Map();
-  async function compute(run) {
-    const repository = settings.hares.repositories.find((candidate) => candidate.name === run.repo);
-    const facts = await gatherFacts({ run, repository, store, stateDir, fetch });
+  const targetOf = ({ repo, number }) => {
+    if (typeof repo !== "string" || !Number.isSafeInteger(number) || number <= 0) throw new HttpError(400, "Readiness needs a repository and a pull request number.");
+    return `${repo}#${number}`;
+  };
+  async function compute({ repo, number, sessionId }) {
+    const repository = settings.hares.repositories.find((candidate) => candidate.name === repo);
+    const facts = await gatherFacts({ repo, number, sessionId, repository, store, stateDir, fetch });
     return { ...evaluateReadiness(facts), checkedAt: new Date(now()).toISOString() };
   }
   return {
-    /** The run's readiness; `fresh` skips the cache. */
-    async get(runId, { fresh = false } = {}) {
-      const run = store.getRun(runId);
-      if (!run) throw new HttpError(404, "No such run.");
-      const key = `${run.status}|${run.prUrl}|${run.updatedAt}`;
-      const hit = cache.get(runId);
+    /** The pull request's readiness; `fresh` skips the cache. */
+    async forPr({ repo, number, sessionId = null }, { fresh = false } = {}) {
+      const target = targetOf({ repo, number });
+      const session = sessionFactsFor({ store, repo, number, sessionId });
+      // What the session does changes the answer, so it is part of the cache key.
+      const key = `${session.id}|${session.facts?.state}|${session.facts?.pendingPermissions}|${session.facts?.snapshot ? JSON.stringify(session.facts.snapshot.review ?? null) : ""}`;
+      const hit = cache.get(target);
       if (!fresh && hit && hit.key === key && now() - hit.at < CACHE_MS) return hit.value;
-      const value = await compute(run);
-      cache.set(runId, { key, at: now(), value });
+      const value = await compute({ repo, number, sessionId: session.id });
+      cache.set(target, { key, at: now(), value });
       return value;
     },
 
     /**
-     * A person accepts the diff's gate-weakening changes for the head commit they saw. Only the web app calls this,
-     * with the signed-in identity; a new push needs a new acceptance.
+     * A person accepts the diff's gate-weakening changes for the head commit they saw, keyed by repo#number and that
+     * commit. Only the web app calls this, with the signed-in identity; a new push needs a new acceptance.
      */
-    async accept(runId, headSha, identity) {
-      const readiness = await this.get(runId, { fresh: true });
+    async accept({ repo, number, sessionId = null }, headSha, identity) {
+      const readiness = await this.forPr({ repo, number, sessionId }, { fresh: true });
       if (readiness.headSha !== headSha) throw new HttpError(409, "The pull request's head has moved since you looked. Check its readiness again before you accept.");
       if (!readiness.canAccept) throw new HttpError(409, "There is no gate-weakening change to accept on this commit.");
       const detail = readiness.checks.find((check) => check.name === "no-gate-weakening").detail;
-      store.acceptGateChange({ runId, headSha, acceptedBy: identity, detail });
-      cache.delete(runId);
-      return this.get(runId, { fresh: true });
+      store.acceptGateChange({ repo, number, headSha, acceptedBy: identity, detail });
+      cache.delete(targetOf({ repo, number }));
+      return this.forPr({ repo, number, sessionId }, { fresh: true });
     },
   };
 }

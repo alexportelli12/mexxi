@@ -1,0 +1,103 @@
+[
+  {
+    "number": 20,
+    "title": "Fork copy",
+    "html_url": "https://github.com/example/my-app/pull/20",
+    "user": {
+      "login": "mallory",
+      "html_url": "https://github.com/mallory"
+    },
+    "draft": false,
+    "head": {
+      "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "ref": "agent/search",
+      "repo": {
+        "full_name": "mallory/my-app"
+      }
+    },
+    "base": {
+      "ref": "main"
+    },
+    "requested_reviewers": [],
+    "requested_teams": [],
+    "labels": [],
+    "updated_at": "2026-11-27T10:00:00Z",
+    "state": "open"
+  },
+  {
+    "number": 21,
+    "title": "Similar name",
+    "html_url": "https://github.com/example/my-app/pull/21",
+    "user": {
+      "login": "alex",
+      "html_url": "https://github.com/alex"
+    },
+    "draft": false,
+    "head": {
+      "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "ref": "agent/search-2",
+      "repo": {
+        "full_name": "example/my-app"
+      }
+    },
+    "base": {
+      "ref": "main"
+    },
+    "requested_reviewers": [],
+    "requested_teams": [],
+    "labels": [],
+    "updated_at": "2026-11-27T10:00:00Z",
+    "state": "open"
+  },
+  {
+    "number": 18,
+    "title": "Old try",
+    "html_url": "https://github.com/example/my-app/pull/18",
+    "user": {
+      "login": "alex",
+      "html_url": "https://github.com/alex"
+    },
+    "draft": false,
+    "head": {
+      "sha": "cccccccccccccccccccccccccccccccccccccccc",
+      "ref": "agent/search",
+      "repo": {
+        "full_name": "example/my-app"
+      }
+    },
+    "base": {
+      "ref": "main"
+    },
+    "requested_reviewers": [],
+    "requested_teams": [],
+    "labels": [],
+    "updated_at": "2026-11-27T10:00:00Z",
+    "state": "closed",
+    "merged_at": null
+  },
+  {
+    "number": 19,
+    "title": "Search",
+    "html_url": "https://github.com/example/my-app/pull/19",
+    "user": {
+      "login": "alex",
+      "html_url": "https://github.com/alex"
+    },
+    "draft": false,
+    "head": {
+      "sha": "dddddddddddddddddddddddddddddddddddddddd",
+      "ref": "agent/search",
+      "repo": {
+        "full_name": "example/my-app"
+      }
+    },
+    "base": {
+      "ref": "main"
+    },
+    "requested_reviewers": [],
+    "requested_teams": [],
+    "labels": [],
+    "updated_at": "2026-11-27T10:00:00Z",
+    "state": "open"
+  }
+]

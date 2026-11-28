@@ -1,0 +1,29 @@
+{
+  "number": 1,
+  "title": "Add search",
+  "html_url": "https://github.com/example/my-app/pull/1",
+  "user": {
+    "login": "alex",
+    "html_url": "https://github.com/alex"
+  },
+  "draft": false,
+  "head": {
+    "sha": "1111111111111111111111111111111111111111",
+    "ref": "agent/search",
+    "repo": {
+      "full_name": "example/my-app"
+    }
+  },
+  "base": {
+    "ref": "main"
+  },
+  "requested_reviewers": [],
+  "requested_teams": [],
+  "labels": [],
+  "updated_at": "2026-11-27T10:00:00Z",
+  "state": "open",
+  "merged": false,
+  "mergeable": true,
+  "body": "Adds search.\n\nCloses #12 and fixes #13. Also resolves other/repo#99.",
+  "body_html": "<h2>Adds search</h2><p>Details <a href=\"javascript:alert(1)\">bad</a> <a href=\"https://github.com/example/my-app/issues/12\">#12</a></p><script>steal()</script><img src=\"https://evil.example/t.png\"><img src=\"https://camo.githubusercontent.com/abc\" alt=\"shot\"><ul class=\"contains-task-list\"><li class=\"task-list-item\"><input type=\"checkbox\" disabled checked> done</li></ul>"
+}

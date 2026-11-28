@@ -11,7 +11,7 @@ const OLD = "b".repeat(40);
 
 /** Facts on which every check passes: a completed run, a reviewed head, green and required CI, a clean diff. */
 const goodFacts = () => ({
-  run: { status: "completed", action: "build", prUrl: "https://github.com/example/my-app/pull/7" },
+  session: { state: "idle" },
   ibni: { review: { rounds: 1, findings: 2, history: [{ findings: 2, open: 0, accepted: 2, headSha: HEAD }] } },
   pendingApprovals: 0,
   pr: { state: "open", draft: false, merged: false, mergeable: true, mergeableState: "clean", headSha: HEAD, baseRef: "main", changedFiles: 1 },
@@ -35,9 +35,9 @@ const red = (run) => ({ ...run, status: "completed", conclusion: "failure" });
 
 // Each rule: a change to the good facts that must fail it, the words that say why, and a fact it can't do without.
 const CASES = [
-  { name: "run-completed", needs: "run", fail: (f) => { f.run.status = "needs_input"; }, why: /needs_input, not completed/ },
-  { name: "run-completed", label: "without a pull request", fail: (f) => { f.run.prUrl = null; }, why: /without a pull request/ },
-  { name: "run-completed", label: "an ask run", fail: (f) => { f.run.action = "ask"; }, why: /opens no pull request/ },
+  { name: "run-completed", needs: "session", fail: (f) => { f.session.state = "working"; }, why: /linked session is working, not finished/ },
+  { name: "run-completed", label: "a session waiting on a permission", fail: (f) => { f.session.state = "blocked"; }, why: /linked session is blocked, not finished/ },
+  { name: "run-completed", label: "no session linked to the pull request", fail: (f) => { f.session = null; }, why: /No session is linked/ },
   { name: "verify-in-ci", needs: "checkRuns", fail: (f) => { f.checkRuns[0] = red(f.checkRuns[0]); }, why: /verify ended failure on aaaaaaa/ },
   { name: "verify-in-ci", label: "no run on the head", fail: (f) => { f.checkRuns[0].headSha = OLD; }, why: /has not run on aaaaaaa/ },
   { name: "verify-in-ci", label: "still running", fail: (f) => { f.checkRuns[0] = { ...f.checkRuns[0], status: "in_progress", conclusion: null }; }, why: /still running/ },
@@ -58,7 +58,7 @@ const CASES = [
   { name: "no-merge-conflicts", needs: "pr", fail: (f) => { f.pr.mergeable = false; f.pr.mergeableState = "dirty"; }, why: /conflicts with main/ },
   { name: "not-draft", needs: "pr", fail: (f) => { f.pr.draft = true; }, why: /is a draft/ },
   { name: "not-draft", label: "closed", fail: (f) => { f.pr.state = "closed"; }, why: /is closed/ },
-  { name: "no-pending-approval", needs: "pendingApprovals", fail: (f) => { f.pendingApprovals = 2; }, why: /2 approvals are still waiting/ },
+  { name: "no-pending-approval", needs: "pendingApprovals", fail: (f) => { f.pendingApprovals = 2; }, why: /2 permissions are still waiting/ },
   { name: "no-gate-weakening", needs: "files", fail: (f) => { f.files[0].patch += "\n+// eslint-disable-next-line"; }, why: /needs your acceptance in the web app: a lint or type-check suppression \(src\/a\.mjs\)/ },
 ];
 
@@ -69,7 +69,7 @@ test("the readiness object has the ten checks of issue #67, in order, each named
   ]);
 });
 
-test("every check passes on good facts, and only then is the run ready", () => {
+test("every check passes on good facts, and only then is the pull request ready", () => {
   const readiness = evaluateReadiness(goodFacts());
   for (const entry of readiness.checks) assert.equal(entry.pass, true, `${entry.name}: ${entry.detail}`);
   assert.equal(readiness.ready, true);

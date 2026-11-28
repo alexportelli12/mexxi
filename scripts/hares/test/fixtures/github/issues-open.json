@@ -1,0 +1,42 @@
+[
+  {
+    "number": 12,
+    "title": "Search is slow",
+    "html_url": "https://github.com/example/my-app/issues/12",
+    "user": {
+      "login": "carol"
+    },
+    "labels": [
+      {
+        "name": "bug"
+      }
+    ],
+    "comments": 2,
+    "updated_at": "2026-11-26T09:00:00Z"
+  },
+  {
+    "number": 1,
+    "title": "Add search",
+    "html_url": "https://github.com/example/my-app/pull/1",
+    "user": {
+      "login": "alex"
+    },
+    "labels": [],
+    "comments": 0,
+    "updated_at": "2026-11-27T10:00:00Z",
+    "pull_request": {
+      "url": "x"
+    }
+  },
+  {
+    "number": 13,
+    "title": "Dark mode",
+    "html_url": "https://github.com/example/my-app/issues/13",
+    "user": {
+      "login": "dave"
+    },
+    "labels": [],
+    "comments": 0,
+    "updated_at": "2026-11-25T09:00:00Z"
+  }
+]

@@ -1,7 +1,8 @@
-// hares's only door to GitHub (decision 0027): read-only, for the repositories
-// hares lists, with a fine-grained token the person stores in the state
-// directory. Every request is a GET; nothing here can merge, approve, comment
-// or change a pull request.
+// hares's read door to GitHub (decision 0027): for the repositories hares lists,
+// with a fine-grained token the person stores in the state directory. Every
+// request here is a GET; nothing in this file can merge, approve, comment or
+// change a pull request. The web app's writes live in github-write.mjs, which
+// goes through the person's own gh login instead and which MCP never imports.
 import { execFile } from "node:child_process";
 import { chmodSync, mkdirSync, rmSync, statSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
@@ -102,6 +103,17 @@ export function parsePullUrl(url) {
   return match ? { slug: `${match[1]}/${match[2]}`, number: Number(match[3]) } : null;
 }
 
+const SLUG = /^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/;
+
+/** "owner/repo" for a configured repository: its `github` setting when it has one, else its checkout's origin. */
+export async function slugForRepository(repository) {
+  if (repository?.github !== undefined && repository.github !== null) {
+    if (!SLUG.test(String(repository.github))) throw new GithubUnavailable(`hares.repositories: ${repository.name}'s github setting must be owner/name.`);
+    return String(repository.github);
+  }
+  return checkoutSlug(repository.path);
+}
+
 const nextLink = (header) => /<([^>]+)>;\s*rel="next"/.exec(header ?? "")?.[1] ?? null;
 
 /**
@@ -109,14 +121,14 @@ const nextLink = (header) => /<([^>]+)>;\s*rel="next"/.exec(header ?? "")?.[1] ?
  * @param {{ token: string, slug: string, fetch?: typeof globalThis.fetch }} options
  */
 export function githubClient({ token, slug, fetch = globalThis.fetch }) {
-  async function request(url) {
+  async function request(url, accept = "application/vnd.github+json") {
     // The URL is always hares's own, under the repository hares was told to read.
     if (!url.startsWith(`${API}/repos/${slug}/`)) throw new Error(`hares refused to read ${url} outside ${slug}`);
     let response;
     try {
       response = await fetch(url, {
         method: "GET",
-        headers: { Accept: "application/vnd.github+json", Authorization: `Bearer ${token}`, "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "hares" },
+        headers: { Accept: accept, Authorization: `Bearer ${token}`, "X-GitHub-Api-Version": "2022-11-28", "User-Agent": "hares" },
         signal: AbortSignal.timeout(TIMEOUT_MS),
         redirect: "error",
       });
@@ -133,16 +145,17 @@ export function githubClient({ token, slug, fetch = globalThis.fetch }) {
   const urlFor = (pathAndQuery) => `${API}/repos/${slug}/${pathAndQuery}`;
   return {
     slug,
-    async get(pathAndQuery) {
-      return (await request(urlFor(pathAndQuery))).body;
+    /** One GET; `accept` asks for another media type, such as application/vnd.github.html+json for body_html. */
+    async get(pathAndQuery, { accept } = {}) {
+      return (await request(urlFor(pathAndQuery), accept)).body;
     },
     /** Every page of a list, following GitHub's next links; `key` picks the list out of an object body. */
-    async getAll(pathAndQuery, key = null) {
+    async getAll(pathAndQuery, key = null, { accept } = {}) {
       const items = [];
       let url = urlFor(pathAndQuery);
       for (let page = 0; url; page += 1) {
         if (page === MAX_PAGES) throw new Error(`GitHub's list for ${pathAndQuery.split("?")[0]} is longer than hares reads`);
-        const { body, next } = await request(url);
+        const { body, next } = await request(url, accept);
         const list = key ? body?.[key] : body;
         if (!Array.isArray(list)) throw new Error(`GitHub's answer for ${pathAndQuery.split("?")[0]} had no list`);
         items.push(...list);

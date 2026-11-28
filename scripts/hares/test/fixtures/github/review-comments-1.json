@@ -1,0 +1,65 @@
+[
+  {
+    "id": 102,
+    "in_reply_to_id": 101,
+    "user": {
+      "login": "alex"
+    },
+    "created_at": "2026-11-27T12:02:00Z",
+    "html_url": "https://github.com/example/my-app/pull/1#discussion_r102",
+    "path": "src/search.mjs",
+    "line": 10,
+    "position": 4,
+    "body_html": "<p>Done in the next push.</p>"
+  },
+  {
+    "id": 100,
+    "user": {
+      "login": "alex"
+    },
+    "created_at": "2026-11-27T12:00:00Z",
+    "html_url": "https://github.com/example/my-app/pull/1#discussion_r100",
+    "path": "src/search.mjs",
+    "line": 10,
+    "position": 4,
+    "body_html": "<p>Why not a Set here?</p>"
+  },
+  {
+    "id": 101,
+    "in_reply_to_id": 100,
+    "user": {
+      "login": "bob"
+    },
+    "created_at": "2026-11-27T12:01:00Z",
+    "html_url": "https://github.com/example/my-app/pull/1#discussion_r101",
+    "path": "src/search.mjs",
+    "line": 10,
+    "position": 4,
+    "body_html": "<p>Order matters.</p>"
+  },
+  {
+    "id": 200,
+    "user": {
+      "login": "alex"
+    },
+    "created_at": "2026-11-27T12:00:00Z",
+    "html_url": "https://github.com/example/my-app/pull/1#discussion_r200",
+    "path": "src/b.mjs",
+    "line": 3,
+    "position": 4,
+    "body_html": "<p>Typo in the name.</p>"
+  },
+  {
+    "id": 300,
+    "user": {
+      "login": "alex"
+    },
+    "created_at": "2026-11-27T12:00:00Z",
+    "html_url": "https://github.com/example/my-app/pull/1#discussion_r300",
+    "path": "src/search.mjs",
+    "line": null,
+    "position": null,
+    "body_html": "<p>Old code.</p>",
+    "original_line": 7
+  }
+]
