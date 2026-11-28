@@ -1,5 +1,5 @@
 ---
-status: Accepted; its browser launcher, allowed hosts and smoke check are superseded by 0016
+status: Accepted; its browser launcher, allowed hosts and smoke check are superseded by 0016, and its runs by 0028
 date: 2026-10-23
 ---
 

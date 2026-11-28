@@ -1,5 +1,5 @@
 ---
-status: Accepted
+status: Accepted; amended by 0028 (segwi is now ħares)
 date: 2026-10-25
 ---
 

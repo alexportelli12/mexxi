@@ -1,5 +1,5 @@
 ---
-status: Accepted
+status: Accepted; amended by 0028, which allows GitHub writes from the web app only
 date: 2026-11-20
 ---
 
