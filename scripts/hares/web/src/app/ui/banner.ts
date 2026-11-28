@@ -1,24 +1,26 @@
 import { ChangeDetectionStrategy, Component, input } from '@angular/core';
+import { Icon, type IconName } from './icon';
 
-/** A message strip. `status` is announced politely; `alert` interrupts, for errors. */
+export type BannerTone = 'error' | 'ok' | 'info';
+const TONES: Record<BannerTone, { box: string; icon: string; name: IconName }> = {
+  error: { box: 'bg-red-soft', icon: 'text-red', name: 'offline' },
+  ok: { box: 'bg-teal-soft', icon: 'text-teal', name: 'check' },
+  info: { box: 'bg-raised', icon: 'text-muted', name: 'bell' },
+};
+
+/** A one-line notice: red when something is wrong, teal when something worked. Put a button in [action]. */
 @Component({
   selector: 'hares-banner',
+  imports: [Icon],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  host: {
-    '[attr.role]': 'tone() === "error" ? "alert" : "status"',
-    '[attr.aria-live]': 'tone() === "error" ? "assertive" : "polite"',
-    '[class]': '"flex flex-wrap items-center justify-between gap-3 rounded-card border px-4 py-3 text-[15px] " + (tone() === "error" ? "border-failed text-text" : "border-border-strong bg-surface-raised text-text")',
-  },
+  host: { role: 'status', class: 'flex items-center gap-3 rounded-2xl py-3 pr-3 pl-4 text-[14.5px] leading-[1.4]', '[class]': 'tone().box' },
   template: `
-    <span class="flex items-center gap-2">
-      @if (tone() === 'error') {
-        <svg class="size-4 shrink-0 text-failed" viewBox="0 0 16 16" aria-hidden="true"><path d="M4 4l8 8M12 4l-8 8" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" /></svg>
-      }
-      <span><ng-content /></span>
-    </span>
-    <ng-content select="[bannerAction]" />
+    <span [class]="tone().icon" class="inline-flex"><hares-icon [name]="tone().name" [size]="20" /></span>
+    <span class="flex-1"><ng-content /></span>
+    <ng-content select="[action]" />
   `,
 })
 export class Banner {
-  readonly tone = input<'info' | 'error'>('info');
+  readonly kind = input<BannerTone>('error');
+  protected tone = () => TONES[this.kind()];
 }

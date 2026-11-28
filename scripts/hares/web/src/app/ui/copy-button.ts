@@ -1,19 +1,17 @@
 import { ChangeDetectionStrategy, Component, input, signal } from '@angular/core';
-import { Button } from './button';
+import { Icon } from './icon';
 
 /** Copies `text` and says so out loud; where the clipboard API is blocked it selects the text to copy by hand. */
 @Component({
   selector: 'hares-copy-button',
-  imports: [Button],
+  imports: [Icon],
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: { class: 'inline-flex items-center' },
   template: `
-    <button hares-button variant="ghost" type="button" (click)="copy()" [attr.aria-label]="'Copy ' + label()">
-      <svg class="size-4" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" /><path d="M10.5 5.5v-2a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2" /></svg>
-      <span class="text-sm">Copy</span>
+    <button type="button" class="inline-flex size-11 cursor-pointer items-center justify-center rounded-[10px] text-muted hover:text-text" (click)="copy()" [attr.aria-label]="'Copy ' + label()">
+      <hares-icon name="copy" [size]="18" />
     </button>
     <span class="sr-only" role="status" aria-live="polite">{{ message() }}</span>
-    @if (message()) { <span class="text-sm text-muted" aria-hidden="true">{{ message() }}</span> }
   `,
 })
 export class CopyButton {
@@ -40,8 +38,7 @@ export class CopyButton {
     const field = document.createElement('textarea');
     field.value = this.text();
     field.setAttribute('readonly', '');
-    field.style.position = 'fixed';
-    field.style.opacity = '0';
+    field.classList.add('fixed', 'opacity-0');
     document.body.append(field);
     field.select();
     try {

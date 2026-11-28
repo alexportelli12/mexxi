@@ -1,18 +1,26 @@
-import type { Step } from '../models';
-import { latestActivity } from './activity';
+import type { AuditRow } from '../models';
+import { groupByDay, kindOf } from './activity';
 
-const step = (id: string, from: Step['from'] = 'agent', type: Step['type'] = 'command'): Step => ({ id, seq: 0, at: '2026-01-01T00:00:00Z', type, title: id, detail: null, from });
+const row = (id: number, when: string, extra: Partial<AuditRow> = {}): AuditRow => ({ id, at: new Date(when).toISOString(), actor: 'a', origin: 'web', action: 'session.answer', target: '', outcome: 'ok', detail: '', ...extra });
 
-describe('latest activity', () => {
-  it('shows the agent\'s latest step now and at most three before it, newest first, leaving out your replies', () => {
-    const steps = [step('a'), step('b'), step('c'), step('d'), step('reply', 'you', 'message'), step('e')];
-    const { now, recent } = latestActivity(steps);
-    expect(now?.id).toBe('e');
-    expect(recent.map((entry) => entry.id)).toEqual(['d', 'c', 'b']);
+describe('activity', () => {
+  const now = new Date('2026-11-28T18:00:00').getTime();
+
+  it('groups rows by local day, newest first, with the day named', () => {
+    const days = groupByDay([row(1, '2026-11-27T09:00:00', { text: 'Older' }), row(2, '2026-11-28T10:00:00', { text: 'First' }), row(3, '2026-11-28T11:00:00', { text: 'Second' })], 'all', now);
+    expect(days.map((day) => [day.name, day.items.map((item) => item.text)])).toEqual([['Today', ['Second', 'First']], ['Yesterday', ['Older']]]);
   });
 
-  it('has nothing to show before the first step, and no recent list after only one', () => {
-    expect(latestActivity([])).toEqual({ now: null, recent: [] });
-    expect(latestActivity([step('a')]).recent).toEqual([]);
+  it('shows only one kind when a filter is chosen, and the server’s own words win', () => {
+    const rows = [row(1, '2026-11-28T10:00:00', { kind: 'merge', text: 'Merged it' }), row(2, '2026-11-28T11:00:00', { kind: 'rule', text: 'Added a rule' })];
+    expect(groupByDay(rows, 'rule', now)[0].items.map((item) => item.text)).toEqual(['Added a rule']);
+  });
+
+  it('reads the kind from the action when the server sent none', () => {
+    expect(kindOf('session.answer')).toBe('answer');
+    expect(kindOf('pr.merge')).toBe('merge');
+    expect(kindOf('approval.always')).toBe('rule');
+    expect(kindOf('ci.rerun')).toBe('ci');
+    expect(kindOf('session.end')).toBe('session');
   });
 });

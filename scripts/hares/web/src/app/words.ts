@@ -1,62 +1,57 @@
 import names from '../../../../../names.json';
 
 /**
- * Every name the interface shows comes from here, so a Maltese word is never
- * typed into a template. names.json is read at build time. hares has no entry
- * there yet, so the product name stands in until it does. The command names are
- * shown only in mono, as the command a run executes.
+ * Every name the interface shows comes from here, so a Maltese word is never typed into a template.
+ * names.json is read at build time. The command names are shown only as the command a session runs.
  */
 const nameOf = (wanted: string): string => names.find((entry) => entry.name === wanted)?.name ?? wanted;
 
+/** The product name in plain ASCII, for titles and anywhere the h-bar might not render. */
 export const productName: string = nameOf('hares');
+/** The product name as the design sets it, with the Maltese h-bar. */
+export const brand = 'ħ' + productName.slice(1);
+/** The workflow the product belongs to. */
+export const workflowName: string = nameOf('mexxi');
 
-export type Action = 'build' | 'ready' | 'ask';
+/** The commands the Start screen offers, in the design's order, with what each one does. */
+export const startCommands: { name: string; what: string }[] = [
+  { name: nameOf('wettaq'), what: 'Build an issue, end to end' },
+  { name: nameOf('lesti'), what: 'Get a repo ready for ' + workflowName },
+  { name: nameOf('sewwi'), what: 'Change the workflow itself' },
+  { name: nameOf('ittestja'), what: 'Test a change in a browser' },
+  { name: nameOf('irrifletti'), what: 'Look back on recent sessions' },
+];
 
-const commandNames: Record<Exclude<Action, 'ask'>, string> = {
-  build: nameOf('wettaq'),
-  ready: nameOf('lesti'),
+/** The command that builds an issue; the Issue tab runs it with the issue number. */
+export const buildCommand = startCommands[0].name;
+
+const NUMBER_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten'];
+
+/** "three" for 3, up to ten; larger counts stay digits. */
+export const numberWord = (count: number): string => NUMBER_WORDS[count] ?? String(count);
+
+const capitalise = (word: string): string => word.charAt(0).toUpperCase() + word.slice(1);
+
+/** "Three sessions", "One session": the count in words, capitalised at the start of a sentence. */
+export const sessionsPhrase = (count: number, { sentence = false } = {}): string => {
+  const text = `${numberWord(count)} ${count === 1 ? 'session' : 'sessions'}`;
+  return sentence ? capitalise(text) : text;
 };
-
-/** The slash command an action runs, or null when it only answers. */
-export function commandFor(action: Action): string | null {
-  return action === 'ask' ? null : `/${commandNames[action]}`;
-}
-
-export const actionLabels: Record<Action, string> = { build: 'Build', ready: 'Get ready', ask: 'Ask' };
-
-/**
- * Each action's Maltese name, shown above its English label. Build and Get ready are named after the
- * command they run. Ask runs no command, so its name, saqsi ("ask"), lives here rather than in
- * names.json, which lists only commands, CLIs, skills and the repository, each checked against its files.
- */
-const ASK_NAME = 'saqsi';
-const capitalised = (word: string): string => word.charAt(0).toUpperCase() + word.slice(1);
-export const actionNames: Record<Action, string> = {
-  build: capitalised(commandNames.build),
-  ready: capitalised(commandNames.ready),
-  ask: capitalised(ASK_NAME),
-};
-
-/** The "what happens" line on the New run screen. */
-export function whatHappens(action: Action, repo: string): string {
-  const command = commandFor(action);
-  return command
-    ? `Runs ${command} in ${repo} on a new branch; you'll get a PR`
-    : `Answers in ${repo} without changing anything`;
-}
 
 /** The notification explanation, with the product name taken from here. */
-export const notificationsExplainer = `${productName} tells you when a run needs your reply or OK, and when it finishes or fails. Nothing else.`;
+export const notificationsExplainer = `${productName} tells you when a session asks you something, when it finishes, and when main goes red. Nothing else is on unless you turn it on.`;
 export const iosHomeScreenHint = `On iPhone, add ${productName} to your Home Screen first, then turn notifications on here.`;
 
-/** Titles. English only: no Maltese word has been verified yet. */
+/** Titles for the browser tab. English only: no Maltese word has been verified yet. */
 export const titles = {
-  runs: 'Runs',
-  runDetail: 'Run',
-  approvals: 'Approvals',
-  newRun: 'New run',
-  audit: 'Audit',
-  notFound: "This page doesn't exist",
+  now: 'Now',
+  session: 'Session',
+  terminal: 'Terminal',
+  start: 'Start a session',
+  settings: 'Settings',
+  notifications: 'Notifications',
+  activity: 'Activity',
+  notFound: 'This page doesn’t exist',
 } as const;
 
 /** The page title: a count of what needs you, then the product name. */
@@ -64,16 +59,5 @@ export function documentTitle(needsYou: number): string {
   return needsYou > 0 ? `(${needsYou}) ${productName}` : productName;
 }
 
-/** The readiness checks (issue #67) in plain words, by the name the server gives each. */
-export const readinessLabels: Record<string, string> = {
-  'run-completed': 'Run finished with a PR',
-  'verify-in-ci': 'Verify ran in CI',
-  'reviewed-head': 'Review saw the latest commit',
-  'review-findings-closed': 'Review findings closed',
-  'ci-green': 'CI green and required',
-  'no-flaky-checks': 'No reruns to go green',
-  'no-merge-conflicts': 'No merge conflicts',
-  'not-draft': 'Open, not a draft',
-  'no-pending-approval': 'No approval waiting',
-  'no-gate-weakening': 'No gate weakened',
-};
+/** What Now says when the server can't see herdr. */
+export const offlineLine = `Your sessions keep running in herdr. ${brand} reconnects on its own.`;

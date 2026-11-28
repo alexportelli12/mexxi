@@ -1,14 +1,15 @@
-import type { Action } from '../words';
 import { productName } from '../words';
+
+export type StartMode = 'prompt' | 'command' | 'issue' | 'pr';
 
 export interface Draft {
   repo: string;
-  action: Action | '';
-  task: string;
+  mode: StartMode;
 }
 
-const KEY = `${productName}:new-run`;
-const EMPTY: Draft = { repo: '', action: '', task: '' };
+const KEY = `${productName}:start`;
+const EMPTY: Draft = { repo: '', mode: 'prompt' };
+const MODES: StartMode[] = ['prompt', 'command', 'issue', 'pr'];
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;
 
@@ -20,31 +21,26 @@ function storage(): StorageLike | null {
   }
 }
 
-/** The saved draft; storage that is missing, blocked or damaged gives an empty one. */
+/** The saved choice on Start; storage that is missing, blocked or damaged gives the default. */
 export function loadDraft(store: StorageLike | null = storage()): Draft {
   try {
     const value = JSON.parse(store?.getItem(KEY) ?? 'null') as Partial<Draft> | null;
     return {
       repo: typeof value?.repo === 'string' ? value.repo : '',
-      action: value?.action === 'build' || value?.action === 'ready' || value?.action === 'ask' ? value.action : '',
-      task: typeof value?.task === 'string' ? value.task : '',
+      mode: MODES.includes(value?.mode as StartMode) ? (value!.mode as StartMode) : 'prompt',
     };
   } catch {
     return { ...EMPTY };
   }
 }
 
-/** Saves the draft; the repo and action stay after a start, the task does not. */
+/** Saves the repo and the way of starting that was last used. A prompt is never kept. */
 export function saveDraft(draft: Draft, store: StorageLike | null = storage()): void {
   try {
     store?.setItem(KEY, JSON.stringify(draft));
   } catch {
-    // Private windows and full storage are fine: the draft just is not kept.
+    // Private windows and full storage are fine: the choice just is not kept.
   }
-}
-
-export function clearTask(store: StorageLike | null = storage()): void {
-  saveDraft({ ...loadDraft(store), task: '' }, store);
 }
 
 /** A small key-value helper for other per-viewer conveniences, with the same safety. */

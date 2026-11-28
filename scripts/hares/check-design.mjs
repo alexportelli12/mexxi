@@ -13,6 +13,15 @@
 // links, and the single <meta name="theme-color"> in site/index.html, which must equal --bg.
 // Image files (site/favicon.svg) are standalone images, so they are not scanned.
 //
+// Rule 3, how the words look. In the web app (scripts/hares/web/src), outside tests:
+// - no all-caps labels: no uppercase class, text-transform: uppercase or small caps, so a label is written
+//   in sentence case and stays that way;
+// - no middle-dot strings ("a · b", &middot;): a comma or a new line separates things;
+// - curly quotes in copy: a straight apostrophe inside a word or a straight double quote around words, in
+//   a template's text or a double-quoted string, is refused ("Can’t", “Keep”);
+// - no border-radius: 50%: a circle is drawn with a pixel radius or rounded-full, and a ring that counts
+//   something is a status bar instead (status-bar.ts).
+//
 // Rule 2, no hard-coded Maltese. A name from names.json (and the product name hares) may not
 // be typed into scripts/hares/web/src/app/. It reaches the interface through words.ts, which
 // reads names.json at build time. A name is exempt only when its names.json entry has
@@ -96,6 +105,36 @@ function* cssValues(text, file) {
   }
 }
 
+const ALL_CAPS = /(?<=[\s"'`])uppercase(?=[\s"'`])|text-transform\s*:\s*uppercase|font-variant-caps\s*:\s*(?:all-)?small-caps/g;
+const MIDDLE_DOT = /·|&middot;|&#0*183;|&#xb7;/gi;
+const HALF_RADIUS = /border-radius\s*:\s*50%|rounded-\[50%\]/g;
+// A straight apostrophe between two letters, or a straight double quote pair, in the text between two tags.
+const STRAIGHT_IN_TEXT = />([^<>{}\n]*(?:[A-Za-z]'[A-Za-z][^<>{}\n]*|"[^"<>{}\n]+"[^<>{}\n]*))</g;
+const STRAIGHT_IN_STRING = /"[^"\n]*[A-Za-z]'[a-z][^"\n]*"/g;
+
+/** The word rules of the web app: sentence case, no middle dots, curly quotes, no half-radius rings. */
+export function checkWords(root) {
+  const problems = [];
+  for (const file of walk(path.join(root, "scripts/hares/web/src"))) {
+    if (/\.spec\.ts$/.test(file)) continue;
+    const name = path.relative(root, file).split(path.sep).join("/");
+    const text = readFileSync(file, "utf8");
+    const report = (pattern, message, target = text) => {
+      for (const match of target.matchAll(pattern)) problems.push(`${name}:${lineOf(text, match.index)}: ${message}`);
+    };
+    report(ALL_CAPS, "all-caps text is refused: write the label in sentence case");
+    report(MIDDLE_DOT, "a middle dot is refused: separate with a comma or a new line");
+    report(HALF_RADIUS, "border-radius 50% is refused: use a pixel radius, or a status bar instead of a ring");
+    if (/\.(html|ts)$/.test(file)) {
+      // Comments may use any quote; the copy is what the rule is about.
+      const code = text.replace(/\/\*[\s\S]*?\*\//g, blank).replace(/^\s*\/\/.*$/gm, blank);
+      report(STRAIGHT_IN_TEXT, "copy with a straight quote or apostrophe: use curly quotes (’ “ ”)", code);
+      report(STRAIGHT_IN_STRING, "a string with a straight apostrophe in a word: use ’", code);
+    }
+  }
+  return problems;
+}
+
 /** @returns {string[]} one message per violation, empty when the design holds */
 export function checkDesign(root = repositoryRoot) {
   const problems = [];
@@ -128,6 +167,8 @@ export function checkDesign(root = repositoryRoot) {
       }
     }
   }
+
+  problems.push(...checkWords(root));
 
   const names = JSON.parse(readFileSync(path.join(root, "names.json"), "utf8"));
   const unverified = new Set(["hares", ...names.filter((entry) => entry.verified !== true).map((entry) => entry.name)]);

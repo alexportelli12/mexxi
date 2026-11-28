@@ -1,79 +1,104 @@
 import { TestBed } from '@angular/core/testing';
-import { ApiService } from './api';
-import { BACKOFF_MS, LiveService, backoffFor } from './live';
+import type { Health, Session } from '../models';
+import { GithubApi } from '../pages/github/github-api';
+import { ApiError, ApiService } from './api';
+import { backoffFor, LiveService, REFRESH_DEBOUNCE_MS } from './live';
 
-describe('reconnect backoff', () => {
-  it('waits 1 s, 2 s, 5 s, 10 s, then 10 s every time', () => {
-    expect(BACKOFF_MS).toEqual([1000, 2000, 5000, 10_000]);
-    expect([0, 1, 2, 3, 4, 20].map(backoffFor)).toEqual([1000, 2000, 5000, 10_000, 10_000, 10_000]);
-  });
-});
-
-/** A stand-in EventSource the test drives by hand. */
-class FakeSource {
-  static last: FakeSource | null = null;
+class FakeEventSource {
+  static last: FakeEventSource;
   static readonly CLOSED = 2;
   readyState = 1;
-  private readonly listeners: Record<string, ((event: unknown) => void)[]> = {};
+  listeners = new Map<string, ((event: unknown) => void)[]>();
   constructor(readonly url: string) {
-    FakeSource.last = this;
+    FakeEventSource.last = this;
   }
-  addEventListener(name: string, listener: (event: unknown) => void): void {
-    (this.listeners[name] ??= []).push(listener);
+  addEventListener(type: string, listener: (event: unknown) => void) {
+    this.listeners.set(type, [...(this.listeners.get(type) ?? []), listener]);
   }
-  emit(name: string, data?: unknown): void {
-    for (const listener of this.listeners[name] ?? []) listener({ data: data === undefined ? undefined : JSON.stringify(data) });
+  emit(type: string, data?: unknown) {
+    for (const listener of this.listeners.get(type) ?? []) listener({ data: JSON.stringify(data) });
   }
-  close(): void {
-    this.readyState = FakeSource.CLOSED;
+  close() {
+    this.readyState = 2;
   }
 }
 
-describe('LiveService reloads', () => {
-  let original: unknown;
-  let listCalls = 0;
-  const api = {
-    runs: async () => { listCalls += 1; return []; },
-    approvals: async () => [],
-    health: async () => ({ ok: true, limits: { taskMaxChars: 1, inputMaxChars: 1, idleTimeoutMinutes: 1 } }),
-  };
+const health = (connected: boolean): Health => ({ ok: true, herdr: { connected, protocol: 22, panes: 1, claudeSessions: 1, lastSeenAt: '2026-11-28T17:21:00Z' } });
+const session = (id: string, status: Session['status']) => ({ id, status, alive: true, lastActivityAt: '2026-11-28T12:00:00Z' }) as Session;
 
+function setup() {
+  const api = {
+    health: vi.fn().mockResolvedValue(health(true)),
+    sessions: vi.fn().mockResolvedValue([session('a', 'blocked')]),
+    questions: vi.fn().mockResolvedValue([]),
+    notificationPrefs: vi.fn().mockResolvedValue({ prefs: {}, held: [] }),
+    heldSeen: vi.fn(),
+  };
+  const github = { prs: vi.fn().mockResolvedValue([{ repo: 'r', number: 1, groups: ['review'] }, { repo: 'r', number: 2, groups: ['bumps'] }]) };
+  TestBed.configureTestingModule({ providers: [{ provide: ApiService, useValue: api }, { provide: GithubApi, useValue: github }] });
+  return { api, github, live: TestBed.inject(LiveService) };
+}
+
+describe('LiveService', () => {
   beforeEach(() => {
-    original = (globalThis as { EventSource?: unknown }).EventSource;
-    (globalThis as { EventSource?: unknown }).EventSource = FakeSource;
-    listCalls = 0;
-    TestBed.configureTestingModule({ providers: [{ provide: ApiService, useValue: api }] });
+    vi.useFakeTimers();
+    vi.stubGlobal('EventSource', FakeEventSource);
   });
   afterEach(() => {
-    TestBed.inject(LiveService).stop();
-    (globalThis as { EventSource?: unknown }).EventSource = original;
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
-  it('asks open screens to reload when the stream comes back after a drop, but not on the first connect', async () => {
-    const live = TestBed.inject(LiveService);
-    let reloads = 0;
-    live.reloads.subscribe(() => (reloads += 1));
-    live.start();
-    const source = FakeSource.last!;
-    source.emit('open');
-    expect(reloads).toBe(0);
-    source.emit('error');
-    expect(live.connection()).toBe('reconnecting');
-    source.emit('open');
-    expect(reloads).toBe(1);
-    await Promise.resolve();
-    expect(listCalls).toBe(2);
+  it('keeps showing what it last saw while herdr is down, and says atlas is offline', async () => {
+    const { api, live } = setup();
+    await live.refresh();
+    expect(live.sessions().map((entry) => entry.id)).toEqual(['a']);
+    api.health.mockResolvedValue(health(false));
+    api.sessions.mockResolvedValue([]);
+    await live.refresh();
+    expect(live.offline()).toBe(true);
+    expect(live.sessions().map((entry) => entry.id)).toEqual(['a']);
   });
 
-  it('reloads everything when the server sends reset', async () => {
-    const live = TestBed.inject(LiveService);
-    let reloads = 0;
-    live.reloads.subscribe(() => (reloads += 1));
+  it('treats an unreachable server the same way, without losing the list', async () => {
+    const { api, live } = setup();
+    await live.refresh();
+    api.health.mockRejectedValue(new ApiError(0, 'Can’t reach the server.'));
+    await live.refresh();
+    expect(live.offline()).toBe(true);
+    expect(live.sessions()).toHaveLength(1);
+    api.health.mockResolvedValue(health(true));
+    await live.refresh();
+    expect(live.offline()).toBe(false);
+  });
+
+  it('folds a burst of question events into one reload, and ignores transcript events for the lists', async () => {
+    const { api, live } = setup();
     live.start();
-    FakeSource.last!.emit('open');
-    FakeSource.last!.emit('reset', { reason: 'truncated' });
-    expect(reloads).toBe(1);
-    await Promise.resolve();
-    expect(listCalls).toBe(2);
+    await vi.advanceTimersByTimeAsync(0);
+    api.health.mockClear();
+    const stream = FakeEventSource.last;
+    stream.emit('question', { sessionId: 'a', at: 'x' });
+    stream.emit('session', { sessionId: 'a', at: 'x' });
+    stream.emit('question', { sessionId: 'b', at: 'x' });
+    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS + 10);
+    expect(api.health).toHaveBeenCalledTimes(1);
+    const seen: string[] = [];
+    live.events.subscribe((event) => seen.push(event.type));
+    stream.emit('transcript', { sessionId: 'a', at: 'x' });
+    await vi.advanceTimersByTimeAsync(REFRESH_DEBOUNCE_MS + 10);
+    expect(seen).toEqual(['transcript']);
+    expect(api.health).toHaveBeenCalledTimes(1);
+  });
+
+  it('counts only the pull requests in the review group', async () => {
+    const { live } = setup();
+    await live.refresh();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(live.boardCount()).toBe(1);
+  });
+
+  it('waits longer between reconnects, up to ten seconds', () => {
+    expect([0, 1, 2, 3, 9].map(backoffFor)).toEqual([1000, 2000, 5000, 10_000, 10_000]);
   });
 });

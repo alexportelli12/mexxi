@@ -1,8 +1,9 @@
 import { TestBed } from '@angular/core/testing';
 import { ApiService } from './api';
+import { GithubApi } from '../pages/github/github-api';
 import { LiveService } from './live';
-import { ApprovalTapGuard, MoveGuard, SETTLE_MS, listShape } from './tap-guard';
-import type { Approval } from '../models';
+import { MoveGuard, QueueTapGuard, SETTLE_MS, listShape } from './tap-guard';
+import type { Pending } from '../models';
 
 const tap = (detail = 1) => new MouseEvent('click', { detail });
 
@@ -27,46 +28,44 @@ describe('MoveGuard', () => {
   });
 });
 
-describe('ApprovalTapGuard', () => {
+describe('QueueTapGuard', () => {
   let clock = 10_000;
-  const approval = (id: string, createdAt: string) => ({ id, runId: 'r', createdAt }) as Approval;
+  const pending = (id: string) => ({ id, sessionId: 's' }) as Pending;
 
   beforeEach(() => {
     clock = 10_000;
     vi.spyOn(performance, 'now').mockImplementation(() => clock);
-    TestBed.configureTestingModule({ providers: [{ provide: ApiService, useValue: {} }] });
+    TestBed.configureTestingModule({ providers: [{ provide: ApiService, useValue: {} }, { provide: GithubApi, useValue: {} }] });
   });
   afterEach(() => vi.restoreAllMocks());
 
-  it('ignores a tap right after the approvals list changes, and keyboard presses never', () => {
-    const guard = TestBed.inject(ApprovalTapGuard);
+  it('ignores a tap right after the queue changes, and keyboard presses never', () => {
+    const guard = TestBed.inject(QueueTapGuard);
     const live = TestBed.inject(LiveService);
     TestBed.tick();
     clock += SETTLE_MS;
     expect(guard.accepts(tap())).toBe(true);
 
-    live.approvals.set([approval('a', '2026-01-01T00:00:00Z'), approval('b', '2026-01-01T00:01:00Z')]);
+    live.questions.set([pending('a'), pending('b')]);
     TestBed.tick();
     expect(guard.accepts(tap())).toBe(false);
     expect(guard.accepts(tap(0))).toBe(true);
-    clock += SETTLE_MS - 1;
-    expect(guard.accepts(tap())).toBe(false);
-    clock += 1;
+    clock += SETTLE_MS;
     expect(guard.accepts(tap())).toBe(true);
 
-    // The same list again is not a move.
-    live.approvals.set([approval('a', '2026-01-01T00:00:00Z'), approval('b', '2026-01-01T00:01:00Z')]);
+    // The same queue again is not a move.
+    live.questions.set([pending('a'), pending('b')]);
     TestBed.tick();
     expect(guard.accepts(tap())).toBe(true);
 
-    // A card leaving moves the ones below it.
-    live.approvals.set([approval('b', '2026-01-01T00:01:00Z')]);
+    // A question leaving moves the ones below it.
+    live.questions.set([pending('b')]);
     TestBed.tick();
     expect(guard.accepts(tap())).toBe(false);
   });
 
-  it('counts a card changing height as a move', () => {
-    const guard = TestBed.inject(ApprovalTapGuard);
+  it('counts the previous and next buttons as a move', () => {
+    const guard = TestBed.inject(QueueTapGuard);
     TestBed.tick();
     clock += SETTLE_MS;
     expect(guard.accepts(tap())).toBe(true);

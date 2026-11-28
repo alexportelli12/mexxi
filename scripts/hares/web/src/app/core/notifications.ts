@@ -110,7 +110,7 @@ export class NotificationsService {
       writeSetting(SUBSCRIPTION_SETTING, await this.api.subscribe(bodyOf(subscription)));
       this.state.set('on');
     } catch (error) {
-      this.message.set(error instanceof ApiError ? error.message : "Couldn't turn notifications on.");
+      this.message.set(error instanceof ApiError ? error.message : "Couldn’t turn notifications on.");
       this.state.set('off');
     } finally {
       this.busy.set(false);
@@ -129,7 +129,7 @@ export class NotificationsService {
       writeSetting(SUBSCRIPTION_SETTING, null);
       this.state.set('off');
     } catch {
-      this.message.set("Couldn't turn notifications off.");
+      this.message.set("Couldn’t turn notifications off.");
     } finally {
       this.busy.set(false);
     }

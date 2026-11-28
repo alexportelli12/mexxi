@@ -1,112 +1,221 @@
-import type { Action } from './words';
+/**
+ * The shapes the web app reads and writes. They are the contract with the server: core/api.ts lists
+ * each endpoint with the JSON it takes and returns, in these types.
+ */
 
-export type RunStatus =
-  | 'queued' | 'running' | 'needs_input' | 'needs_approval'
-  | 'completed' | 'failed' | 'stopped' | 'timed_out';
+/** What herdr reports for a session's pane. "blocked" is waiting on a person. */
+export type SessionStatus = 'blocked' | 'working' | 'idle' | 'done' | 'unknown';
 
-export type StepType = 'edit' | 'command' | 'test' | 'read' | 'message' | 'refusal';
+/** The three groups the status bar counts. Idle covers idle, done and unknown. */
+export type Phase = 'waiting' | 'working' | 'idle';
 
-export interface Step {
-  id: string;
+/** What the server knew about a session when the person looked: sent back with every answer. */
+export interface Expect {
+  /** The pane's terminal; null while a session has no pane (a folder-trust prompt, a finished session). */
+  terminalId: string | null;
+  /** The Claude session id; null before the first prompt, such as on a folder-trust prompt. */
+  sessionId: string | null;
+  status: SessionStatus;
+  /** herdr's state_change_seq: the server refuses the answer when it has moved. */
   seq: number;
-  at: string;
-  type: StepType;
-  title: string;
-  detail: string | null;
-  ok?: boolean | null;
-  from?: 'agent' | 'you';
-  tool?: string;
 }
 
-export interface Run {
+export interface SessionLinks {
+  /** Every link carries the evidence it was derived from; nothing is guessed. */
+  issue: { number: number; url: string; evidence: string } | null;
+  branch: { name: string; evidence: string } | null;
+  pr: { number: number; repo: string; url: string; evidence: string } | null;
+}
+
+export interface Session {
+  /** The Claude session id, or a launch id until herdr reports one. */
   id: string;
+  /** The person's rename, else the terminal title, else the first prompt. */
+  title: string;
+  /** The configured repository name, or an empty string when the folder is in none. */
   repo: string;
-  action: Action;
-  task: string;
-  status: RunStatus;
-  branch: string | null;
-  prUrl: string | null;
-  verify: 'pass' | 'fail' | null;
-  costUsd: number | null;
-  reason: string | null;
-  createdAt: string;
-  updatedAt: string;
+  status: SessionStatus;
+  /** False once the pane is closed: the transcript stays and the session can be resumed. */
+  alive: boolean;
+  seq: number;
+  terminalId: string | null;
+  /** "app" when this app started it, "you" when it was started by hand in a terminal. */
+  startedBy: 'app' | 'you';
+  startedAt: string;
   lastActivityAt: string;
   endedAt: string | null;
-  /** What a Working run waits on, such as its own background command; absent from servers that predate it. */
-  waitingOn?: string | null;
-  /** The workspace tool's record of the run, on one run's page only (the list leaves it out). */
-  snapshot?: IbniSnapshot | null;
+  /** One plain line for lists: what it is doing or asking. */
+  line: string;
+  /** Why a blocked session waits: a question or a permission prompt; null when it is not blocked. */
+  waitingOn: 'question' | 'permission' | null;
+  pendingCount: number;
+  links: SessionLinks;
 }
 
-/** The workspace tool's info and stats in its own shape, as the server keeps them: read with the run pane's snapshotFrom. */
-export interface IbniSnapshot {
-  branch?: string;
-  state?: string;
-  prUrl?: string | null;
-  createdAt?: string;
-  steps: { step: string; outcome: string; durationMs?: number; endedAt?: string }[];
-  verify?: { attempts: number; passed: number; failed: number; history: { outcome: string; at?: string }[] };
-  review?: { rounds: number; findings: number };
-  qa?: { rounds: number; findings: number };
-  /** Set when the workspace tool stopped answering after the run had a workspace. */
-  error?: string;
+export interface TranscriptStep {
+  title: string;
+  ok: boolean | null;
+  detail: string | null;
 }
 
-/** Whether a run's pull request is ready for you to look at: advisory, and fail-closed (a check it can't tell fails). */
-export interface Readiness {
-  ready: boolean;
-  checks: { name: string; pass: boolean; detail: string }[];
-  /** The pull request's head commit, which an acceptance applies to; null when it couldn't be read. */
-  headSha: string | null;
-  /** True when the diff weakens a gate and nobody has accepted that for this head yet. */
-  canAccept: boolean;
-  checkedAt: string;
+/** One row of the readable transcript. Tool steps are folded into a single "steps" row. */
+export type TranscriptEntry =
+  | { seq: number; at: string; kind: 'you'; text: string }
+  | { seq: number; at: string; kind: 'agent'; text: string }
+  | { seq: number; at: string; kind: 'answer'; text: string }
+  | { seq: number; at: string; kind: 'steps'; summary: string; steps: TranscriptStep[] };
+
+export interface SessionDetail extends Session {
+  transcript: TranscriptEntry[];
+  /** The newest transcript seq, to ask only for what is new next time. */
+  nextSince: number;
+  pending: Pending[];
 }
 
-export interface RunDetail extends Run {
-  steps: Step[];
+export interface QuestionOption {
+  /** The digit that picks it on the terminal; the server turns the label into keys from a fresh screen. */
+  n: number;
+  label: string;
+  description?: string;
+}
+
+/** One question of a call. A call can carry several, and each can allow more than one pick. */
+export interface QuestionItem {
+  header?: string;
+  question: string;
+  multiSelect: boolean;
+  options: QuestionOption[];
 }
 
 /** What an Edit, Write or NotebookEdit call would put in the file, raw and complete. */
-export type ApprovalContent =
+export type PermissionContent =
   | { kind: 'write'; text: string }
   | { kind: 'edit'; oldText: string; newText: string; replaceAll: boolean }
   | { kind: 'notebook'; cellId: string | null; editMode: string | null; cellType: string | null; text: string };
 
-export interface Approval {
-  id: string;
-  runId: string;
-  repo: string;
-  tool: string;
-  /** The raw command, file path, URL or call: never redacted or cut. */
-  exact: string;
-  /** Null for calls that change no file; absent from servers that predate it. */
-  content?: ApprovalContent | null;
-  cwd: string;
-  why: string;
-  risk: string;
-  riskLabel: string;
-  createdAt: string;
-  expiresAt: string;
-  status: 'pending' | 'allowed' | 'denied' | 'expired';
+export interface PermissionRule {
+  /** The exact rule, such as Bash(pnpm add:*), or the access it grants, from the prompt's own option label. */
+  text: string;
+  /** "rule" is permanent for the repo; "session" lasts until the session ends. */
+  scope: 'rule' | 'session';
 }
 
-/** A local extension's page, linked from the menu. */
+export interface Permission {
+  tool: string;
+  /** "run a command", "edit a file": what Claude wants to do, in words. */
+  verb: string;
+  /** The raw command, path, URL or call: never redacted or cut. */
+  exact: string;
+  content?: PermissionContent | null;
+  risk: string;
+  riskLabel: string;
+  why: string;
+  /** Too long to show whole: no Allow or Always buttons, only "answer in the terminal". */
+  tooLong: boolean;
+  /** Null when the prompt offers no always-allow option, or it is one only the terminal may take. */
+  always: PermissionRule | null;
+}
+
+export type PendingKind = 'question' | 'plan' | 'permission' | 'trust';
+
+/** Something a session waits for you to decide: the queue on Now is a list of these. */
+export interface Pending {
+  id: string;
+  sessionId: string;
+  kind: PendingKind;
+  /** Who asks: the session's repo or title. "That’s Fair is asking". */
+  asker: string;
+  /** A short topic for the line above the question, such as "templates". */
+  topic?: string;
+  askedAt: string;
+  items: QuestionItem[];
+  /** "Type something" is offered, so an own answer can be typed. */
+  freeText: boolean;
+  /** "Chat about this" is offered, so "Talk it through instead" works. */
+  chat: boolean;
+  permission?: Permission;
+  expect: Expect;
+  /** False when only the terminal can answer it, with the reason in words. */
+  answerable: boolean;
+  reason: string | null;
+}
+
+/** One answer per question item, in order. */
+export type Answer =
+  | { kind: 'option'; n: number }
+  | { kind: 'options'; ns: number[] }
+  | { kind: 'text'; text: string }
+  | { kind: 'chat'; text: string };
+
+export type Decision = 'once' | 'always' | 'deny';
+
+export interface HerdrHealth {
+  connected: boolean;
+  protocol: number | null;
+  panes: number;
+  claudeSessions: number;
+  /** When herdr last answered; shown as "last seen" while it is down. */
+  lastSeenAt: string | null;
+}
+
+export interface Health {
+  ok: boolean;
+  version?: string;
+  /** The machine's name, such as atlas. Shown wherever the screens say where sessions run. */
+  host?: string;
+  herdr: HerdrHealth;
+  /** Whether a default branch is red, for the dot on CI; absent until GitHub is set up. */
+  board?: { mainRed: boolean };
+}
+
+export interface RepoInfo {
+  name: string;
+  /** The path in tilde form. */
+  path: string;
+  /** "owner/name" on GitHub, or null. */
+  github: string | null;
+  defaultBranch: string;
+}
+
+/** A local extension's page, linked from Settings. */
 export interface Extension {
   name: string;
   title: string;
   url: string;
 }
 
-export interface Repo {
-  name: string;
-  actions: Action[];
-  defaultBranch: string;
-  clean: boolean;
-  onDefault: boolean;
-  lastRun: { id: string; status: RunStatus; createdAt: string } | null;
+export interface NotificationEvents {
+  asks: boolean;
+  finishes: boolean;
+  mainRed: boolean;
+  prReady: boolean;
+  newBump: boolean;
 }
+
+export interface QuietHours {
+  enabled: boolean;
+  /** "23:00" */
+  start: string;
+  /** "07:00" */
+  end: string;
+}
+
+export interface HeldNotification {
+  id: string;
+  kind: string;
+  title: string;
+  text: string;
+  /** A same-origin path: the question or pull request it was about. */
+  url: string;
+  createdAt: string;
+}
+
+export interface NotificationPrefs {
+  events: NotificationEvents;
+  quietHours: QuietHours;
+}
+
+export type ActivityKind = 'answer' | 'merge' | 'session' | 'rule' | 'ci' | 'other';
 
 export interface AuditRow {
   id: number;
@@ -117,31 +226,28 @@ export interface AuditRow {
   target: string;
   outcome: string;
   detail: string;
+  /** What happened, in words. When the server sends none, the app words it from the action. */
+  text?: string;
+  /** Where: the repository and session. */
+  where?: string;
+  kind?: ActivityKind;
 }
 
-/** A message on the SSE stream. */
-export interface RunMessage {
-  runId: string;
+/** What starts a session, without the id the app adds. */
+export type StartBody = StartRequest extends infer T ? (T extends unknown ? Omit<T, 'clientId'> : never) : never;
+
+/** What starts a session. All four open a new herdr pane. */
+export type StartRequest =
+  | { clientId: string; repo: string; kind: 'prompt'; prompt: string }
+  | { clientId: string; repo: string; kind: 'command'; command: string; args: string }
+  | { clientId: string; repo: string; kind: 'issue'; issue: number }
+  | { clientId: string; repo: string; kind: 'pr'; pr: number; ask: 'review-comments' | 'failing-check' };
+
+/** A screen of a session's terminal, as plain text. */
+export interface Screen {
+  text: string;
+  expect: Expect;
   at: string;
-  status: RunStatus;
-  reason: string | null;
-  branch: string | null;
-  prUrl: string | null;
-  verify: 'pass' | 'fail' | null;
-  waitingOn?: string | null;
-  snapshot?: IbniSnapshot | null;
-}
-
-export interface EventMessage {
-  runId: string;
-  seq: number;
-  at: string;
-  kind: string;
-  data: Record<string, unknown>;
-  step: Step | null;
-}
-
-export interface Health {
-  ok: boolean;
-  limits: { taskMaxChars: number; inputMaxChars: number; idleTimeoutMinutes: number };
+  /** An overlay is open: it looks idle, so steering is refused until it is closed in the terminal. */
+  overlay: boolean;
 }

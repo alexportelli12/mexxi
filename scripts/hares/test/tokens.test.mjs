@@ -47,3 +47,30 @@ test("body text and the accent reach AA on every surface", () => {
     }
   }
 });
+
+// The app's own colours: each theme's text colours must be readable on the page and on a card. Each
+// block is read on its own, because the two themes declare the same names.
+function themeBlock(selector) {
+  const start = css.indexOf(selector);
+  assert.ok(start >= 0, `${selector} is in tokens.css`);
+  const body = css.slice(css.indexOf("{", start) + 1, css.indexOf("}", start));
+  return new Map([...body.matchAll(/--hares-([\w-]+):\s*(#[0-9a-f]{6})/gi)].map(([, name, value]) => [name, value]));
+}
+
+for (const [theme, selector] of [["dark", ':root[data-theme="dark"] {'], ["light", ':root[data-theme="light"] {']]) {
+  const colours = themeBlock(selector);
+  for (const text of ["text", "muted", "faint", "amber-text"]) {
+    for (const surface of ["bg", "surface"]) {
+      test(`hares ${theme}: --hares-${text} reaches WCAG AA (4.5:1) on --hares-${surface}`, () => {
+        const ratio = contrast(colours.get(text), colours.get(surface));
+        assert.ok(ratio >= 4.5, `${ratio.toFixed(2)}:1`);
+      });
+    }
+  }
+  for (const [text, surface] of [["on-amber", "amber"], ["on-teal", "teal"], ["on-red", "red"]]) {
+    test(`hares ${theme}: text on the ${surface} fill reaches AA`, () => {
+      const ratio = contrast(colours.get(text), colours.get(surface));
+      assert.ok(ratio >= 4.5, `${ratio.toFixed(2)}:1`);
+    });
+  }
+}

@@ -107,3 +107,39 @@ test("named colour words outside CSS values, and keywords that are not colours, 
 test("site/tokens.css may hold any colour", async (t) => {
   assert.deepEqual(checkDesign(await tree(t, { "site/tokens.css": ":root { --bg: #0a0b0d; --soft: rgb(1 2 3 / 0.1); --x: red; --y: oklch(70% 0.1 200); }" })), []);
 });
+
+const wordsFile = (name, content) => ({ [`scripts/hares/web/src/app/${name}`]: content });
+
+test("an all-caps label is refused, as a class, as CSS, and as small caps", async (t) => {
+  const problems = checkDesign(await tree(t, {
+    ...wordsFile("a.ts", "template: `<span class=\"text-xs uppercase tracking-wide\">Waiting</span>`"),
+    "scripts/hares/web/src/styles.css": ".x { text-transform: uppercase; } .y { font-variant-caps: all-small-caps; }",
+  }));
+  assert.equal(problems.length, 3, problems.join("\n"));
+  assert.match(problems[0], /all-caps/);
+});
+
+test("a middle dot, written or as an entity, is refused", async (t) => {
+  const problems = checkDesign(await tree(t, { ...wordsFile("a.ts", "const line = 'eduline ·  4 min';"), ...wordsFile("b.ts", "const html = '<span>a &middot; b</span>';") }));
+  assert.equal(problems.length, 2);
+  assert.match(problems[0], /middle dot/);
+});
+
+test("straight quotes in copy are refused in template text and double-quoted strings, but not in comments or specs", async (t) => {
+  const refused = checkDesign(await tree(t, {
+    ...wordsFile("a.ts", "template: `<p>Can't reach the server</p><p>Press \"Keep\" to go on</p>`"),
+    ...wordsFile("b.ts", "const message = \"Couldn't send\";"),
+  }));
+  assert.equal(refused.length, 3, refused.join("\n"));
+  const allowed = checkDesign(await tree(t, {
+    ...wordsFile("a.ts", "// it doesn't matter here\n/* nor doesn't this */\ntemplate: `<p>Can’t reach the server</p><p class=\"a\">{{ x ? 'ok' : 'no' }}</p>`"),
+    ...wordsFile("a.spec.ts", "const text = \"Can't\";"),
+  }));
+  assert.deepEqual(allowed, []);
+});
+
+test("a half-radius ring is refused, but a pixel radius and rounded-full are not", async (t) => {
+  const refused = checkDesign(await tree(t, { "scripts/hares/web/src/styles.css": ".ring { border-radius: 50%; }", ...wordsFile("a.ts", "const c = 'rounded-[50%] size-4';") }));
+  assert.equal(refused.length, 2);
+  assert.deepEqual(checkDesign(await tree(t, { ...wordsFile("a.ts", "const c = 'rounded-full size-2 rounded-[14px]';"), "scripts/hares/web/src/styles.css": ".dot { border-radius: 5px; }" })), []);
+});

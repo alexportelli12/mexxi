@@ -7,7 +7,7 @@ const swSource = readFileSync('public/sw.js', 'utf8');
 
 type Listener = (event: unknown) => void;
 
-function loadWorker(origin = 'https://app.example.com') {
+function loadWorker(origin = 'https://app.example.com', answerStatus = 200) {
   const listeners: Record<string, Listener> = {};
   const shown: { title: string; options: Record<string, unknown> }[] = [];
   const opened: string[] = [];
@@ -17,7 +17,8 @@ function loadWorker(origin = 'https://app.example.com') {
   const fakeFetch = (url: string, init?: RequestInit) => {
     fetches.push({ url, init });
     const body = url === '/api/push/key' ? { publicKey: 'AQID' } : { id: 'sub' };
-    return Promise.resolve({ ok: true, json: () => Promise.resolve(body) });
+    const status = url.endsWith('/answer') ? answerStatus : 200;
+    return Promise.resolve({ ok: status < 400, status, json: () => Promise.resolve(body) });
   };
   const subscription = (endpoint: string) => ({ toJSON: () => ({ endpoint, keys: { p256dh: 'p', auth: 'a' }, expirationTime: null }) });
   const self = {
@@ -45,13 +46,15 @@ const waitable = () => {
 describe('service worker', () => {
   const origin = 'https://app.example.com';
 
-  it('only accepts a same-origin path to a run or an approval', () => {
+  it('only opens a same-origin session, pull request or old run or approval link, and anything else goes to Now', () => {
     const { guard } = loadWorker();
-    expect(guard('/runs/abc-123', origin)).toBe('/runs/abc-123');
+    expect(guard('/s/abc-123', origin)).toBe('/s/abc-123');
+    expect(guard('/s/abc-123?q=p-1', origin)).toBe('/s/abc-123?q=p-1');
+    expect(guard('/prs/my-repo/231', origin)).toBe('/prs/my-repo/231');
     expect(guard('/approvals/9f', origin)).toBe('/approvals/9f');
     expect(guard(`${origin}/runs/abc`, origin)).toBe('/runs/abc');
-    for (const bad of ['https://evil.example/runs/abc', '//evil.example/runs/abc', '/audit', '/runs', '/runs/', 'javascript:alert(1)', '/runs/../audit', '/runs/a/b', undefined, 42]) {
-      expect(guard(bad, origin)).toBe('/runs');
+    for (const bad of ['https://evil.example/s/abc', '//evil.example/s/abc', '/audit', '/s', '/s/', '/s/a/b', '/s/abc?next=/evil', '/prs/r/x', '/runs/../audit', 'javascript:alert(1)', undefined, 42]) {
+      expect(guard(bad, origin)).toBe('/');
     }
   });
 
@@ -62,12 +65,48 @@ describe('service worker', () => {
       worker.listeners['push'](event);
       await event.box.promise;
     };
-    await send({ v: 1, kind: 'needs_approval', title: 'my-app needs your OK', url: '/approvals/ab', tag: 'run-1' });
+    await send({ v: 1, kind: 'asks', title: 'My repo is asking', url: '/s/ab?q=p1', tag: 'ask-1' });
     await send({ v: 2, kind: 'failed', title: 'nope' });
     await send(null);
     expect(worker.shown).toHaveLength(1);
-    expect(worker.shown[0].title).toBe('my-app needs your OK');
-    expect(worker.shown[0].options).toMatchObject({ body: 'Needs your OK', tag: 'run-1', renotify: true, data: { url: '/approvals/ab' } });
+    expect(worker.shown[0].title).toBe('My repo is asking');
+    expect(worker.shown[0].options).toMatchObject({ body: 'Needs your answer', tag: 'ask-1', renotify: true, actions: [], data: { url: '/s/ab?q=p1' } });
+  });
+
+  const answers = { keep: { sessionId: 'ab', questionId: 'q1', expect: { terminalId: 't', sessionId: 'ab', status: 'blocked', seq: 4 }, answers: [{ kind: 'option', n: 1 }] } };
+  const ask = { v: 1, kind: 'asks', title: 'Ask', url: '/s/ab', actions: [{ action: 'keep', title: 'Keep' }, { action: 'ghost', title: 'No answer stored' }], answers };
+
+  it('puts a button only on an action that has an answer stored with it', async () => {
+    const worker = loadWorker();
+    const event = { data: { json: () => ask }, ...waitable() };
+    worker.listeners['push'](event);
+    await event.box.promise;
+    expect(worker.shown[0].options['actions']).toEqual([{ action: 'keep', title: 'Keep' }]);
+  });
+
+  it('sends the stored answer, with what the person saw, when its button is tapped, and says so when the server refuses', async () => {
+    const worker = loadWorker();
+    const shownByPush = { notification: { close: () => undefined, data: { url: '/s/ab', answers } }, action: 'keep', ...waitable() };
+    worker.listeners['notificationclick'](shownByPush);
+    await shownByPush.box.promise;
+    expect(worker.fetches[0].url).toBe('/api/sessions/ab/answer');
+    expect(JSON.parse(worker.fetches[0].init!.body as string)).toEqual({ questionId: 'q1', expect: answers.keep.expect, answers: answers.keep.answers });
+    expect(worker.shown).toHaveLength(0);
+
+    const refused = loadWorker(undefined, 409);
+    const click = { notification: { close: () => undefined, data: { url: '/s/ab', answers } }, action: 'keep', ...waitable() };
+    refused.listeners['notificationclick'](click);
+    await click.box.promise;
+    expect(refused.shown[0].options['body']).toBe('The session changed since you looked; check it again');
+    expect(refused.opened).toEqual([]);
+  });
+
+  it('does nothing for a button whose answer was never stored', async () => {
+    const worker = loadWorker();
+    const click = { notification: { close: () => undefined, data: { url: '/s/ab', answers: null } }, action: 'keep', ...waitable() };
+    worker.listeners['notificationclick'](click);
+    await click.box.promise;
+    expect(worker.fetches).toEqual([]);
   });
 
   it('opens a window when none is open, and focuses and navigates one that is', async () => {
@@ -77,12 +116,12 @@ describe('service worker', () => {
       worker.listeners['notificationclick'](event);
       await event.box.promise;
     };
-    await click('/runs/abc');
-    expect(worker.opened).toEqual(['/runs/abc']);
+    await click('/s/abc');
+    expect(worker.opened).toEqual(['/s/abc']);
     const client = { focus: () => Promise.resolve(client), navigate: (url: string) => { worker.navigated.push(url); return Promise.resolve(); } };
     worker.self.windows = [client];
     await click('https://evil.example/runs/abc');
-    expect(worker.navigated).toEqual(['/runs']);
+    expect(worker.navigated).toEqual(['/']);
   });
 
   it('posts a replaced subscription to the server when the browser hands over the new one', async () => {

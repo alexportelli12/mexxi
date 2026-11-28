@@ -2,6 +2,7 @@
 // index.html, the service worker is never cached, and the app shell sits behind
 // the same identity check as the API.
 import assert from "node:assert/strict";
+import { IMAGE_HOSTS } from "../lib/html-sanitize.mjs";
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
@@ -32,7 +33,7 @@ test("every web response carries the strict policy, and deep links get the app",
   for (const url of ["/", "/runs/0f0f0f0f-0f0f-4f0f-8f0f-0f0f0f0f0f0f", "/approvals/abc123", "/assets/main-abc.js"]) {
     const response = await request(server, "GET", url);
     assert.equal(response.status, 200, url);
-    assert.equal(response.headers["content-security-policy"], "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+    assert.equal(response.headers["content-security-policy"], `default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: ${IMAGE_HOSTS.map((host) => `https://${host}`).join(" ")}; connect-src 'self'; worker-src 'self'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`);
     assert.equal(response.headers["x-content-type-options"], "nosniff");
     assert.equal(response.headers["referrer-policy"], "no-referrer");
   }

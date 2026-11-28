@@ -1,37 +1,35 @@
-import { clearTask, loadDraft, saveDraft } from './draft';
+import { loadDraft, readSetting, saveDraft, writeSetting } from './draft';
 
 const memory = () => {
   const data = new Map<string, string>();
   return { getItem: (key: string) => data.get(key) ?? null, setItem: (key: string, value: string) => void data.set(key, value), removeItem: (key: string) => void data.delete(key) };
 };
-const throwing = {
-  getItem: () => { throw new Error('blocked'); },
-  setItem: () => { throw new Error('full'); },
-  removeItem: () => { throw new Error('blocked'); },
-};
 
-describe('draft persistence', () => {
-  it('keeps the repo, action and task between loads', () => {
+describe('start draft', () => {
+  it('remembers the repo and the way of starting', () => {
     const store = memory();
-    saveDraft({ repo: 'my-app', action: 'build', task: 'Fix the footer' }, store);
-    expect(loadDraft(store)).toEqual({ repo: 'my-app', action: 'build', task: 'Fix the footer' });
+    saveDraft({ repo: 'my-repo', mode: 'issue' }, store);
+    expect(loadDraft(store)).toEqual({ repo: 'my-repo', mode: 'issue' });
   });
 
-  it('clears only the task after a start', () => {
+  it('falls back to a prompt when nothing is saved or the saved way is unknown', () => {
     const store = memory();
-    saveDraft({ repo: 'my-app', action: 'ask', task: 'Why?' }, store);
-    clearTask(store);
-    expect(loadDraft(store)).toEqual({ repo: 'my-app', action: 'ask', task: '' });
+    expect(loadDraft(store)).toEqual({ repo: '', mode: 'prompt' });
+    saveDraft({ repo: 'r', mode: 'wat' as never }, store);
+    expect(loadDraft(store).mode).toBe('prompt');
   });
 
-  it('survives storage that throws, or holds rubbish', () => {
-    expect(loadDraft(throwing)).toEqual({ repo: '', action: '', task: '' });
-    expect(() => saveDraft({ repo: 'a', action: 'ask', task: 'b' }, throwing)).not.toThrow();
-    expect(() => clearTask(throwing)).not.toThrow();
+  it('survives storage that throws, as in a private window', () => {
+    const blocked = { getItem: () => { throw new Error('no'); }, setItem: () => { throw new Error('no'); }, removeItem: () => { throw new Error('no'); } };
+    expect(loadDraft(blocked)).toEqual({ repo: '', mode: 'prompt' });
+    expect(() => saveDraft({ repo: 'r', mode: 'pr' }, blocked)).not.toThrow();
+  });
+
+  it('keeps small settings under their own names and removes them on null', () => {
     const store = memory();
-    store.setItem('x', '1');
-    expect(loadDraft({ ...store, getItem: () => '{not json' })).toEqual({ repo: '', action: '', task: '' });
-    expect(loadDraft({ ...store, getItem: () => JSON.stringify({ repo: 5, action: 'rm -rf', task: null }) })).toEqual({ repo: '', action: '', task: '' });
-    expect(loadDraft(null)).toEqual({ repo: '', action: '', task: '' });
+    writeSetting('theme', 'dark', store);
+    expect(readSetting('theme', store)).toBe('dark');
+    writeSetting('theme', null, store);
+    expect(readSetting('theme', store)).toBeNull();
   });
 });
