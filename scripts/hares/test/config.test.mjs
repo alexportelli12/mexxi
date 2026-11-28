@@ -12,11 +12,11 @@ test("hares is off by default, loopback-only, with the plan's caps", async () =>
   const { hares } = await resolveConfig({}, { home });
   assert.equal(hares.enabled, false);
   assert.deepEqual(hares.bind, { host: "127.0.0.1", port: 4280 });
-  assert.equal(hares.runner, "claude-code");
+  assert.ok(!("runner" in hares) && !("model" in hares) && !("canary" in hares), "segwi's runner, model and canary are retired");
   assert.deepEqual(hares.repositories, []);
   assert.deepEqual(hares.auth.web, { mode: "localhost-only", header: "Tailscale-User-Login", allowed: [], hostname: "" });
   assert.equal(hares.limits.concurrentRuns, 2);
-  assert.equal(hares.limits.approvalTimeoutMinutes, 60);
+  assert.deepEqual(Object.keys(hares.limits).sort(), ["concurrentRuns", "inputMaxChars", "runsPerDay", "taskMaxChars"], "no run timeouts: a session is the person's");
   assert.equal(hares.push, true);
   assert.equal(hares.service.systemdUserUnit, false);
 });
@@ -25,7 +25,7 @@ test("a partly set hares key keeps the other defaults", async () => {
   const { hares } = await resolveConfig({ hares: { enabled: true, limits: { runsPerDay: 5 } } }, { home });
   assert.equal(hares.enabled, true);
   assert.equal(hares.limits.runsPerDay, 5);
-  assert.equal(hares.limits.maxTurns, 80);
+  assert.equal(hares.limits.concurrentRuns, 2);
 });
 
 test("a repository with an unknown action, or an unknown auth mode, is refused", async () => {
@@ -36,12 +36,14 @@ test("a repository with an unknown action, or an unknown auth mode, is refused",
   await assert.rejects(resolveConfig({ hares: { auth: { web: { mode: "open" } } } }, { home }), ConfigError);
 });
 
-test("the canary defaults to a small model and a short run, and refuses a model name with odd characters", async () => {
+test("notifications default to asks, finishes and main red on, ready and bumps off, and a repository may name its GitHub slug", async () => {
   const { hares } = await resolveConfig({}, { home });
-  assert.deepEqual(hares.canary, { model: "haiku", maxTurns: 6 });
-  assert.equal((await resolveConfig({ hares: { canary: { maxTurns: 3 } } }, { home })).hares.canary.model, "haiku");
-  await assert.rejects(resolveConfig({ hares: { canary: { model: "haiku; rm" } } }, { home }), ConfigError);
-  await assert.rejects(resolveConfig({ hares: { canary: { maxTurns: 0 } } }, { home }), ConfigError);
+  assert.deepEqual(hares.notifications.events, { asks: true, finishes: true, mainRed: true, prReady: false, newBump: false });
+  assert.deepEqual(hares.notifications.quietHours, { enabled: false, start: "23:00", end: "07:00" });
+  await assert.rejects(resolveConfig({ hares: { notifications: { quietHours: { start: "25:00" } } } }, { home }), ConfigError);
+  const slug = await resolveConfig({ hares: { repositories: [{ name: "my-app", path: "~/my-app", actions: ["build"], github: "me/my-app" }] } }, { home });
+  assert.equal(slug.hares.repositories[0].github, "me/my-app");
+  await assert.rejects(resolveConfig({ hares: { repositories: [{ name: "my-app", path: "~/my-app", actions: ["build"], github: "not a slug" }] } }, { home }), ConfigError);
 });
 
 test("an old config with the retired sandbox and permissions keys still loads, ignores them and warns once, naming each to delete", async (t) => {

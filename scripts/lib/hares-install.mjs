@@ -1,6 +1,7 @@
 // What the installer does for hares, which is opt-in (decision 0011): the
 // `hares` link in ~/.local/bin and, on Linux with hares.service.systemdUserUnit,
-// three systemd user units. The link is owned by where it points, like ibni's.
+// one systemd user unit for the server. (The nightly canary's two units were
+// retired with segwi's runner: an install removes them when it recorded them.) The link is owned by where it points, like ibni's.
 // The units are owned by a state file that records each path and the hash of
 // what was written, so a unit mexxi did not write is a conflict and is never
 // overwritten, and turning the feature off removes exactly what was recorded.
@@ -11,8 +12,11 @@ import path from "node:path";
 import { readJson } from "./host-hooks.mjs";
 
 export const UNIT_HEADER = "# Managed by mexxi's installer. Edits are overwritten.";
-// The units `systemctl enable --now` starts; the canary service runs from its timer.
-const ENABLED_UNITS = ["hares.service", "hares-canary.timer"];
+// The units `systemctl enable --now` starts.
+const ENABLED_UNITS = ["hares.service"];
+// The canary's units, retired when herdr replaced segwi's runner (decision 0028): `hares doctor` checks by hand
+// what the canary checked each night. An install that recorded them stops and removes them.
+const RETIRED_UNITS = ["hares-canary.timer", "hares-canary.service"];
 // hares was called segwi. The installer recorded those units and that link, so it retires them (decision 0003).
 const LEGACY_ENABLED_UNITS = ["segwi.service", "segwi-canary.timer"];
 
@@ -87,7 +91,7 @@ export function pathEnvironment(searchPath) {
 }
 
 /**
- * The three unit files as [name, content]. `searchPath` is the PATH the
+ * The unit files as [name, content]: the server. `searchPath` is the PATH the
  * installer ran with: a user service otherwise gets systemd's bare default,
  * which misses a node, claude, gh or ibni installed under the home directory.
  */
@@ -99,7 +103,7 @@ export function renderUnits({ checkout, nodePath, searchPath }) {
     ["hares.service", [
       UNIT_HEADER,
       "[Unit]",
-      "Description=hares, the mexxi run launcher (web app and MCP server on loopback)",
+      "Description=hares, the cockpit for your Claude Code sessions (web app and MCP server on loopback)",
       "After=network.target",
       "",
       "[Service]",
@@ -108,40 +112,14 @@ export function renderUnits({ checkout, nodePath, searchPath }) {
       "RestartSec=5",
       ...environment,
       "# Hardening that cannot get in the agent's way. Filesystem sandboxing (ProtectHome,",
-      "# ProtectSystem, PrivateTmp) is left out on purpose: a run works with your own access,",
-      "# as a session you start by hand does (decision 0016).",
+      "# ProtectSystem, PrivateTmp) is left out on purpose: hares reads your sessions' transcripts",
+      "# and herdr's socket with your own access, as you do (decision 0016).",
       "NoNewPrivileges=yes",
       "LockPersonality=yes",
       "UMask=0077",
       "",
       "[Install]",
       "WantedBy=default.target",
-      "",
-    ].join("\n")],
-    ["hares-canary.service", [
-      UNIT_HEADER,
-      "[Unit]",
-      "Description=hares canary, a small real run that checks the coding agent still behaves as expected",
-      "",
-      "[Service]",
-      "Type=oneshot",
-      `ExecStart=${command("canary")}`,
-      ...environment,
-      "UMask=0077",
-      "",
-    ].join("\n")],
-    ["hares-canary.timer", [
-      UNIT_HEADER,
-      "[Unit]",
-      "Description=Run the hares canary every night",
-      "",
-      "[Timer]",
-      "OnCalendar=*-*-* 03:30",
-      "RandomizedDelaySec=15m",
-      "Persistent=true",
-      "",
-      "[Install]",
-      "WantedBy=timers.target",
       "",
     ].join("\n")],
   ];
@@ -194,7 +172,9 @@ export async function planUnits({ unitsDir, stateFile, legacyStateFile = path.jo
   }
   for (const entry of recorded) {
     if (desired.some((unit) => unit.path === entry.path)) continue;
-    drift.push(`${entry.path} was added by mexxi and config.json no longer asks for it`);
+    drift.push(RETIRED_UNITS.includes(path.basename(entry.path))
+      ? `${entry.path} was added by mexxi for the canary, which is retired`
+      : `${entry.path} was added by mexxi and config.json no longer asks for it`);
     remove.push(entry);
   }
   for (const entry of legacyRecorded) {
@@ -203,13 +183,12 @@ export async function planUnits({ unitsDir, stateFile, legacyStateFile = path.jo
   }
   const owned = { units: desired.map(({ path: unitPath, sha256: hash }) => ({ path: unitPath, sha256: hash })) };
   const commands = [];
-  const stopping = remove.map((entry) => path.basename(entry.path)).filter((name) => [...ENABLED_UNITS, ...LEGACY_ENABLED_UNITS].includes(name));
+  const stopping = remove.map((entry) => path.basename(entry.path)).filter((name) => [...ENABLED_UNITS, ...LEGACY_ENABLED_UNITS, RETIRED_UNITS[0]].includes(name));
   if (stopping.length) commands.push(["disable", "--now", ...stopping]);
   if (write.length || remove.length) commands.push(["daemon-reload"]);
   if (write.length) commands.push(["enable", "--now", ...ENABLED_UNITS]);
   // enable --now leaves a unit that is already running on its old definition, so
-  // one whose file changed is restarted. A fresh unit was just started, and the
-  // canary service is a oneshot that its next run picks up after daemon-reload.
+  // one whose file changed is restarted. A fresh unit was just started.
   const restarting = ENABLED_UNITS.filter((name) => rewritten.includes(name));
   if (restarting.length) commands.push(["restart", ...restarting]);
   return {

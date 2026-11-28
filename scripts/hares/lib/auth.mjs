@@ -3,15 +3,20 @@
 // local. The Host must be a loopback name, or in tailscale-header mode the
 // configured tailnet name, so a page on another site cannot reach the API
 // through DNS rebinding: its requests carry its own name as Host.
+import { LEGACY_RUN_BROWSER_MARKS, RUN_BROWSER_MARK } from "../../lib/browser.mjs";
 import { isLoopbackAddress } from "./bind.mjs";
 import { HttpError } from "./errors.mjs";
 
-/**
- * A run's browser (Playwright MCP) puts this in its user agent, and hares refuses
- * any request that carries it. Unlike an origin list, that holds through redirects and however the host is
- * spelled, and no browser tool a run may use can change the user agent.
- */
-export const RUN_BROWSER_MARK = "hares-run-browser";
+// The mark is defined beside the Playwright arguments that send it (scripts/lib/browser.mjs). hares refuses
+// any request that carries it, in the old spelling too, and no browser tool the agent may use can change the
+// user agent.
+export { RUN_BROWSER_MARK };
+
+/** True when the request's user agent carries the mark of a browser the agent drives, in any spelling. */
+export function isRunBrowserRequest(req) {
+  const userAgent = String(req.headers["user-agent"] ?? "").toLowerCase();
+  return [RUN_BROWSER_MARK, ...LEGACY_RUN_BROWSER_MARKS].some((mark) => userAgent.includes(mark));
+}
 
 export const PROXY_HEADERS = ["tailscale-user-login", "tailscale-user-name", "x-forwarded-for", "forwarded"];
 const LOOPBACK_NAMES = new Set(["127.0.0.1", "localhost", "[::1]"]);
@@ -40,6 +45,8 @@ export function createAuthenticator(web) {
   const header = web.header.toLowerCase();
   const tailnetName = hostName(web.hostname ?? "");
   return function authenticate(req) {
+    // Before identity: behind tailscale serve this browser carries yours, and it must not tap Approve.
+    if (isRunBrowserRequest(req)) throw new HttpError(403, "A run's own browser can't use hares.");
     if (!isLoopbackAddress(req.socket.remoteAddress)) throw new HttpError(403, "Only loopback connections are accepted.");
     if (web.mode === "localhost-only") {
       const proxied = PROXY_HEADERS.find((name) => req.headers[name] !== undefined);

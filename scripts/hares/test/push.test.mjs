@@ -1,5 +1,6 @@
 // Push (plan sections 6.8, 11.5 and 11.8): a stand-in push service records what the
-// server sends; the test decrypts each body the way a browser would.
+// server sends; the test decrypts each body the way a browser would. When a push is
+// sent, and what it says, is notify.mjs's (notify.test.mjs); this is delivery.
 import assert from "node:assert/strict";
 import { readFileSync, statSync } from "node:fs";
 import http from "node:http";
@@ -8,11 +9,10 @@ import net from "node:net";
 import path from "node:path";
 import test from "node:test";
 import { endpointAllowed } from "../lib/push.mjs";
-import { startServer } from "../lib/serve.mjs";
 import { runVapid } from "../lib/vapid-cli.mjs";
 import { initVapid, readVapid } from "../lib/vapid.mjs";
 import { decryptPush, makeSubscriber } from "./push-decrypt.mjs";
-import { fakeAdapter, makeRepo, makeSettings, request, tempDir, waitFor } from "./helpers.mjs";
+import { makeSettings, request, startHares, tempDir } from "./helpers.mjs";
 
 const TOKEN = `ghp_${"a1B2c3D4e5".repeat(4).slice(0, 36)}`;
 
@@ -36,110 +36,63 @@ async function standIn(t) {
   return { posts, state, agent, endpoint: "https://push.example.com/send/abc123" };
 }
 
-const noPr = { pr: false };
-const ibni = {
-  findNewWorkspace: async () => ({ sessionId: "s1", worktreePath: "/tmp/hares-test-worktrees/s1" }),
-  summary: async () => ({ branch: "agent/demo", prUrl: noPr.pr ? "https://github.com/example/my-app/pull/1" : null, verify: "pass", worktreePath: "/tmp/hares-test-worktrees/s1" }),
-  list: async () => [],
-};
-
-async function boot(t, fixture, push, stateDir) {
-  process.env.FAKE_HOST_TOKEN = TOKEN;
-  t.after(() => { delete process.env.FAKE_HOST_TOKEN; });
-  const repo = makeRepo(t);
-  const host = fakeAdapter(t, fixture);
-  const settings = makeSettings({ repos: [{ name: "my-app", path: repo, actions: ["build", "ready", "ask"] }] });
-  const server = await startServer({
-    settings, dataDir: tempDir(t, "hares-data-"), runner: host.adapter, ibni, staticRoot: null, stateDir,
-    pushOptions: { allowEndpoint: () => true, agent: push.agent },
-  });
-  t.after(() => server.close());
+/** The server with push signed by `stateDir`'s keys, delivering to the stand-in, and one subscribed device. */
+async function boot(t, push, stateDir, settingsPatch = null) {
+  const box = await startHares(t, { stateDir, pushOptions: { allowEndpoint: () => true, agent: push.agent }, ...(settingsPatch ? { settingsPatch } : {}) });
   const subscriber = makeSubscriber();
-  const subscribed = await request(server, "POST", "/api/push/subscriptions", { body: { endpoint: push.endpoint, keys: subscriber.keys } });
+  const subscribed = await request(box.server, "POST", "/api/push/subscriptions", { body: { endpoint: push.endpoint, keys: subscriber.keys } });
   assert.equal(subscribed.status, 201);
-  return { server, subscriber, subscriptionId: subscribed.json.id };
+  return { ...box, subscriber, subscriptionId: subscribed.json.id };
 }
 
 const decrypted = (push, subscriber) => push.posts.map((post) => JSON.parse(decryptPush(post.body, subscriber)));
 
-test("each transition that needs you sends exactly one encrypted push, with the documented headers and payload", async (t) => {
+test("each notification sends exactly one encrypted push per device, with the documented headers and a payload that carries no task", async (t) => {
   const stateDir = tempDir(t, "hares-state-");
   const publicKey = initVapid(stateDir);
   const push = await standIn(t);
-  noPr.pr = false;
-  const { server, subscriber } = await boot(t, "push-flow", push, stateDir);
-  const started = await request(server, "POST", "/api/runs", { body: { repo: "my-app", action: "build", task: `Look at example.com with ${TOKEN}` } });
-  const runId = started.json.run.id;
-  const answer = async (decision) => {
-    const approval = await waitFor(async () => (await request(server, "GET", "/api/approvals?status=pending")).json.approvals[0], { what: "an approval" });
-    await request(server, "POST", `/api/approvals/${approval.id}`, { body: { decision } });
-    return approval;
-  };
-  const first = await answer("allow");
-  await waitFor(() => server.store.getRun(runId).status === "running" || server.store.pendingApprovalsFor(runId).length === 0, { what: "resume" });
-  const second = await waitFor(async () => {
-    const pending = (await request(server, "GET", "/api/approvals?status=pending")).json.approvals[0];
-    return pending && pending.id !== first.id ? pending : null;
-  }, { what: "the second approval" });
-  await request(server, "POST", `/api/approvals/${second.id}`, { body: { decision: "deny" } });
-  await waitFor(() => server.store.getRun(runId).status === "needs_input", { what: "needs_input" });
-  noPr.pr = true;
-  assert.equal((await request(server, "POST", `/api/runs/${runId}/input`, { body: { text: "Go on" } })).status, 200);
-  await waitFor(() => server.store.getRun(runId).status === "completed", { what: "completed" });
+  const { server, subscriber } = await boot(t, push, stateDir);
+  server.notifier.dispatch("asks", { sessionId: "11111111-1111-4111-8111-111111111111", recordId: "toolu_1", repo: "my-app", waiting: "permission", task: `Look at example.com with ${TOKEN}` });
+  server.notifier.dispatch("finishes", { sessionId: "11111111-1111-4111-8111-111111111111", repo: "my-app" });
   await server.push.idle();
 
-  assert.equal(push.posts.length, 4);
+  assert.equal(push.posts.length, 2);
   for (const post of push.posts) {
     assert.equal(post.headers["content-encoding"], "aes128gcm");
     assert.equal(post.headers.ttl, "3600");
-    assert.match(post.headers.topic, /^run-[0-9a-f]{12}$/);
+    assert.match(post.headers.topic, /^[0-9a-f]{32}$/);
     assert.match(post.headers.authorization, /^vapid t=[\w-]+\.[\w-]+\.[\w-]+, k=[\w-]+$/);
     assert.equal(post.headers.authorization.split("k=")[1], publicKey);
   }
-  assert.deepEqual(push.posts.map((post) => post.headers.urgency), ["high", "high", "high", "normal"]);
+  assert.deepEqual(push.posts.map((post) => post.headers.urgency), ["high", "normal"]);
   const payloads = decrypted(push, subscriber);
-  assert.deepEqual(payloads.map((payload) => payload.kind), ["needs_approval", "needs_approval", "needs_input", "completed"]);
   assert.deepEqual(payloads[0], {
-    v: 1, kind: "needs_approval", runId, approvalId: first.id, repo: "my-app", status: "needs_approval",
-    title: "my-app needs your OK", url: `/approvals/${first.id}`, tag: `run-${runId}`,
+    v: 1, kind: "asks", title: "my-app needs your OK", body: "", url: "/s/11111111-1111-4111-8111-111111111111?q=toolu_1",
+    tag: "session-11111111-1111-4111-8111-111111111111", sessionId: "11111111-1111-4111-8111-111111111111", recordId: "toolu_1", actions: [], answers: {},
   });
-  assert.equal(payloads[1].approvalId, second.id);
-  assert.deepEqual(payloads[2], { v: 1, kind: "needs_input", runId, repo: "my-app", status: "needs_input", title: "my-app needs your reply", url: `/runs/${runId}`, tag: `run-${runId}` });
-  assert.equal(payloads[3].title, "my-app is done");
+  assert.equal(payloads[1].title, "my-app finished");
   assert.ok(payloads.every((payload) => payload.title.length <= 80));
-
   const everything = JSON.stringify(payloads) + push.posts.map((post) => post.body.toString("latin1")).join("");
   assert.ok(!everything.includes(TOKEN), "no token in a payload or a recorded body");
   assert.ok(!everything.includes("example.com"), "no task text or command in a payload");
 });
 
-test("a failed run sends one push, and a push service answering 410 removes the subscription and audits it", async (t) => {
+test("a push service answering 410 removes the subscription and audits it", async (t) => {
   const stateDir = tempDir(t, "hares-state-");
   initVapid(stateDir);
   const push = await standIn(t);
-  const { server, subscriber, subscriptionId } = await boot(t, "error-result", push, stateDir);
-  await request(server, "POST", "/api/runs", { body: { repo: "my-app", action: "build", task: "Break" } });
-  await waitFor(() => push.posts.length === 1, { what: "the failure push" });
-  await server.push.idle();
-  const [payload] = decrypted(push, subscriber);
-  assert.equal(payload.kind, "failed");
-  assert.equal(payload.title, "my-app failed");
-  assert.equal(push.posts[0].headers.urgency, "normal");
-
+  const { server, subscriptionId } = await boot(t, push, stateDir);
   push.state.status = 410;
-  await request(server, "POST", "/api/runs", { body: { repo: "my-app", action: "build", task: "Again" } });
-  await waitFor(() => push.posts.length === 2, { what: "the second push" });
+  server.notifier.dispatch("finishes", { sessionId: "11111111-1111-4111-8111-111111111111", repo: "my-app" });
   await server.push.idle();
+  assert.equal(push.posts.length, 1);
   assert.equal(server.store.getSubscription(subscriptionId), null);
   assert.ok(server.store.listAudit(100).some((row) => row.action === "push.gone" && row.target === subscriptionId));
 });
 
 test("subscribing twice keeps one id, the endpoint rule applies, and nothing sensitive reaches the audit log", async (t) => {
   const stateDir = tempDir(t, "hares-state-");
-  const repo = makeRepo(t);
-  const settings = makeSettings({ repos: [{ name: "my-app", path: repo, actions: ["ask"] }] });
-  const server = await startServer({ settings, dataDir: tempDir(t, "hares-data-"), runner: fakeAdapter(t, "ask-completed").adapter, ibni, staticRoot: null, stateDir });
-  t.after(() => server.close());
+  const { server } = await startHares(t, { stateDir });
   const keys = makeSubscriber().keys;
   const endpoint = "https://fcm.googleapis.com/fcm/send/secret-device-token";
   const first = await request(server, "POST", "/api/push/subscriptions", { body: { endpoint, keys } });
@@ -166,9 +119,7 @@ test("subscribing twice keeps one id, the endpoint rule applies, and nothing sen
 
 test("the public key route says when push isn't set up and serves the key once it is", async (t) => {
   const stateDir = tempDir(t, "hares-state-");
-  const settings = makeSettings({ repos: [{ name: "my-app", path: makeRepo(t), actions: ["ask"] }] });
-  const server = await startServer({ settings, dataDir: tempDir(t, "hares-data-"), runner: fakeAdapter(t, "ask-completed").adapter, ibni, staticRoot: null, stateDir });
-  t.after(() => server.close());
+  const { server } = await startHares(t, { stateDir });
   const missing = await request(server, "GET", "/api/push/key");
   assert.equal(missing.status, 404);
   assert.equal(missing.json.error, "Push isn't set up. To set it up, run hares vapid init.");
@@ -180,22 +131,12 @@ test("without hares.vapidSubject push counts as not set up: the key route says s
   const stateDir = tempDir(t, "hares-state-");
   initVapid(stateDir);
   const push = await standIn(t);
-  const settings = makeSettings({ repos: [{ name: "my-app", path: makeRepo(t), actions: ["build", "ready", "ask"] }] });
-  settings.hares.vapidSubject = "";
-  process.env.FAKE_HOST_TOKEN = TOKEN;
-  t.after(() => { delete process.env.FAKE_HOST_TOKEN; });
-  const server = await startServer({
-    settings, dataDir: tempDir(t, "hares-data-"), runner: fakeAdapter(t, "error-result").adapter, ibni, staticRoot: null, stateDir,
-    pushOptions: { allowEndpoint: () => true, agent: push.agent },
-  });
-  t.after(() => server.close());
+  const { server } = await boot(t, push, stateDir, { hares: { ...makeSettings({ repos: [] }).hares, vapidSubject: "" } });
   const missing = await request(server, "GET", "/api/push/key");
   assert.equal(missing.status, 404);
   assert.match(missing.json.error, /hares\.vapidSubject/);
   assert.doesNotMatch(missing.json.error, /vapid init/, "the keys exist, so only the subject is missing");
-  await request(server, "POST", "/api/push/subscriptions", { body: { endpoint: push.endpoint, keys: makeSubscriber().keys } });
-  const started = await request(server, "POST", "/api/runs", { body: { repo: "my-app", action: "build", task: "Break" } });
-  await waitFor(() => server.store.getRun(started.json.run.id).status === "failed", { what: "the failure" });
+  server.notifier.dispatch("finishes", { sessionId: "11111111-1111-4111-8111-111111111111", repo: "my-app" });
   await server.push.idle();
   assert.equal(push.posts.length, 0);
 });
@@ -204,9 +145,8 @@ test("the configured subject signs every push", async (t) => {
   const stateDir = tempDir(t, "hares-state-");
   initVapid(stateDir);
   const push = await standIn(t);
-  const { server } = await boot(t, "error-result", push, stateDir);
-  await request(server, "POST", "/api/runs", { body: { repo: "my-app", action: "build", task: "Break" } });
-  await waitFor(() => push.posts.length === 1, { what: "the failure push" });
+  const { server } = await boot(t, push, stateDir);
+  server.notifier.dispatch("finishes", { sessionId: "11111111-1111-4111-8111-111111111111", repo: "my-app" });
   await server.push.idle();
   const token = push.posts[0].headers.authorization.match(/^vapid t=([\w-]+\.[\w-]+\.[\w-]+)/)[1];
   const claims = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString("utf8"));

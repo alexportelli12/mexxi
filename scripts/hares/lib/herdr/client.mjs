@@ -13,6 +13,21 @@ import path from "node:path";
 /** The herdr protocol this client was written and tested against (herdr 0.9.5). */
 export const HERDR_PROTOCOL = 22;
 export const REQUEST_TIMEOUT_MS = 3000;
+/**
+ * Creating and closing tabs, workspaces and panes, and starting an agent, can take
+ * longer than a read: closing a workspace or a pane took over 3 s live at gate 1.
+ */
+export const LIFECYCLE_TIMEOUT_MS = 15_000;
+// Lifecycle calls are named by their verb (create, close, start), so this module
+// chooses a wait without naming a write method (test/herdr-static.test.mjs).
+const LIFECYCLE_VERB = /\.(create|close|start)$/;
+
+/** The client-side wait for one write: longer for lifecycle calls, and never shorter than herdr's own timeout_ms. */
+export function writeTimeoutFor(method, params) {
+  if (!LIFECYCLE_VERB.test(method)) return REQUEST_TIMEOUT_MS;
+  const herdrWait = Number.isInteger(params?.timeout_ms) ? params.timeout_ms + 5_000 : 0;
+  return Math.max(LIFECYCLE_TIMEOUT_MS, herdrWait);
+}
 
 /** The only methods herdrRequest sends: none of them changes a pane. */
 export const READ_METHODS = new Set([
@@ -80,7 +95,7 @@ export async function herdrRequest(method, params = {}, options = {}) {
 
 /** Any request, sent once and never retried. Only guard.mjs may import this. */
 export function herdrWrite(method, params, options = {}) {
-  return roundTrip(method, params, options);
+  return roundTrip(method, params, { timeoutMs: writeTimeoutFor(method, params), ...options });
 }
 
 /**

@@ -1,0 +1,13 @@
+[
+  {
+    "tool": "Bash",
+    "input": {
+      "command": "git ls-files",
+      "description": "List tracked files"
+    },
+    "result": "README.md\nnotes.txt"
+  },
+  {
+    "say": "The repository has two tracked files: `README.md` and `notes.txt`."
+  }
+]

@@ -409,7 +409,7 @@ export async function install(options = {}) {
       ...(modsPlan?.drift ?? []),
       ...haresUnits.drift,
       ...await registrationDrift({
-        browser: config.browser, hosts: config.hosts, home,
+        browser: config.browser, hosts: config.hosts, home, hares: config.hares,
         claudeJson: options.claudeJson ?? path.join(home, ".claude.json"),
         codexConfig: path.join(options.codex ?? path.join(home, ".codex"), "config.toml"),
       }),
@@ -475,7 +475,7 @@ export async function install(options = {}) {
       }).catch((error) => ({ version: config.browser.playwrightMcpVersion, failed: error.message }))
       : { version: config.browser.playwrightMcpVersion, skipped: "not the real home" };
   }
-  const registration = Object.fromEntries(Object.entries(registrationCommands(config.browser, home)).filter(([host]) => config.hosts[host]));
+  const registration = Object.fromEntries(Object.entries(registrationCommands(config.browser, home, config.hares)).filter(([host]) => config.hosts[host]));
   return {
     created: pending.length, relinked: relinks.length, removed: stale.length, rendered: drift.length, checked: entries.length,
     settings: settingsPlan?.drift.length ?? 0, ...(playwrightMcp && { playwrightMcp }), ...(hasUnitWork && { hares: { ...unitSummary, systemctl: unitOutcome.systemctl, failed: unitOutcome.failed } }), ...modsSummary(modsPlan), ...(modsFailed && { mods: "failed", modsFailed }), registration,

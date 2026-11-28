@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { ConfigError, resolveConfig } from "../../lib/config.mjs";
 import { dataDir, ensurePrivateDir } from "../lib/paths.mjs";
-import { settingsFromConfig } from "../lib/settings.mjs";
+import { readSettings, settingsFromConfig } from "../lib/settings.mjs";
 import { openStore } from "../lib/store.mjs";
 import { tempDir } from "./helpers.mjs";
 
@@ -60,7 +60,7 @@ test("data left in mexxi/segwi moves to mexxi/hares once, and never over a hares
 
 test("the store versions its schema and keeps run ids, event sequences and client ids unique", () => {
   const store = openStore(":memory:");
-  assert.equal(store.db.prepare("PRAGMA user_version").get().user_version, 6);
+  assert.equal(store.db.prepare("PRAGMA user_version").get().user_version, 8);
   store.createRun({ id: "r1", repo: "a", action: "ask", task: "t", clientId: "c1" });
   assert.throws(() => store.createRun({ id: "r2", repo: "a", action: "ask", task: "t", clientId: "c1" }));
   const first = store.addEvent("r1", "text", { text: "a" });
@@ -79,7 +79,7 @@ test("a version 4 database gains waitingOn, the ibni snapshot and gate acceptanc
   old.close();
   const store = openStore(file);
   t.after(() => store.close());
-  assert.equal(store.db.prepare("PRAGMA user_version").get().user_version, 6);
+  assert.equal(store.db.prepare("PRAGMA user_version").get().user_version, 8);
   assert.equal(store.getRun("r1").waitingOn, null);
   const updated = store.updateRun("r1", { waitingOn: "Waiting on npm run verify", snapshot: { steps: [{ step: "prepare", outcome: "succeeded" }] } });
   assert.deepEqual([updated.waitingOn, updated.snapshot], ["Waiting on npm run verify", { steps: [{ step: "prepare", outcome: "succeeded" }] }]);
@@ -102,4 +102,24 @@ test("the VAPID subject is empty by default, takes a real contact, and refuses p
   assert.throws(() => settingsFromConfig(withSubject("mailto:hares@localhost")), /placeholder/);
   // The schema checks the shape; the clear message about placeholders comes from settings.
   await assert.rejects(resolveConfig({ hares: { vapidSubject: "hares@example.com" } }, { home }), /vapidSubject/);
+});
+
+test("a config that still sets segwi's runner, model, canary or run timeouts loads, drops them and names each to delete", async (t) => {
+  const dir = tempDir(t);
+  const file = path.join(dir, "config.json");
+  writeFileSync(file, JSON.stringify({ hares: {
+    enabled: true, runner: "claude-code", model: "sonnet", canary: { model: "haiku", maxTurns: 6 },
+    limits: { concurrentRuns: 3, maxTurns: 80, idleTimeoutMinutes: 30, hardTimeoutMinutes: 120, approvalTimeoutMinutes: 60 },
+    repositories: [{ name: "app", path: "/tmp/app", actions: ["build"], github: "me/app" }],
+  } }));
+  const warnings = [];
+  const settings = await readSettings({ file, home: dir, warn: (message) => warnings.push(message) });
+  assert.equal(warnings.length, 1);
+  for (const key of ["hares.runner", "hares.model", "hares.canary", "hares.limits.maxTurns", "hares.limits.idleTimeoutMinutes", "hares.limits.hardTimeoutMinutes", "hares.limits.approvalTimeoutMinutes"]) {
+    assert.ok(warnings[0].includes(key), key);
+  }
+  assert.ok(!("runner" in settings.hares) && !("canary" in settings.hares) && !("maxTurns" in settings.hares.limits));
+  assert.equal(settings.hares.limits.concurrentRuns, 3, "the caps that remain are kept");
+  assert.equal(settings.hares.repositories[0].github, "me/app");
+  assert.deepEqual(settings.hares.notifications.events, { asks: true, finishes: true, mainRed: true, prReady: false, newBump: false }, "notification defaults come from the schema");
 });

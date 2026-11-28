@@ -63,8 +63,9 @@ test("with hares on the settings gain one group per event, with the right matche
   assert.equal(groups.PreToolUse[0].matcher, "AskUserQuestion|ExitPlanMode|REPL");
   assert.equal(groups.PermissionRequest[0].matcher, "*");
   assert.equal(groups.Notification[0].matcher, "permission_prompt|idle_prompt|elicitation_dialog");
-  assert.equal(groups.PostToolUse[0].matcher, "*");
-  assert.equal(groups.PostToolUseFailure[0].matcher, "*");
+  // Not "*": that would start node after every tool call in every session.
+  assert.equal(groups.PostToolUse[0].matcher, "AskUserQuestion|ExitPlanMode|REPL");
+  assert.equal(groups.PostToolUseFailure[0].matcher, "AskUserQuestion|ExitPlanMode|REPL");
   for (const event of ["UserPromptSubmit", "Stop", "SessionEnd"]) assert.equal("matcher" in groups[event][0], false, event + " takes no matcher");
   for (const group of Object.values(groups).flat()) {
     assert.equal(group.hooks[0].timeout, 5);

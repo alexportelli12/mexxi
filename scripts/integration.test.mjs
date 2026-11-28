@@ -93,7 +93,7 @@ async function copyCheckout(base) {
 async function registerPlaywright(home, { codex = path.join(home, ".codex") } = {}) {
   const { config } = await loadConfig({ file: path.join(home, ".config/mexxi/config.json"), home });
   await fakePlaywrightMcp(home, config.browser.playwrightMcpVersion);
-  const args = playwrightArguments(config.browser, home);
+  const args = playwrightArguments(config.browser, home, config.hares);
   if (config.hosts.claude) {
     await writeFile(path.join(home, ".claude.json"), JSON.stringify({ mcpServers: { playwright: { type: "stdio", command: "node", args, env: {} } } }));
   }
@@ -1344,11 +1344,11 @@ test("with hares unset, or set to its defaults, the install records and renders 
   for (const name of unset.files.keys()) assert.doesNotMatch(name, /systemd|hares-units/, name);
 });
 
-// hares opted in: the `hares` link, and optionally three systemd user units
+// hares opted in: the `hares` link, and optionally a systemd user unit
 // recorded in a state file. A stand-in systemctl logs its calls; none of
 // these tests reaches the real systemd or the real home.
 const haresLinkTarget = path.join(path.resolve(checkout), "scripts/hares/server.mjs");
-const unitNames = ["hares-canary.service", "hares-canary.timer", "hares.service"];
+const unitNames = ["hares.service"];
 
 function systemctlStub(result = { available: true, status: 0, stderr: "" }) {
   const calls = [];
@@ -1386,7 +1386,7 @@ test("enabling hares without the service adds the link and nothing else", async 
   await install({ ...on.options, check: true });
 });
 
-test("enabling the service writes three recorded units and starts them through systemctl", async (t) => {
+test("enabling the service writes the recorded server unit and starts it through systemctl", async (t) => {
   const { home, options, stub } = await haresHome(t, withService);
   const result = await install(options);
 
@@ -1397,21 +1397,15 @@ test("enabling the service writes three recorded units and starts them through s
   for (const line of ["Restart=on-failure", "RestartSec=5", "NoNewPrivileges=yes", "LockPersonality=yes", "UMask=0077", "Environment=NODE_ENV=production", 'Environment="PATH=/opt/node/bin:/home/someone/.local/bin:/usr/bin"']) {
     assert.match(service, new RegExp(`^${line}$`, "m"), line);
   }
-  // A run works with your own access, as a session you start by hand does.
+  // hares reads your sessions with your own access, as you do.
   assert.doesNotMatch(service, /^(ProtectHome|ProtectSystem|PrivateTmp|RestrictSUIDSGID)=/m);
-  const canary = await readFile(unitFile(home, "hares-canary.service"), "utf8");
-  assert.match(canary, /^Type=oneshot$/m);
-  assert.match(canary, /^Environment="PATH=\/opt\/node\/bin:\/home\/someone\/\.local\/bin:\/usr\/bin"$/m);
-  assert.match(canary, /^ExecStart=\S+ \S+\/scripts\/hares\/server\.mjs canary$/m);
-  const timer = await readFile(unitFile(home, "hares-canary.timer"), "utf8");
-  for (const line of ["OnCalendar=*-*-* 03:30", "RandomizedDelaySec=15m", "Persistent=true", "WantedBy=timers.target"]) assert.ok(timer.includes(`\n${line}\n`), line);
   for (const name of unitNames) assert.ok((await readFile(unitFile(home, name), "utf8")).startsWith("# Managed by mexxi's installer."), name);
 
   const state = JSON.parse(await readFile(stateFile(home), "utf8"));
-  assert.deepEqual(state.units.map((unit) => unit.path), ["hares.service", "hares-canary.service", "hares-canary.timer"].map((name) => unitFile(home, name)));
+  assert.deepEqual(state.units.map((unit) => unit.path), ["hares.service"].map((name) => unitFile(home, name)));
   for (const unit of state.units) assert.equal(unit.sha256, createHash("sha256").update(await readFile(unit.path)).digest("hex"));
 
-  assert.deepEqual(stub.calls, [["daemon-reload"], ["enable", "--now", "hares.service", "hares-canary.timer"]]);
+  assert.deepEqual(stub.calls, [["daemon-reload"], ["enable", "--now", "hares.service"]]);
   assert.equal(result.hares.systemctl, "ran");
   // Running it again changes and runs nothing, and --check is green.
   assert.equal((await install(options)).hares, undefined);
@@ -1423,8 +1417,8 @@ test("--dry-run lists the units and the systemctl commands and writes nothing", 
   const { home, options, stub } = await haresHome(t, withService);
   const before = await snapshot(home);
   const result = await install({ ...options, dryRun: true });
-  assert.deepEqual(result.hares.units, { write: ["hares.service", "hares-canary.service", "hares-canary.timer"].map((name) => unitFile(home, name)), remove: [] });
-  assert.deepEqual(result.hares.commands, ["systemctl --user daemon-reload", "systemctl --user enable --now hares.service hares-canary.timer"]);
+  assert.deepEqual(result.hares.units, { write: ["hares.service"].map((name) => unitFile(home, name)), remove: [] });
+  assert.deepEqual(result.hares.commands, ["systemctl --user daemon-reload", "systemctl --user enable --now hares.service"]);
   assert.deepEqual(await snapshot(home), before);
   assert.deepEqual(stub.calls, []);
   await assert.rejects(lstat(path.join(home, ".config/systemd")), /ENOENT/);
@@ -1442,7 +1436,7 @@ test("turning the service off, or hares off, removes exactly the recorded units 
   const result = await install(options);
   assert.deepEqual((await readdir(path.join(home, ".config/systemd/user"))).sort(), ["mine.service"]);
   assert.deepEqual(JSON.parse(await readFile(stateFile(home), "utf8")), { units: [] });
-  assert.deepEqual(stub.calls, [["disable", "--now", "hares.service", "hares-canary.timer"], ["daemon-reload"]]);
+  assert.deepEqual(stub.calls, [["disable", "--now", "hares.service"], ["daemon-reload"]]);
   assert.deepEqual(result.hares.units.remove.sort(), unitNames.map((name) => unitFile(home, name)).sort());
   // The link stays while hares stays enabled.
   if (process.platform !== "win32") assert.equal(await readlink(path.join(home, ".local/bin/hares")), haresLinkTarget);
@@ -1475,31 +1469,31 @@ test("--check reports a unit that was edited or deleted by hand, and the next in
   await install(options);
   await install({ ...options, check: true });
   await writeFile(unitFile(home, "hares.service"), "# edited\n");
-  await rm(unitFile(home, "hares-canary.timer"));
-  await assert.rejects(install({ ...options, check: true }), (error) => {
-    assert.match(error.message, /hares\.service differs from what mexxi renders/);
-    assert.match(error.message, /hares-canary\.timer is missing/);
-    return true;
-  });
+  await assert.rejects(install({ ...options, check: true }), /hares\.service differs from what mexxi renders/);
+  stub.calls.length = 0;
+  await install(options);
+  await install({ ...options, check: true });
+  await rm(unitFile(home, "hares.service"));
+  await assert.rejects(install({ ...options, check: true }), /hares\.service is missing/);
   stub.calls.length = 0;
   await install(options);
   await install({ ...options, check: true });
   assert.ok((await readFile(unitFile(home, "hares.service"), "utf8")).includes("ExecStart="));
-  // The timer was missing, so enable --now starts it; hares.service changed under a running service.
-  assert.deepEqual(stub.calls, [["daemon-reload"], ["enable", "--now", "hares.service", "hares-canary.timer"], ["restart", "hares.service"]]);
+  // The deleted unit is written again and started (the edited one was repaired above).
+  assert.deepEqual(stub.calls, [["daemon-reload"], ["enable", "--now", "hares.service"]]);
 });
 
 test("a unit that changed is restarted after the reload, and --dry-run shows it", async (t) => {
   const { options, stub } = await haresHome(t, withService);
   await install(options);
   stub.calls.length = 0;
-  // A new PATH changes both services: hares.service is restarted, the oneshot canary is not.
+  // A new PATH changes the service, so it is restarted.
   const moved = { ...options, searchPath: "/home/someone/.local/bin:/usr/local/bin:/usr/bin" };
   const dryRun = await install({ ...moved, dryRun: true });
-  assert.deepEqual(dryRun.hares.commands, ["systemctl --user daemon-reload", "systemctl --user enable --now hares.service hares-canary.timer", "systemctl --user restart hares.service"]);
+  assert.deepEqual(dryRun.hares.commands, ["systemctl --user daemon-reload", "systemctl --user enable --now hares.service", "systemctl --user restart hares.service"]);
   assert.deepEqual(stub.calls, []);
   await install(moved);
-  assert.deepEqual(stub.calls, [["daemon-reload"], ["enable", "--now", "hares.service", "hares-canary.timer"], ["restart", "hares.service"]]);
+  assert.deepEqual(stub.calls, [["daemon-reload"], ["enable", "--now", "hares.service"], ["restart", "hares.service"]]);
   stub.calls.length = 0;
   await install(moved);
   assert.deepEqual(stub.calls, [], "nothing changed, so nothing restarts");
@@ -1529,7 +1523,7 @@ test("without systemctl the units are still written, and the commands are handed
   const result = await install({ ...options, systemctl: () => ({ available: false, status: null, stderr: "" }) });
   assert.deepEqual((await readdir(path.join(home, ".config/systemd/user"))).sort(), unitNames);
   assert.equal(result.hares.systemctl, "missing");
-  assert.deepEqual(result.hares.commands, ["systemctl --user daemon-reload", "systemctl --user enable --now hares.service hares-canary.timer"]);
+  assert.deepEqual(result.hares.commands, ["systemctl --user daemon-reload", "systemctl --user enable --now hares.service"]);
   await install({ ...options, check: true });
 });
 
@@ -1588,11 +1582,35 @@ test("an install retires the segwi link and units it recorded and moves their st
 
   await assert.rejects(lstat(path.join(bin, "segwi")), /ENOENT/, "the recorded segwi link is retired");
   await assert.rejects(lstat(legacyState), /ENOENT/, "the old state file is gone");
-  assert.deepEqual((await readdir(path.join(home, ".config/systemd/user"))).sort(), ["hares-canary.service", "hares-canary.timer", "hares.service"]);
-  assert.deepEqual(JSON.parse(await readFile(stateFile(home), "utf8")).units.map((unit) => path.basename(unit.path)), ["hares.service", "hares-canary.service", "hares-canary.timer"]);
+  assert.deepEqual((await readdir(path.join(home, ".config/systemd/user"))).sort(), ["hares.service"]);
+  assert.deepEqual(JSON.parse(await readFile(stateFile(home), "utf8")).units.map((unit) => path.basename(unit.path)), ["hares.service"]);
   assert.deepEqual(stub.calls[0], ["disable", "--now", "segwi.service", "segwi-canary.timer"]);
   assert.deepEqual(result.hares.units.remove.map((file) => path.basename(file)).sort(), legacyNames.slice().sort());
   await install({ ...options, check: true });
+});
+
+// The nightly canary was retired with segwi's runner (decision 0028). An install that recorded its units stops
+// and removes them, and leaves a canary unit it never wrote alone.
+test("an install stops and removes the canary units it recorded, and keeps the server unit", async (t) => {
+  const { home, options, stub } = await haresHome(t, withService);
+  await install(options);
+  const canaryNames = ["hares-canary.service", "hares-canary.timer"];
+  for (const name of canaryNames) await writeFile(unitFile(home, name), "# Managed by mexxi's installer. Edits are overwritten.\n");
+  const state = JSON.parse(await readFile(stateFile(home), "utf8"));
+  await writeFile(stateFile(home), JSON.stringify({ units: [...state.units, ...canaryNames.map((name) => ({ path: unitFile(home, name), sha256: "old" }))] }));
+  stub.calls.length = 0;
+  await assert.rejects(install({ ...options, check: true }), /hares-canary\.timer was added by mexxi for the canary, which is retired/);
+  const result = await install(options);
+  assert.deepEqual((await readdir(path.join(home, ".config/systemd/user"))).sort(), ["hares.service"]);
+  assert.deepEqual(stub.calls, [["disable", "--now", "hares-canary.timer"], ["daemon-reload"]]);
+  assert.deepEqual(result.hares.units.remove.map((file) => path.basename(file)).sort(), canaryNames);
+  await install({ ...options, check: true });
+
+  const mine = await haresHome(t, withService);
+  await mkdir(path.dirname(unitFile(mine.home, "x")), { recursive: true });
+  await writeFile(unitFile(mine.home, "hares-canary.timer"), "[Timer]\nOnCalendar=daily\n");
+  await install(mine.options);
+  assert.equal(await readFile(unitFile(mine.home, "hares-canary.timer"), "utf8"), "[Timer]\nOnCalendar=daily\n", "a canary unit mexxi never recorded is the user's");
 });
 
 test("an install leaves a segwi link that points somewhere else alone", async (t) => {

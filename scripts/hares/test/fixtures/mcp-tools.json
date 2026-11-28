@@ -1,5 +1,20 @@
 [
   {
+    "name": "get_ci",
+    "description": "Shows recent GitHub Actions runs per configured repository and whether its default branch is red. Read-only: nothing here reruns a job.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "repo": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "get_output",
     "description": "Reads a run's output after event number `since`: agent text, replies, approvals and step results in full. maxChars caps the text per call; a longer text comes in parts. Pass the returned nextSince and nextOffset back to carry on.",
     "inputSchema": {
@@ -28,6 +43,30 @@
       },
       "required": [
         "id"
+      ],
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "get_pr",
+    "description": "Shows one pull request: its description as text, conversation comments, review threads with replies, reviews, checks and readiness. Read-only; readiness is advisory and no tool can set it.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "repo": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+        },
+        "number": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000000
+        }
+      },
+      "required": [
+        "repo",
+        "number"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false
@@ -73,8 +112,47 @@
     }
   },
   {
+    "name": "list_issues",
+    "description": "Lists open issues (not pull requests) of the configured repositories, newest activity first. Read-only.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "repo": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "list_prs",
+    "description": "Lists open pull requests of the configured repositories with the groups each is in (review, ready, failing, bumps) and its checks. Read-only.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "repo": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+        },
+        "group": {
+          "type": "string",
+          "enum": [
+            "review",
+            "ready",
+            "failing",
+            "bumps"
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    }
+  },
+  {
     "name": "list_repos",
-    "description": "Lists the repositories hares may work in, with the default branch, whether the checkout is clean and the latest run.",
+    "description": "Lists the repositories segwi may work in, with the default branch, whether the checkout is clean and the latest run.",
     "inputSchema": {
       "type": "object",
       "properties": {},
@@ -85,6 +163,39 @@
   {
     "name": "list_runs",
     "description": "Lists recent runs, newest first, optionally only one status or repository.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "queued",
+            "running",
+            "needs_input",
+            "needs_approval",
+            "completed",
+            "failed",
+            "stopped",
+            "timed_out"
+          ]
+        },
+        "repo": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "list_sessions",
+    "description": "Lists every Claude Code session on this machine, newest first, exactly as list_runs does (it is the same list under its new name).",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -142,7 +253,7 @@
   },
   {
     "name": "start_run",
-    "description": "Starts a run of a configured action (build, ready or ask) in a configured repository. Returns the run id and status; follow it with get_output.",
+    "description": "Starts a run of a configured action (build, ready or ask) in a configured repository. Returns the run id and status; follow it with get_output. Also starts a plain session (action session, task as the first message), a mexxi command (action command, command and task as its arguments), /wettaq from an issue (action issue, issue) or a fix from a pull request (action pr, pr, and ask: review-comments or failing-check). Each opens a new terminal pane.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -154,7 +265,11 @@
           "enum": [
             "build",
             "ready",
-            "ask"
+            "ask",
+            "session",
+            "command",
+            "issue",
+            "pr"
           ]
         },
         "task": {
@@ -166,12 +281,32 @@
           "type": "string",
           "format": "uuid",
           "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+        },
+        "command": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9.-]{0,63}$"
+        },
+        "issue": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000000
+        },
+        "pr": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000000
+        },
+        "ask": {
+          "type": "string",
+          "enum": [
+            "review-comments",
+            "failing-check"
+          ]
         }
       },
       "required": [
         "repo",
-        "action",
-        "task"
+        "action"
       ],
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "additionalProperties": false

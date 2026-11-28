@@ -1,38 +1,127 @@
 // Starts the hares server: refuses a non-loopback bind or an empty allow list
-// (and audits the refusal), recovers runs a previous process left active, then
-// listens.
+// (and audits the refusal), connects to herdr (read-only until a person acts),
+// follows the sessions and the hook's records, then listens.
 import { readFileSync } from "node:fs";
 import http from "node:http";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { audit } from "./audit.mjs";
-import { createApprovalService } from "./approvals.mjs";
+import { createHookApprovals } from "./approvals.mjs";
 import { assertAuthConfig, createAuthenticator } from "./auth.mjs";
 import { assertLoopbackBind, assertPortOutsideWorkflow } from "./bind.mjs";
 import { createHandler } from "./http.mjs";
 import { closeExtensions, loadExtensions } from "./extensions.mjs";
-import { createIbniLink } from "./ibni-link.mjs";
+import { createGithubBoard } from "./github-board.mjs";
+import { createGithubWriter, runGh } from "./github-write.mjs";
+import { slugForRepository } from "./github.mjs";
+import { createHerdrAdapter } from "./herdr/adapter.mjs";
+import { defaultSocket } from "./herdr/client.mjs";
+import { createLinkResolver } from "./links.mjs";
 import { createMcpHandler } from "./mcp.mjs";
+import { createNotifier } from "./notify.mjs";
 import { createPushService } from "./push.mjs";
 import { ensurePrivateDir, stateDir as defaultStateDir } from "./paths.mjs";
 import { createReadinessService } from "./readiness.mjs";
-import { createRunService } from "./runs.mjs";
-import { createBroker } from "./sse.mjs";
+import { createRunView } from "./run-view.mjs";
+import { createSessionStream } from "./session-stream.mjs";
+import { createSessionService } from "./sessions.mjs";
 import { openStore } from "./store.mjs";
-import { createRunner } from "../runners/index.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_STATIC = path.join(here, "..", "web", "dist", "web", "browser");
 const version = JSON.parse(readFileSync(path.join(here, "..", "..", "..", "package.json"), "utf8")).version ?? "0.0.0";
+const DAY_MS = 24 * 60 * 60 * 1000;
+const LINK_REFRESH_MS = 60_000;
+const WORKSPACE_KEY = "herdr.workspace";
+
+/** Where ħares keeps the id of the herdr workspace it opens new tabs in (guard.mjs workspaceStore). */
+function workspaceStoreFor(store) {
+  const get = store.db.prepare("SELECT value FROM meta WHERE key = ?");
+  const set = store.db.prepare("INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET value = excluded.value");
+  return { get: () => get.get(WORKSPACE_KEY)?.value ?? null, set: (id) => set.run(WORKSPACE_KEY, id) };
+}
 
 /**
- * @param {{ settings: object, dataDir: string, runner?: object, ibni?: object, staticRoot?: string|null, approvalTimeoutMs?: number, settleMs?: number, stateDir?: string, mcpConfirmTtlMs?: number, pushOptions?: { allowEndpoint?: Function, agent?: object, send?: Function }, githubFetch?: typeof fetch }} options
- *   `runner`, `ibni`, `approvalTimeoutMs`, `settleMs`, `stateDir`, `mcpConfirmTtlMs`, `pushOptions` and `githubFetch` are injected by tests; the CLI uses the configured runner and the real ibni.
+ * Which session made which pull request, and which issue a session works on, from the links ħares
+ * derives by evidence (links.mjs). Refreshed in the background, so readiness and the board can ask
+ * synchronously. It is also readiness.mjs's store interface: sessionForPr, sessionFacts,
+ * gateAcceptance and acceptGateChange, over store.mjs and the session service.
  */
-export async function startServer({ settings, dataDir, runner, ibni = createIbniLink(), staticRoot = DEFAULT_STATIC, approvalTimeoutMs, settleMs, stateDir = defaultStateDir(), mcpConfirmTtlMs, pushOptions = {}, githubFetch = globalThis.fetch }) {
+export function createLinkIndex({ sessions, store, approvals, log = () => {} }) {
+  const links = new Map();
+  let latest = new Map();
+  let timer = null;
+  let running = null;
+
+  async function refresh() {
+    if (running) return running;
+    running = (async () => {
+      try {
+        const list = await sessions.list();
+        latest = new Map(list.map((session) => [session.id, session]));
+        for (const session of list) {
+          if (!session.repo || !/^[0-9a-f-]{36}$/i.test(session.id)) continue;
+          try {
+            links.set(session.id, (await sessions.get(session.id, { limit: 0 })).links);
+          } catch (error) {
+            log(`links for ${session.id}: ${error.message}`);
+          }
+        }
+      } finally {
+        running = null;
+      }
+    })();
+    return running;
+  }
+
+  const sessionWhere = (test) => {
+    for (const [id, linked] of links) {
+      const session = latest.get(id);
+      if (session && test(session, linked)) return id;
+    }
+    return null;
+  };
+
+  return {
+    refresh,
+    linksOf: (id) => links.get(id) ?? null,
+    session: (id) => (id ? latest.get(id) ?? null : null),
+    sessionForPr: (repo, number) => sessionWhere((session, linked) => session.repo === repo && linked?.pull?.number === number),
+    sessionForIssue: (repo, number) => sessionWhere((session, linked) => session.repo === repo && linked?.issue?.number === number),
+    sessionFacts(sessionId) {
+      const session = latest.get(sessionId);
+      if (!session) return null;
+      const state = session.alive ? session.status : "closed";
+      return { state, snapshot: null, pendingPermissions: approvals.forSession(sessionId).length };
+    },
+    gateAcceptance: (repo, number, headSha) => store.prGateAcceptance(repo, number, headSha),
+    acceptGateChange: (fields) => store.acceptPrGateChange(fields),
+    start() {
+      void refresh().catch(() => {});
+      timer = setInterval(() => void refresh().catch(() => {}), LINK_REFRESH_MS);
+      timer.unref();
+      const off = [sessions.on("session.changed", ({ initial }) => { if (!initial) void refresh().catch(() => {}); })];
+      return () => { clearInterval(timer); off.forEach((stop) => stop()); };
+    },
+  };
+}
+
+/**
+ * @param {{ settings: object, dataDir: string, staticRoot?: string|null, stateDir?: string, mcpConfirmTtlMs?: number,
+ *   pushOptions?: { allowEndpoint?: Function, agent?: object, send?: Function }, githubFetch?: typeof fetch,
+ *   herdrSocket?: string, adapterOptions?: object, home?: string, pendingOptions?: object, ghExec?: Function,
+ *   checkout?: Function, notifyPollMs?: number, now?: () => Date }} options
+ *   herdrSocket, adapterOptions, home, pendingOptions, ghExec, checkout, notifyPollMs, now, stateDir, mcpConfirmTtlMs,
+ *   pushOptions and githubFetch are injected by tests (a fake herdr, a temp HOME, a fake gh); the CLI uses the real ones.
+ */
+export async function startServer({
+  settings, dataDir, staticRoot = DEFAULT_STATIC, stateDir = defaultStateDir(), mcpConfirmTtlMs, pushOptions = {}, githubFetch = globalThis.fetch,
+  herdrSocket = defaultSocket(), adapterOptions = {}, home = os.homedir(), pendingOptions = {}, ghExec = runGh, checkout, notifyPollMs, now = () => new Date(),
+}) {
   ensurePrivateDir(dataDir);
   const store = openStore(path.join(dataDir, "segwi.db"));
-  const { bind, auth, runner: runnerId } = settings.hares;
+  const { bind, auth } = settings.hares;
   try {
     assertAuthConfig(auth.web);
     assertLoopbackBind(bind.host);
@@ -42,20 +131,69 @@ export async function startServer({ settings, dataDir, runner, ibni = createIbni
     store.close();
     throw error;
   }
-  const theRunner = runner ?? createRunner(runnerId, { dataDir, stateDir });
-  const broker = createBroker({ store });
-  let serverUrl = "";
-  const runs = createRunService({ store, settings, runner: theRunner, ibni, broker, serverUrl: () => serverUrl, settleMs });
-  const approvals = createApprovalService({ store, settings, runs, broker, timeoutMs: approvalTimeoutMs });
-  const readiness = createReadinessService({ store, settings, stateDir, fetch: githubFetch });
+  const log = (message) => console.error(`hares: ${message}`);
+  const adapter = createHerdrAdapter({ socket: herdrSocket, workspaceStore: workspaceStoreFor(store), log, ...adapterOptions });
+  // herdr may be down: the server still starts, shows it, and reconnects with backoff.
+  await adapter.connect().catch((error) => log(`herdr is not reachable yet: ${error.message}`));
+
+  const repoOf = (name) => settings.hares.repositories.find((repository) => repository.name === name);
+  const slugFor = async (repoOrRepository) => slugForRepository(typeof repoOrRepository === "string" ? repoOf(repoOrRepository) : repoOrRepository);
   const push = createPushService({ store, settings, stateDir, ...pushOptions });
-  runs.onStatus((status, run) => push.notify(status, run));
-  runs.recover();
+  let sessions = null;
+  let notifier = null;
+  const approvals = createHookApprovals({
+    store, adapter, settings, home,
+    repoForSession: (sessionId) => linkIndex?.session(sessionId)?.repo ?? "",
+    // The push for a permission goes out with the question's own "asks" event, so this one is only counted.
+    notify: () => {},
+  });
+  let readiness = null;
+  const board = createGithubBoard({
+    settings, stateDir, fetch: githubFetch,
+    readiness: { forPr: (target) => readiness.forPr(target) },
+    linkedSession: ({ repo, number }) => linkIndex?.sessionForPr(repo, number) ?? null,
+  });
+  const links = createLinkResolver({
+    slugFor: async (repo) => slugFor(repo),
+    findPullsForBranch: async ({ repo, branch }) => {
+      const pull = await board.prForBranch(repo, branch);
+      return pull ? [{ ...pull, headRefName: branch }] : [];
+    },
+  });
+  sessions = createSessionService({
+    adapter, store, settings, approvals, links, home, pendingOptions, slugFor, ...(checkout ? { checkout } : {}), now, log,
+  });
+  const linkIndex = createLinkIndex({ sessions, store, approvals, log });
+  readiness = createReadinessService({ store: linkIndex, settings, stateDir, fetch: githubFetch });
+  const writer = createGithubWriter({
+    settings, exec: ghExec,
+    audit: ({ action, target, actor, outcome }) => audit(store, { actor: actor ?? "unknown", origin: "web", action, target, outcome }),
+  });
+  notifier = createNotifier({ store, push, settings, sessions, board, now, ...(notifyPollMs ? { pollMs: notifyPollMs } : {}), log });
+  const stream = createSessionStream({ sessions, now });
+  const stopWatching = sessions.watch();
+  await sessions.sync().catch((error) => log(`first session sync failed: ${error.message}`));
+  const stopLinks = linkIndex.start();
+  const stopNotify = notifier.start();
+  // Activity keeps 90 days: purge once at start, then daily (the audit trigger refuses anything younger).
+  const purge = () => {
+    try {
+      const removed = store.purgeAudit();
+      if (removed) audit(store, { actor: "system", origin: "system", action: "audit.purged", outcome: "ok", detail: `${removed} rows older than 90 days` });
+    } catch (error) {
+      log(`audit purge failed: ${error.message}`);
+    }
+  };
+  purge();
+  const purgeTimer = setInterval(purge, DAY_MS);
+  purgeTimer.unref();
+
+  const runs = createRunView({ sessions, store, settings, ...(checkout ? { checkout } : {}) });
   const extensions = await loadExtensions(settings.hares.extensions ?? [], { dataDir, settings });
-  const handler = createHandler({ extensions,
-    store, settings, authenticate: createAuthenticator(auth.web), runs, approvals, readiness, broker, push,
-    staticRoot: staticRoot && readableDir(staticRoot) ? staticRoot : null, version, stateDir,
-    mcp: createMcpHandler({ store, settings, runs, approvals, readiness, stateDir, confirmTtlMs: mcpConfirmTtlMs }),
+  const handler = createHandler({
+    extensions, store, settings, authenticate: createAuthenticator(auth.web), sessions, approvals, readiness, board, writer, notifier, push, stream,
+    herdr: adapter, linkIndex, staticRoot: staticRoot && readableDir(staticRoot) ? staticRoot : null, version, ...(checkout ? { checkout } : {}),
+    mcp: createMcpHandler({ store, settings, runs, approvals: { list: (query) => approvals.list(query) }, readiness, github: board, stateDir, confirmTtlMs: mcpConfirmTtlMs }),
   });
   // A request still running when the server closes may find the store shut; it has nobody left to answer.
   const server = http.createServer((req, res) => void handler(req, res).catch(() => res.destroy()));
@@ -64,17 +202,20 @@ export async function startServer({ settings, dataDir, runner, ibni = createIbni
     server.listen(bind.port, bind.host, resolve);
   });
   const { port } = /** @type {import("node:net").AddressInfo} */ (server.address());
-  serverUrl = `http://127.0.0.1:${port}`;
+  const serverUrl = `http://127.0.0.1:${port}`;
   audit(store, { actor: "system", origin: "system", action: "server.start", outcome: "ok", detail: `listening on ${bind.host}:${port}` });
   let closed = false;
   return {
-    port, url: serverUrl, store, runs, approvals, push,
+    port, url: serverUrl, store, sessions, approvals, push, notifier, adapter, linkIndex, board,
     async close() {
       if (closed) return;
       closed = true;
-      await runs.shutdown();
-      approvals.shutdown();
-      broker.close();
+      clearInterval(purgeTimer);
+      stopNotify();
+      stopLinks();
+      stopWatching();
+      stream.close();
+      adapter.close();
       await closeExtensions(extensions);
       server.closeAllConnections();
       await new Promise((resolve) => server.close(resolve));

@@ -14,6 +14,30 @@ import { mkdir, readdir, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
+/**
+ * A browser the agent drives puts this in its user agent, and hares refuses any request that carries it
+ * (scripts/hares/lib/auth.mjs). Unlike an origin list it holds through redirects and however the host is
+ * spelled. The old spellings stay refused too: a browser registered before the rename still sends one.
+ */
+export const RUN_BROWSER_MARK = "hares-run-browser";
+export const LEGACY_RUN_BROWSER_MARKS = ["segwi-run-browser"];
+export const RUN_BROWSER_AGENT = `Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36 ${RUN_BROWSER_MARK}`;
+
+const WILDCARD_HOSTS = new Set(["0.0.0.0", "::", "[::]", ""]);
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1", "[::1]"]);
+
+/** Every origin hares answers on: loopback at its port, the bind host when it is another address, and the tailnet name. */
+export function haresOrigins(hares) {
+  const port = hares?.bind?.port;
+  const host = hares?.bind?.host ?? "";
+  const tailnetName = hares?.auth?.web?.hostname;
+  return [
+    ...(port ? [`http://127.0.0.1:${port}`, `http://localhost:${port}`, `http://[::1]:${port}`] : []),
+    ...(port && !WILDCARD_HOSTS.has(host) && !LOOPBACK_HOSTS.has(host) ? [`http://${host.includes(":") && !host.startsWith("[") ? `[${host}]` : host}:${port}`] : []),
+    ...(tailnetName ? [`https://${tailnetName}`, `http://${tailnetName}`] : []),
+  ];
+}
+
 // Where the installer keeps the pinned server, one folder per version.
 export function playwrightMcpRoot(home = os.homedir()) {
   return path.join(home, ".local/share/mexxi/playwright-mcp");
@@ -79,19 +103,22 @@ export async function registeredPlaywrightVersions({ hosts, claudeJson, codexCon
   return versions;
 }
 
-// The arguments after `node`.
-export function playwrightArguments(browser, home = os.homedir()) {
+// The arguments after `node`. With hares enabled the browser is also marked and kept away from hares, so
+// a session the agent runs by hand or through herdr, which uses this user-scope server, cannot open hares and
+// tap Approve. `hares` is config.hares.
+export function playwrightArguments(browser, home = os.homedir(), hares = undefined) {
   return [
     playwrightMcpCli(browser, home),
     "--headless",
     "--isolated",
     ...(browser.executablePath === null ? ["--browser=chromium"] : [`--executable-path=${browser.executablePath}`]),
     `--output-dir=${browser.outputDir}`,
+    ...(hares?.enabled ? [`--user-agent=${RUN_BROWSER_AGENT}`, `--blocked-origins=${haresOrigins(hares).join(";")}`] : []),
   ];
 }
 
-export function opencodePlaywright(browser, home = os.homedir()) {
-  return { type: "local", command: ["node", ...playwrightArguments(browser, home)], enabled: true };
+export function opencodePlaywright(browser, home = os.homedir(), hares = undefined) {
+  return { type: "local", command: ["node", ...playwrightArguments(browser, home, hares)], enabled: true };
 }
 
 // The value of a --flag=value or --flag value argument, undefined when absent.
@@ -106,8 +133,8 @@ function shellQuote(word) {
 }
 
 // The lines for hosts whose MCP registry is the user's own.
-export function registrationCommands(browser, home = os.homedir()) {
-  const server = ["node", ...playwrightArguments(browser, home)].map(shellQuote).join(" ");
+export function registrationCommands(browser, home = os.homedir(), hares = undefined) {
+  const server = ["node", ...playwrightArguments(browser, home, hares)].map(shellQuote).join(" ");
   return {
     claude: `claude mcp add --scope user playwright -- ${server}`,
     codex: `codex mcp add playwright -- ${server}`,
@@ -116,7 +143,7 @@ export function registrationCommands(browser, home = os.homedir()) {
 
 // Compares a registered server's arguments with config. Returns the reasons it
 // does not match, empty when it does.
-export function playwrightMismatches(command, args, browser, home = os.homedir()) {
+export function playwrightMismatches(command, args, browser, home = os.homedir(), hares = undefined) {
   const problems = [];
   const viaNpx = args.map((arg) => arg.match(/^@playwright\/mcp(?:@(.+))?$/)).find(Boolean);
   if (viaNpx) {
@@ -136,6 +163,17 @@ export function playwrightMismatches(command, args, browser, home = os.homedir()
   const expectedBrowser = browser.executablePath === null ? "chromium" : undefined;
   if (browserName !== expectedBrowser) {
     problems.push(`passes ${browserName === undefined ? "no --browser" : `--browser ${browserName}`}, config.json expects ${expectedBrowser === undefined ? "none" : `--browser ${expectedBrowser}`}`);
+  }
+  if (hares?.enabled) {
+    const userAgent = flagValue(args, "--user-agent");
+    if (!userAgent?.includes(RUN_BROWSER_MARK)) {
+      problems.push(`passes ${userAgent === undefined ? "no --user-agent" : "a --user-agent without the mark"}, so hares cannot tell this browser from yours; config.json expects ${RUN_BROWSER_MARK} in it`);
+    }
+    const blocked = (flagValue(args, "--blocked-origins") ?? "").split(";").filter(Boolean).sort();
+    const expectedBlocked = haresOrigins(hares).sort();
+    if (blocked.join(";") !== expectedBlocked.join(";")) {
+      problems.push(`blocks ${blocked.join(";") || "no origins"}, config.json expects ${expectedBlocked.join(";")} so the browser cannot open hares`);
+    }
   }
   // It would also let the browser open any file:// path on the machine.
   if (args.includes("--allow-unrestricted-file-access")) problems.push("passes --allow-unrestricted-file-access");
@@ -188,8 +226,8 @@ export async function codexPlaywrightArguments(file) {
 // Problems per enabled host whose registration is not exactly what config.json
 // asks for. Unregistered fails: with the host enabled, rendered QA cannot run
 // there, which is as incomplete as a missing link. The fix is the printed line.
-export async function registrationDrift({ browser, hosts, claudeJson, codexConfig, home = os.homedir() }) {
-  const commands = registrationCommands(browser, home);
+export async function registrationDrift({ browser, hosts, claudeJson, codexConfig, home = os.homedir(), hares = undefined }) {
+  const commands = registrationCommands(browser, home, hares);
   const removals = { claude: "claude mcp remove --scope user playwright", codex: "codex mcp remove playwright" };
   const drift = [];
   if (Object.values(hosts).some(Boolean) && await installedPlaywrightMcp(browser, home) !== browser.playwrightMcpVersion) {
@@ -202,7 +240,7 @@ export async function registrationDrift({ browser, hosts, claudeJson, codexConfi
     if (!hosts[host]) continue;
     const found = await inspect(file);
     if (found.status === "found") {
-      for (const problem of playwrightMismatches(found.command, found.args, browser, home)) {
+      for (const problem of playwrightMismatches(found.command, found.args, browser, home, hares)) {
         drift.push(`${host}: Playwright MCP ${problem}; run ${removals[host]}, then ${commands[host]}`);
       }
     } else {

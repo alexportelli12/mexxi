@@ -16,6 +16,9 @@ import {
 } from "./lib/pending.mjs";
 
 const STDIN_MS = 1000;
+// However the work goes (a slow disk, a stuck read), the hook ends within this,
+// with exit 0, so it never holds up the session it reports on.
+const HARD_EXIT_MS = 2000;
 const STDIN_MAX_BYTES = 8 * 1024 * 1024;
 
 function readStdin() {
@@ -129,6 +132,8 @@ async function main() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  // unref: the timer never keeps the process alive, it only ends one that is still running.
+  setTimeout(() => process.exit(0), HARD_EXIT_MS).unref();
   main()
     .catch(() => {})
     .finally(() => process.exit(0));

@@ -2,7 +2,7 @@
 // real hook.mjs as a process with a temporary HOME and XDG_DATA_HOME, so nothing
 // here can touch the real data directory or ~/.claude.
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -49,6 +49,21 @@ for (const [label, garbage] of [["not json", "this is not json"], ["empty stdin"
     assert.equal(existsSync(pendingRoot(box.options)), false);
   });
 }
+
+test("the hook exits 0 within about 2 s when Claude Code never closes its stdin (a stuck hook holds up the session)", { timeout: 6000 }, async (t) => {
+  const box = sandbox(t);
+  const started = Date.now();
+  const child = spawn(process.execPath, [hook], { env: { PATH: process.env.PATH, HOME: box.home, XDG_DATA_HOME: box.xdg }, stdio: ["pipe", "pipe", "pipe"] });
+  t.after(() => child.kill("SIGKILL"));
+  let stdout = "";
+  child.stdout.on("data", (chunk) => { stdout += chunk; });
+  // Half a record, and the pipe left open.
+  child.stdin.write('{"session_id": "abc", "hook_event_name": "PreToolUse"');
+  const code = await new Promise((resolve) => child.on("exit", resolve));
+  assert.equal(code, 0);
+  assert.ok(Date.now() - started < 2500, "exited in " + (Date.now() - started) + " ms");
+  assert.equal(stdout, "");
+});
 
 test("the hook exits 0 even when the data directory cannot be written", (t) => {
   const box = sandbox(t);

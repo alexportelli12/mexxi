@@ -148,7 +148,7 @@ async function renderOpencode(checkout, config, files, home) {
   // The shared guard and loop breaker run in OpenCode through this plugin,
   // loaded from the clone so its imports of scripts/hooks resolve.
   const plugin = [...(template.plugin ?? []), pathToFileURL(path.join(checkout, "opencode/plugins/mexxi-guard.js")).href];
-  const rendered = { $schema: template.$schema, plugin, agent, permission, mcp: { playwright: opencodePlaywright(config.browser, home) } };
+  const rendered = { $schema: template.$schema, plugin, agent, permission, mcp: { playwright: opencodePlaywright(config.browser, home, config.hares) } };
   files.set("opencode/opencode.json", `${JSON.stringify(rendered, null, 2)}\n`);
 }
 

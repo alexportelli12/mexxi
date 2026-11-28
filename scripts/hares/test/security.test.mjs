@@ -1,5 +1,6 @@
 // The security rejection tests (plan sections 11.4 and 11.5): the real server on
-// a loopback port, a temporary data directory and repository, and the fake host.
+// a loopback port, a temporary data directory and repository, a fake herdr and
+// the fake claude it starts (helpers.mjs startHares).
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
@@ -10,23 +11,17 @@ import { fileURLToPath } from "node:url";
 import { BindRefusedError, PortCollisionError } from "../lib/bind.mjs";
 import { AuthConfigError } from "../lib/auth.mjs";
 import { startServer } from "../lib/serve.mjs";
-import { createBroker } from "../lib/sse.mjs";
 import { openStore } from "../lib/store.mjs";
-import { fakeAdapter, fixturesDir, makeRepo, makeSettings, tempDir, waitFor } from "./helpers.mjs";
+import { createSessionStream } from "../lib/session-stream.mjs";
+import { makeSettings, startHares, tempDir, waitFor } from "./helpers.mjs";
 
 const serverEntry = fileURLToPath(new URL("../server.mjs", import.meta.url));
 const TOKEN = `ghp_${"a1B2c3D4e5".repeat(4).slice(0, 36)}`;
-const noIbni = { findNewWorkspace: async () => null, summary: async () => { throw new Error("no ibni in this test"); }, list: async () => [] };
 
-/** Starts a server over a fresh repo. `fixture` names a recording or a file path. */
-async function boot(t, { fixture = "ask-completed", auth, limits, actions = ["build", "ready", "ask"], repoPath, dataDir, staticRoot = null, settingsPatch = {}, ibni = noIbni, wrapRunner = (runner) => runner } = {}) {
-  const repo = repoPath ?? makeRepo(t);
-  const dir = dataDir ?? tempDir(t, "hares-data-");
-  const { adapter } = fakeAdapter(t, fixture);
-  const settings = { ...makeSettings({ repos: [{ name: "my-app", path: repo, actions }], auth, limits }), ...settingsPatch };
-  const server = await startServer({ settings, dataDir: dir, runner: wrapRunner(adapter), ibni, staticRoot });
-  t.after(() => server.close());
-  return { server, repo, dir, settings };
+/** Starts a server over a fresh repo and a fake herdr. `scenario` names what the fake claude says. */
+async function boot(t, { scenario = "completed", actions = ["build", "ready", "ask"], ...options } = {}) {
+  const box = await startHares(t, { scenario, actions, ...options });
+  return { ...box, dir: box.dataDir };
 }
 
 function request(server, method, urlPath, { headers = {}, body, raw, origin = true, json = true } = {}) {
@@ -55,7 +50,7 @@ test("a non-loopback bind is refused in both auth modes, and the refusal is audi
   for (const auth of [{ mode: "localhost-only" }, { mode: "tailscale-header", allowed: ["you@example.com"] }]) {
     const dir = tempDir(t, "hares-data-");
     const settings = makeSettings({ repos: [], auth, host: "0.0.0.0" });
-    await assert.rejects(startServer({ settings, dataDir: dir, runner: fakeAdapter(t, "ask-completed").adapter, staticRoot: null }), BindRefusedError);
+    await assert.rejects(startServer({ settings, dataDir: dir, staticRoot: null }), BindRefusedError);
     const store = openStore(path.join(dir, "segwi.db"));
     assert.equal(store.listAudit(1)[0].outcome, "rejected");
     assert.match(store.listAudit(1)[0].detail, /loopback/);
@@ -78,7 +73,7 @@ test("the serve command exits 2 and says why when the configured host is not loo
 test("tailscale-header mode refuses to start with nobody allowed", async (t) => {
   const dir = tempDir(t, "hares-data-");
   const settings = makeSettings({ repos: [], auth: { mode: "tailscale-header", allowed: [] } });
-  await assert.rejects(startServer({ settings, dataDir: dir, runner: fakeAdapter(t, "ask-completed").adapter, staticRoot: null }), AuthConfigError);
+  await assert.rejects(startServer({ settings, dataDir: dir, staticRoot: null }), AuthConfigError);
 });
 
 test("localhost-only rejects a request that carries a proxy identity, or a non-loopback Host", async (t) => {
@@ -117,14 +112,14 @@ test("tailscale-header: only loopback names and the configured tailnet name are 
   for (const host of ["my-machine.example.ts.net", "MY-MACHINE.example.ts.net", "my-machine.example.ts.net:443", "127.0.0.1", "localhost:4280", "[::1]"]) {
     assert.equal((await request(server, "GET", "/api/repos", { headers: { ...identity, Host: host } })).status, 200, host);
   }
-  assert.equal(server.store.listRuns().length, 0);
+  assert.equal(server.store.listLaunches().length, 0);
 });
 
 test("a run's own browser is refused everywhere, whatever the Host, identity or origin", async (t) => {
   for (const auth of [{ mode: "localhost-only" }, { mode: "tailscale-header", allowed: ["you@example.com"] }]) {
     const { server } = await boot(t, { auth });
     const agent = { "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) Chrome/140.0.0.0 Safari/537.36 hares-run-browser", ...(auth.mode === "tailscale-header" ? { "Tailscale-User-Login": "you@example.com" } : {}) };
-    for (const [method, route] of [["GET", "/"], ["GET", "/approvals"], ["GET", "/api/approvals"], ["GET", "/api/stream"], ["POST", "/api/approvals/0123456789abcdef01234567"], ["POST", "/mcp"], ["POST", "/internal/approvals"]]) {
+    for (const [method, route] of [["GET", "/"], ["GET", "/approvals"], ["GET", "/api/approvals"], ["GET", "/api/questions"], ["GET", "/api/stream"], ["POST", "/api/approvals/0123456789abcdef01234567"], ["POST", "/api/sessions/abc/answer"], ["POST", "/api/prs/my-app/1/merge"], ["POST", "/mcp"], ["POST", "/internal/approvals"], ["GET", "/ext/tokens.css"]]) {
       const response = await request(server, method, route, { headers: agent, body: method === "POST" ? { decision: "allow" } : undefined });
       assert.equal(response.status, 403, `${auth.mode} ${method} ${route}`);
     }
@@ -134,7 +129,7 @@ test("a run's own browser is refused everywhere, whatever the Host, identity or 
 
 test("tailscale-header mode refuses to start without a tailnet name", async (t) => {
   const settings = makeSettings({ repos: [], auth: { mode: "tailscale-header", allowed: ["you@example.com"], hostname: "" } });
-  await assert.rejects(startServer({ settings, dataDir: tempDir(t, "hares-data-"), runner: fakeAdapter(t, "ask-completed").adapter, staticRoot: null }), /auth.web.hostname is empty/);
+  await assert.rejects(startServer({ settings, dataDir: tempDir(t, "hares-data-"), staticRoot: null }), /auth.web.hostname is empty/);
 });
 
 test("writes need the app's own origin and a JSON content type", async (t) => {
@@ -151,12 +146,23 @@ test("writes need the app's own origin and a JSON content type", async (t) => {
     assert.equal(response.status, status, JSON.stringify(options));
     assert.equal(lastRejected(server).outcome, "rejected");
   }
-  assert.equal(server.store.listRuns().length, 0);
+  assert.equal(server.store.listLaunches().length, 0);
   assert.equal((await startRun(server, {}, { origin: false, headers: { "Sec-Fetch-Site": "same-origin" } })).status, 201);
 });
 
+
+/** Waits for the session behind a legacy run id to show its pane and transcript. */
+async function launched(server, id) {
+  return waitFor(async () => {
+    await server.adapter.refresh();
+    await server.sessions.sync();
+    const run = (await request(server, "GET", `/api/runs/${id}`)).json?.run;
+    return run && run.status !== "queued" && run.steps.length ? run : null;
+  }, { what: "the session to start" });
+}
+
 test("an unlisted repo or action, an extra field, and over-length input are 400 and audited", async (t) => {
-  const { server } = await boot(t, { actions: ["ask"], limits: { taskMaxChars: 20, inputMaxChars: 10 } });
+  const { server, fake } = await boot(t, { actions: ["ask"], limits: { taskMaxChars: 20, inputMaxChars: 10 } });
   const cases = [
     { repo: "other-app" },
     { action: "build" },
@@ -173,10 +179,14 @@ test("an unlisted repo or action, an extra field, and over-length input are 400 
     assert.ok(!lastRejected(server).detail.includes("x".repeat(21)), "the audit never holds the body");
   }
   assert.equal((await request(server, "POST", "/api/runs", { raw: "{not json" })).status, 400);
-  assert.equal(server.store.listRuns().length, 0);
+  for (const body of [{ repo: "other-app", kind: "prompt", prompt: "x" }, { repo: "my-app", kind: "deploy" }, { repo: "my-app", kind: "prompt", prompt: "x", extra: 1 }]) {
+    assert.equal((await request(server, "POST", "/api/sessions", { body })).status, 400, JSON.stringify(body));
+  }
+  assert.equal(server.store.listLaunches().length, 0);
+  assert.equal(fake.writes().length, 0, "nothing reached herdr");
 
   const { run } = (await startRun(server)).json;
-  await waitFor(() => server.store.getRun(run.id).status === "completed");
+  await launched(server, run.id);
   const sendTo = (id, body, urlPath = "input") => request(server, "POST", `/api/runs/${id}/${urlPath}`, { body });
   assert.equal((await sendTo(run.id, { text: "x".repeat(11) })).status, 400);
   assert.equal((await sendTo(run.id, { text: "hi", extra: 1 })).status, 400);
@@ -187,113 +197,82 @@ test("an unlisted repo or action, an extra field, and over-length input are 400 
   assert.equal((await request(server, "GET", `/api/runs/${run.id}/events?since=-1`)).status, 400);
   assert.equal((await request(server, "GET", "/api/audit?limit=201")).status, 400);
   assert.equal((await request(server, "POST", "/api/runs", { raw: JSON.stringify({ task: "x".repeat(70 * 1024) }) })).status, 413);
+  const session = (await request(server, "GET", "/api/sessions")).json.sessions[0];
+  const expect = { terminalId: session.terminalId, sessionId: session.id, status: session.status, seq: session.seq };
+  assert.equal((await request(server, "POST", `/api/sessions/${session.id}/steer`, { body: { expect, text: "x".repeat(11) } })).status, 400);
+  assert.equal((await request(server, "POST", `/api/sessions/${session.id}/end`, { body: { expect } })).status, 400, "ending needs confirm: true");
 });
 
-test("a dirty checkout, or one off its default branch, is 409 and audited", async (t) => {
-  const { server, repo } = await boot(t);
+test("a dirty checkout, or one off its default branch, is 409 for work that commits, and audited", async (t) => {
+  const { server, repo, fake } = await boot(t);
   writeFileSync(path.join(repo, "untracked.txt"), "x");
-  const dirty = await startRun(server);
+  const dirty = await startRun(server, { action: "build" });
   assert.equal(dirty.status, 409);
   assert.match(dirty.json.error, /uncommitted/);
   assert.equal(lastRejected(server).outcome, "rejected");
   spawnSync("git", ["-C", repo, "clean", "-fdq"]);
   spawnSync("git", ["-C", repo, "checkout", "-q", "-b", "feature"]);
-  const off = await startRun(server);
+  const off = await startRun(server, { action: "build" });
   assert.equal(off.status, 409);
   assert.match(off.json.error, /feature/);
-  assert.equal(server.store.listRuns().length, 0);
-  const repos = (await request(server, "GET", "/api/repos")).json.repos;
-  assert.equal(repos[0].onDefault, false);
-  assert.ok(!JSON.stringify(repos).includes(repo), "the repository path is never shown");
+  assert.equal(server.store.listLaunches().length, 0);
+  assert.equal(fake.writes().length, 0);
 });
 
-test("over the concurrent-runs cap, or the daily cap, is 429 and audited", async (t) => {
-  const concurrent = await boot(t, { fixture: "build-needs-input", limits: { concurrentRuns: 1 } });
+test("over the concurrent-sessions cap, or the daily cap, is 429 and audited", async (t) => {
+  const concurrent = await boot(t, { limits: { concurrentRuns: 1 } });
   assert.equal((await startRun(concurrent.server, { action: "build" })).status, 201);
   const blocked = await startRun(concurrent.server, { action: "build", task: "another" });
   assert.equal(blocked.status, 429);
   assert.equal(lastRejected(concurrent.server).outcome, "rejected");
 
-  const daily = await boot(t, { limits: { runsPerDay: 1 } });
-  const { run } = (await startRun(daily.server)).json;
-  await waitFor(() => daily.server.store.getRun(run.id).status === "completed");
-  assert.equal((await startRun(daily.server, { task: "second" })).status, 429);
-  assert.equal(daily.server.store.listRuns().length, 1);
+  const daily = await boot(t, { limits: { runsPerDay: 1, concurrentRuns: 5 } });
+  assert.equal((await request(daily.server, "POST", "/api/sessions", { body: { repo: "my-app", kind: "prompt", prompt: "first" } })).status, 201);
+  assert.equal((await request(daily.server, "POST", "/api/sessions", { body: { repo: "my-app", kind: "prompt", prompt: "second" } })).status, 429);
+  assert.equal(daily.server.store.listLaunches().length, 1);
 });
 
-test("an ask run completes, shows readable steps, and a repeated clientId returns the same run", async (t) => {
-  const { server } = await boot(t);
+test("an ask session shows readable steps through the old routes, and a repeated clientId returns the same run", async (t) => {
+  const { server, claude } = await boot(t);
   const clientId = "0b8e3c2e-5a4b-4a53-9a0e-1d2f3a4b5c6d";
   const created = await startRun(server, { clientId });
   assert.equal(created.status, 201);
   const id = created.json.run.id;
-  await waitFor(() => server.store.getRun(id).status === "completed");
+  const run = await launched(server, id);
   const again = await startRun(server, { clientId });
   assert.equal(again.status, 200);
   assert.equal(again.json.run.id, id);
-  assert.equal(server.store.listRuns().length, 1);
+  assert.equal(server.store.listLaunches().length, 1);
+  assert.ok(claude.starts[0].args.includes("--disallowedTools"), "an ask can't write files");
 
-  const run = (await request(server, "GET", `/api/runs/${id}`)).json.run;
-  assert.equal(run.status, "completed");
-  assert.equal(typeof run.costUsd, "number");
-  assert.ok(!("worktreePath" in run) && !("hostSessionId" in run));
-  assert.deepEqual(run.steps.map((step) => step.type), ["command", "message"]);
-  assert.equal(run.steps[0].ok, true);
-  assert.equal(run.steps[0].detail, "README.md\nnotes.txt");
+  assert.equal(run.status, "needs_input");
+  assert.ok(!("worktreePath" in run) && !("hostSessionId" in run) && !("cwd" in run));
+  assert.deepEqual(run.steps.map((step) => step.type), ["message", "command", "message"]);
   const events = (await request(server, "GET", `/api/runs/${id}/events?since=1`)).json.events;
-  assert.ok(events.every((event) => event.seq > 1));
-  assert.deepEqual((await request(server, "GET", "/api/runs?status=completed&limit=5")).json.runs.map((entry) => entry.id), [id]);
-  assert.equal((await request(server, "POST", `/api/runs/${id}/stop`, { body: { confirm: true } })).status, 409);
-  assert.equal((await request(server, "POST", `/api/runs/${id}/input`, { body: { text: "more" } })).status, 409);
+  assert.ok(events.length > 0 && events.every((event) => event.seq > 1));
   assert.equal((await request(server, "GET", "/api/runs/00000000-0000-4000-8000-000000000000")).status, 404);
 
   const health = (await request(server, "GET", "/api/health")).json;
-  assert.equal(health.runner.id, "claude-code");
-  assert.equal(health.runner.tested, true);
   assert.equal(health.ok, true);
-  // A run needs nothing beyond the agent itself, so health has no sandbox to warn about.
-  assert.ok(!("sandbox" in health));
-  for (const header of ["content-security-policy", "x-content-type-options", "referrer-policy"]) assert.ok(health[header] === undefined && (await request(server, "GET", "/api/health")).headers[header]);
+  assert.equal(health.herdr.connected, true);
+  assert.equal(health.herdr.protocol, 22);
+  assert.ok(!("canary" in health) && !("runner" in health), "the retired canary and runner are gone from health");
+  for (const header of ["content-security-policy", "x-content-type-options", "referrer-policy"]) assert.ok((await request(server, "GET", "/api/health")).headers[header]);
   assert.match((await request(server, "GET", "/api/health")).headers["cache-control"], /no-store/);
   assert.match((await request(server, "GET", "/")).text, /Build the web app/);
   assert.ok(server.store.listAudit(200).some((row) => row.action === "POST /api/runs" && row.outcome === "ok"));
 });
 
-test("a build run that asks a question waits for a reply, takes it, and can be stopped", async (t) => {
-  const { server } = await boot(t, { fixture: "build-needs-input" });
+test("a session that waits takes a reply through the old input route, and stop ends its pane", async (t) => {
+  const { server, fake } = await boot(t, { scenario: "asks" });
   const id = (await startRun(server, { action: "build", task: "add a flag" })).json.run.id;
-  await waitFor(() => server.store.getRun(id).status === "needs_input");
+  await launched(server, id);
   assert.equal((await request(server, "POST", `/api/runs/${id}/input`, { body: { text: "Default to off." } })).status, 200);
-  await waitFor(() => server.store.listEvents(id).filter((event) => event.kind === "result").length === 2);
-  assert.equal(server.store.getRun(id).status, "needs_input");
+  assert.ok(fake.writes().some((entry) => entry.params.text === "Default to off."));
   const stopped = await request(server, "POST", `/api/runs/${id}/stop`, { body: { confirm: true } });
   assert.equal(stopped.json.run.status, "stopped");
+  assert.equal(fake.state.agents.length, 0, "the pane is closed");
   assert.ok(server.store.listAudit(50).some((row) => row.action === "POST /api/runs/:id/stop" && row.outcome === "ok"));
-});
-
-test("a run that goes quiet is stopped as timed out, and the hard limit stops a busy one", async (t) => {
-  const idle = await boot(t, { fixture: "build-needs-input", limits: { idleTimeoutMinutes: 0.004 } });
-  const idleId = (await startRun(idle.server, { action: "build" })).json.run.id;
-  await waitFor(() => idle.server.store.getRun(idleId).status === "timed_out");
-  assert.match(idle.server.store.getRun(idleId).reason, /No activity/);
-
-  const hard = await boot(t, { fixture: "build-needs-input", limits: { hardTimeoutMinutes: 0.004 } });
-  const hardId = (await startRun(hard.server, { action: "build" })).json.run.id;
-  await waitFor(() => hard.server.store.getRun(hardId).status === "timed_out");
-  assert.equal(hard.server.store.getRun(hardId).reason, "Hit the time limit");
-});
-
-test("a run left active by a previous process is marked failed on start", async (t) => {
-  const dir = tempDir(t, "hares-data-");
-  const repo = makeRepo(t);
-  const first = await boot(t, { fixture: "build-needs-input", dataDir: dir, repoPath: repo });
-  const id = (await startRun(first.server, { action: "build" })).json.run.id;
-  await waitFor(() => first.server.store.getRun(id).status === "needs_input");
-  await first.server.close();
-  const second = await boot(t, { dataDir: dir, repoPath: repo });
-  const run = second.server.store.getRun(id);
-  assert.equal(run.status, "failed");
-  assert.equal(run.reason, "hares restarted while this run was active");
 });
 
 test("audit rows can't be updated or deleted", async (t) => {
@@ -304,11 +283,12 @@ test("audit rows can't be updated or deleted", async (t) => {
   assert.ok(server.store.listAudit(1).length === 1);
 });
 
-test("a seeded token in the task and in tool output is absent from the database, REST, SSE and replay", async (t) => {
-  const recording = readFileSync(path.join(fixturesDir, "claude-code", "ask-completed.jsonl"), "utf8");
-  const seeded = path.join(tempDir(t, "hares-fixture-"), "seeded.jsonl");
-  writeFileSync(seeded, recording.replace("README.md\\nnotes.txt", `leaked ${TOKEN} here`));
-  const { server, dir } = await boot(t, { fixture: seeded });
+test("a seeded token in the task and in the transcript is absent from the database, REST and SSE", async (t) => {
+  process.env.FAKE_HOST_TOKEN = TOKEN;
+  t.after(() => { delete process.env.FAKE_HOST_TOKEN; });
+  const scenario = path.join(tempDir(t, "hares-fixture-"), "seeded.json");
+  writeFileSync(scenario, JSON.stringify([{ tool: "Bash", input: { command: "ls" }, result: "x" }, { say: "leaked __FAKE_TOKEN__ here" }]));
+  const { server, dir } = await boot(t, { scenario });
 
   const chunks = [];
   const stream = await new Promise((resolve) => {
@@ -317,24 +297,15 @@ test("a seeded token in the task and in tool output is absent from the database,
   t.after(() => stream.destroy());
   const created = await startRun(server, { task: `Use ${TOKEN} to look around` });
   const id = created.json.run.id;
-  await waitFor(() => server.store.getRun(id).status === "completed");
-  await waitFor(() => chunks.join("").includes('"completed"'));
+  const run = await launched(server, id);
+  await waitFor(() => chunks.join("").includes("event: session"), { what: "a session event" });
 
   const rest = [created.text, (await request(server, "GET", `/api/runs/${id}`)).text, (await request(server, "GET", `/api/runs/${id}/events`)).text,
-    (await request(server, "GET", "/api/runs")).text, (await request(server, "GET", "/api/audit")).text].join("\n");
+    (await request(server, "GET", "/api/runs")).text, (await request(server, "GET", "/api/audit")).text, (await request(server, "GET", "/api/sessions")).text,
+    (await request(server, "GET", `/api/sessions/${run.id}`)).text].join("\n");
   assert.ok(rest.includes("[REDACTED]"));
   assert.ok(!rest.includes(TOKEN), "REST");
-  assert.ok(chunks.join("").includes("event: event") && chunks.join("").includes("event: run"));
   assert.ok(!chunks.join("").includes(TOKEN), "SSE");
-
-  const replay = await new Promise((resolve) => {
-    const req = http.get({ host: "127.0.0.1", port: server.port, path: "/api/stream", headers: { "Last-Event-ID": "0" } }, (res) => {
-      let text = "";
-      res.on("data", (chunk) => { text += chunk; if (text.includes('"completed"')) { req.destroy(); resolve(text); } });
-    });
-  });
-  assert.ok(replay.includes("event: event") && !replay.includes(TOKEN), "replay");
-
   server.store.db.exec("PRAGMA wal_checkpoint(FULL)");
   for (const name of readdirSync(dir).filter((file) => file.startsWith("segwi.db"))) {
     assert.ok(!readFileSync(path.join(dir, name)).includes(TOKEN), `${name} holds no token`);
@@ -345,7 +316,7 @@ test("a bind port inside workflow.ports is refused and audited, and the CLI exit
   const dir = tempDir(t, "hares-data-");
   const settings = { ...makeSettings({ repos: [] }), workflowPorts: { first: 3000, last: 3999 } };
   settings.hares.bind.port = 3500;
-  await assert.rejects(startServer({ settings, dataDir: dir, runner: fakeAdapter(t, "ask-completed").adapter, staticRoot: null }), PortCollisionError);
+  await assert.rejects(startServer({ settings, dataDir: dir, staticRoot: null }), PortCollisionError);
   const store = openStore(path.join(dir, "segwi.db"));
   assert.equal(store.listAudit(1)[0].outcome, "rejected");
   assert.match(store.listAudit(1)[0].detail, /workflow\.ports/);
@@ -367,129 +338,35 @@ test("a malformed percent escape in a static path is 400, not 500", async (t) =>
   assert.equal((await request(server, "GET", "/anything")).status, 200);
 });
 
-/** A promise the test resolves by hand, and whether anything is waiting on it yet. */
-function gate() {
-  let open;
-  const promise = new Promise((resolve) => { open = resolve; });
-  const state = { entered: false, open: (value) => open(value) };
-  state.wait = () => { state.entered = true; return promise; };
-  return state;
-}
-
-/** An ibni whose workspace lookup hangs until the test opens the gate. */
-function slowIbni(lookup) {
-  const calls = { summary: 0 };
-  return {
-    calls,
-    findNewWorkspace: () => lookup.wait(),
-    summary: async () => { calls.summary += 1; return { branch: "agent/x", prUrl: null, verify: null, worktreePath: "/tmp/hares-test-worktrees/x" }; },
-    list: async () => [],
-  };
-}
-
-const statusEvents = (server, id) => server.store.listEvents(id).filter((row) => row.kind === "status");
-
-/** Opens the gate, then waits until the result handler has finished with what it got. */
-async function release(lookup, ibni) {
-  lookup.open({ sessionId: "s1", worktreePath: "/tmp/hares-test-worktrees/x" });
-  await waitFor(() => ibni.calls.summary === 1, { what: "the summary lookup" });
-  await new Promise((resolve) => setTimeout(resolve, 100));
-}
-
-test("a stop that lands during a slow ibni lookup wins: no later status, event or push", async (t) => {
-  const lookup = gate();
-  const ibni = slowIbni(lookup);
-  const { server } = await boot(t, { fixture: "build-needs-input", ibni });
-  const pushed = [];
-  server.runs.onStatus((status) => pushed.push(status));
-  const id = (await startRun(server, { action: "build" })).json.run.id;
-  await waitFor(() => lookup.entered, { what: "the result handler to reach ibni" });
-  pushed.length = 0;
-  assert.equal((await request(server, "POST", `/api/runs/${id}/stop`, { body: { confirm: true } })).json.run.status, "stopped");
-  const events = statusEvents(server, id).length;
-  await release(lookup, ibni);
-  const run = server.store.getRun(id);
-  assert.equal(run.status, "stopped");
-  assert.equal(run.reason, "Stopped by you");
-  assert.equal(statusEvents(server, id).length, events, "no status event after the stop");
-  assert.deepEqual(pushed, ["stopped"], "no status change after the stop");
-});
-
-test("a timeout that lands during a slow ibni lookup wins", async (t) => {
-  const lookup = gate();
-  const ibni = slowIbni(lookup);
-  const { server } = await boot(t, { fixture: "build-needs-input", ibni, limits: { idleTimeoutMinutes: 0.01 } });
-  const pushed = [];
-  server.runs.onStatus((status) => pushed.push(status));
-  const id = (await startRun(server, { action: "build" })).json.run.id;
-  await waitFor(() => lookup.entered, { what: "the result handler to reach ibni" });
-  pushed.length = 0;
-  await waitFor(() => server.store.getRun(id).status === "timed_out", { what: "the idle timeout" });
-  const events = statusEvents(server, id).length;
-  await release(lookup, ibni);
-  assert.equal(server.store.getRun(id).status, "timed_out");
-  assert.match(server.store.getRun(id).reason, /No activity/);
-  assert.equal(statusEvents(server, id).length, events);
-  assert.deepEqual(pushed, ["timed_out"]);
-});
-
-test("a stop that lands while the host is starting stays stopped, and the host it started is stopped", async (t) => {
-  const starting = gate();
-  const calls = [];
-  const wrapRunner = (runner) => ({
-    ...runner,
-    async start(spec, emit) {
-      await starting.wait();
-      const started = await runner.start(spec, emit);
-      calls.push("started");
-      return started;
-    },
-    stop(runId) { calls.push("stop"); runner.stop(runId); },
-  });
-  const { server } = await boot(t, { fixture: "build-needs-input", wrapRunner });
-  const created = startRun(server, { action: "build" });
-  await waitFor(() => starting.entered, { what: "the start" });
-  const [{ id }] = server.store.listRuns();
-  assert.equal((await request(server, "POST", `/api/runs/${id}/stop`, { body: { confirm: true } })).json.run.status, "stopped");
-  starting.open();
-  assert.equal((await created).json.run.status, "stopped");
-  assert.deepEqual(calls, ["stop", "started", "stop"], "the host started after the stop is stopped too");
-  await new Promise((resolve) => setTimeout(resolve, 300));
-  assert.equal(server.store.getRun(id).status, "stopped");
-  assert.equal(statusEvents(server, id).at(-1).data.status, "stopped");
-});
-
-test("concurrent starts with one clientId make one run: the first gets 201, the rest 200 with the same run", async (t) => {
-  const { server } = await boot(t, { fixture: "build-needs-input" });
+test("concurrent starts with one clientId make one session: the first gets 201, the rest 200 with the same id", async (t) => {
+  const { server, fake } = await boot(t);
   const clientId = "4c1d6a3e-2b7f-4e8a-9c0d-1e2f3a4b5c6d";
-  const responses = await Promise.all(Array.from({ length: 5 }, () => startRun(server, { action: "build", clientId })));
+  const responses = await Promise.all(Array.from({ length: 5 }, () => request(server, "POST", "/api/sessions", { body: { repo: "my-app", kind: "prompt", prompt: "hi", clientId } })));
   assert.deepEqual(responses.map((response) => response.status).sort(), [200, 200, 200, 200, 201]);
-  assert.equal(new Set(responses.map((response) => response.json.run.id)).size, 1);
-  assert.equal(server.store.listRuns().length, 1);
+  assert.equal(new Set(responses.map((response) => response.json.session.id)).size, 1);
+  assert.equal(server.store.listLaunches().length, 1);
+  assert.equal(fake.writes().filter((entry) => entry.method.endsWith(".start")).length, 1);
 });
 
-test("an SSE reconnect that missed more than 1000 events gets one reset with the latest id instead of a replay", (t) => {
-  const store = openStore(":memory:");
-  t.after(() => store.close());
-  const broker = createBroker({ store });
-  t.after(() => broker.close());
-  store.createRun({ id: "r1", repo: "my-app", action: "ask", task: "x" });
-  const ids = Array.from({ length: 1002 }, (_, index) => store.addEvent("r1", "text", { text: `event ${index}` }).id);
+test("the live stream names what changed and never carries content, and a client too far behind gets one reset", () => {
+  const listeners = new Map();
+  const sessions = { on: (name, fn) => { listeners.set(name, fn); return () => listeners.delete(name); } };
+  const stream = createSessionStream({ sessions, heartbeatMs: 60_000 });
   const connect = (lastEventId) => {
     let text = "";
     const res = { writeHead() {}, write(chunk) { text += chunk; }, on() {}, end() {} };
-    broker.handle({ headers: { "last-event-id": String(lastEventId) } }, res);
-    return { text: () => text };
+    stream.handle({ headers: lastEventId === undefined ? {} : { "last-event-id": String(lastEventId) } }, res);
+    return () => text;
   };
-  const messages = (text) => text.split("\n\n").filter((block) => block.startsWith("id: "));
-
-  const exactlyCap = connect(ids[1]); // 1000 missed: replayed in full
-  assert.equal(messages(exactlyCap.text()).length, 1000);
-  assert.ok(!exactlyCap.text().includes("event: reset"));
-
-  const overCap = connect(ids[0]); // 1001 missed: no replay, one reset
-  assert.deepEqual(messages(overCap.text()), [`id: ${ids.at(-1)}\nevent: reset\ndata: {"reason":"truncated"}`]);
-  const live = store.addEvent("r1", "text", { text: "after" });
-  broker.publish(live);
-  assert.match(overCap.text(), new RegExp(`id: ${live.id}\\nevent: event\\n`), "then it goes live");
+  const live = connect();
+  listeners.get("question.added")({ sessionId: "s1", recordId: "toolu_1", text: "secret question text", initial: false });
+  listeners.get("session.changed")({ id: "s1", status: "blocked", initial: false });
+  listeners.get("session.changed")({ id: "s2", initial: true });
+  assert.match(live(), /event: question\ndata: \{"sessionId":"s1","id":"toolu_1","at":/);
+  assert.match(live(), /event: session\ndata: \{"sessionId":"s1","at":/);
+  assert.doesNotMatch(live(), /secret question text|blocked|s2/, "ids only; the initial sync is not news");
+  assert.match(connect(1)(), /event: session/, "a client one event behind is replayed what it missed");
+  assert.match(connect(9999)(), /event: reset/, "an id this process never issued resets the client");
+  stream.close();
 });
+

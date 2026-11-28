@@ -1,47 +1,16 @@
-// The caps that keep a run, or a runaway client, from costing more than meant.
+// The caps that keep a runaway client from starting more sessions than meant:
+// how many ħares-started sessions may be open at once, and how many a day.
+// Interactive sessions belong to the person, so there is no idle or hard timeout.
 import { HttpError } from "./errors.mjs";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/** Throws a 429 when starting another run would break a cap. */
+/** Throws a 429 when starting another session would break a cap. */
 export function assertWithinCaps(store, limits, now = new Date()) {
   if (store.countActive() >= limits.concurrentRuns) {
-    throw new HttpError(429, `${limits.concurrentRuns} runs are already working. Wait for one to finish or stop one.`);
+    throw new HttpError(429, `${limits.concurrentRuns} sessions ħares started are still open. End one first.`);
   }
   if (store.countSince(new Date(now.getTime() - DAY_MS).toISOString()) >= limits.runsPerDay) {
-    throw new HttpError(429, `The limit of ${limits.runsPerDay} runs a day is reached.`);
+    throw new HttpError(429, `The limit of ${limits.runsPerDay} sessions a day is reached.`);
   }
-}
-
-/**
- * One idle timer (reset by activity, paused while a person is asked) and one hard timer per run. `onTimeout`
- * receives the run id and the plain reason.
- */
-export function createWatchdog(limits, onTimeout) {
-  const timers = new Map();
-  const minutes = (value) => value * 60_000;
-  function clear(runId) {
-    const entry = timers.get(runId);
-    if (!entry) return;
-    clearTimeout(entry.idle);
-    clearTimeout(entry.hard);
-    timers.delete(runId);
-  }
-  function arm(runId) {
-    const entry = timers.get(runId) ?? {};
-    clearTimeout(entry.idle);
-    entry.idle = setTimeout(() => { clear(runId); onTimeout(runId, `No activity for ${limits.idleTimeoutMinutes} min`); }, minutes(limits.idleTimeoutMinutes));
-    entry.idle.unref();
-    if (!entry.hard) {
-      entry.hard = setTimeout(() => { clear(runId); onTimeout(runId, "Hit the time limit"); }, minutes(limits.hardTimeoutMinutes));
-      entry.hard.unref();
-    }
-    timers.set(runId, entry);
-  }
-  // Waiting on a person is not idleness: the idle timer stops, the hard one runs on.
-  function pause(runId) {
-    const entry = timers.get(runId);
-    if (entry) clearTimeout(entry.idle);
-  }
-  return { watch: arm, touch: arm, pause, clear, stopAll: () => [...timers.keys()].forEach(clear) };
 }

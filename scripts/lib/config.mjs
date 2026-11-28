@@ -102,6 +102,11 @@ export function abbreviateHome(value, home = os.homedir()) {
 // Remove this shim, and let the schema refuse them again, after 2026-12-01.
 const RETIRED_HARES_KEYS = ["permissions", "mcpPermissions", "branchPrefixes", "allowUnsandboxed", "allowedDomains"];
 const RETIRED_REPOSITORY_KEYS = ["permissions", "allowedDomains"];
+// segwi's own runner, its model, the nightly canary and the run timeouts, retired when herdr became the source of
+// sessions (decision 0028): ħares drives the Claude Code sessions you have, so there is no runner to configure and
+// no run to time out. The same shim: an old config loads, and the installer names each key to delete.
+const RETIRED_HERDR_ERA_KEYS = ["runner", "model", "canary"];
+const RETIRED_LIMIT_KEYS = ["maxTurns", "idleTimeoutMinutes", "hardTimeoutMinutes", "approvalTimeoutMinutes"];
 
 const isObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
 const omit = (value, keys) => Object.fromEntries(Object.entries(value).filter(([key]) => !keys.includes(key)));
@@ -130,14 +135,16 @@ function withoutRetiredHaresKeys(value, retired) {
   const hares = isObject(value) ? value.hares : undefined;
   if (!isObject(hares)) return value;
   const before = retired.length;
-  retired.push(...RETIRED_HARES_KEYS.filter((key) => key in hares).map((key) => `hares.${key}`));
+  retired.push(...[...RETIRED_HARES_KEYS, ...RETIRED_HERDR_ERA_KEYS].filter((key) => key in hares).map((key) => `hares.${key}`));
+  const limits = isObject(hares.limits) ? omit(hares.limits, RETIRED_LIMIT_KEYS) : hares.limits;
+  if (isObject(hares.limits)) retired.push(...RETIRED_LIMIT_KEYS.filter((key) => key in hares.limits).map((key) => `hares.limits.${key}`));
   const repositories = Array.isArray(hares.repositories) ? hares.repositories.map((repository, index) => {
     if (!isObject(repository)) return repository;
     retired.push(...RETIRED_REPOSITORY_KEYS.filter((key) => key in repository).map((key) => `hares.repositories[${index}].${key}`));
     return omit(repository, RETIRED_REPOSITORY_KEYS);
   }) : hares.repositories;
   if (retired.length === before) return value;
-  return { ...value, hares: { ...omit(hares, RETIRED_HARES_KEYS), ...(repositories ? { repositories } : {}) } };
+  return { ...value, hares: { ...omit(hares, [...RETIRED_HARES_KEYS, ...RETIRED_HERDR_ERA_KEYS]), ...(repositories ? { repositories } : {}), ...(limits ? { limits } : {}) } };
 }
 
 function withoutRetiredReviewKeys(value, retired) {

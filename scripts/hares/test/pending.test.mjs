@@ -5,9 +5,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { readFileSync } from "node:fs";
+import { parseScreen } from "../lib/herdr/screen.mjs";
 import {
-  clearForTool, extractAskUserQuestion, foldPending, gcResolved, listRecords, parseLiteral, recordIdFor, ruleTexts, writeRecord,
+  clearForTool, extractAskUserQuestion, foldPending, gcResolved, listRecords, parseLiteral, recordIdFor, removeRecords, ruleTexts, staleWhenUnblocked, writeRecord,
 } from "../lib/pending.mjs";
+
+const liveScreen = (name) => parseScreen(readFileSync(new URL("./fixtures/herdr/screens/" + name, import.meta.url), "utf8"));
 
 const SESSION = "11111111-2222-4333-8444-555555555555";
 
@@ -165,4 +169,84 @@ test("extractAskUserQuestion tells apart no call, a literal call and a call it c
   assert.deepEqual(extractAskUserQuestion("await tools . AskUserQuestion( {questions: []} )"), { found: true, input: { questions: [] } });
   assert.deepEqual(extractAskUserQuestion("await tools.AskUserQuestion(args)"), { found: true, unparsed: true });
   assert.deepEqual(extractAskUserQuestion("await tools.AskUserQuestion([1])"), { found: true, unparsed: true });
+});
+
+// --- Gate 1 findings -----------------------------------------------------------
+
+const replLiteral = (extra = {}) => question({ at: "2026-01-01T00:00:01Z", via: "repl", toolUseId: "toolu_repl", toolName: "REPL", recordId: "question_toolu_repl", ...extra });
+const replInner = (extra = {}) => question({ at: "2026-01-01T00:00:02Z", toolUseId: "repl_abc", recordId: "question_repl_abc", ...extra });
+
+test("a Code Mode question reported by both the REPL call and its inner AskUserQuestion shows once, from the inner record (F4)", () => {
+  const items = foldPending({ sessionId: SESSION, records: [replLiteral(), replInner()] });
+  assert.equal(items.length, 1);
+  assert.equal(items[0].id, "question_repl_abc");
+});
+
+test("an unreadable REPL literal is still folded into the inner record that arrived after it (F4)", () => {
+  const items = foldPending({ sessionId: SESSION, records: [replLiteral({ unparsed: true, input: null }), replInner()] });
+  assert.deepEqual(items.map((item) => [item.id, item.answerable]), [["question_repl_abc", true]]);
+});
+
+test("a REPL question with no inner record yet still shows, and a different later question does not swallow it", () => {
+  assert.equal(foldPending({ sessionId: SESSION, records: [replLiteral()] })[0].id, "question_toolu_repl");
+  const other = replInner({ input: { questions: [{ question: "Something else?", options: [{ label: "A" }] }] } });
+  assert.deepEqual(foldPending({ sessionId: SESSION, records: [replLiteral(), other] }).map((item) => item.id), ["question_toolu_repl", "question_repl_abc"]);
+});
+
+test("the same permission prompt recorded twice shows once, as the newest record", () => {
+  const items = foldPending({ sessionId: SESSION, records: [permission({ recordId: "permission_a", inputHash: "h1" }), permission({ at: "2026-01-01T00:00:09Z", recordId: "permission_b", inputHash: "h1" })] });
+  assert.deepEqual(items.map((item) => item.id), ["permission_b"]);
+  const two = foldPending({ sessionId: SESSION, records: [permission({ recordId: "permission_a", inputHash: "h1" }), permission({ recordId: "permission_b", inputHash: "h2" })] });
+  assert.equal(two.length, 2, "two different commands are two prompts");
+});
+
+test("permission and hint records go once the session leaves blocked, and questions stay (F7)", () => {
+  const hint = { v: 1, at: "2026-01-01T00:00:03Z", kind: "hint", sessionId: SESSION, recordId: "hint" };
+  const records = [question(), permission(), hint];
+  const now = Date.parse("2026-01-01T00:00:05Z");
+  assert.deepEqual(staleWhenUnblocked(records, { status: "working", leftBlocked: true, now }).map((record) => record.recordId), ["permission_abc", "hint"]);
+  assert.deepEqual(staleWhenUnblocked(records, { status: "blocked", leftBlocked: true, now }), [], "nothing goes while still blocked");
+});
+
+test("a permission record written a moment before herdr reports blocked is kept, and an old one with no blocked state goes (F7)", () => {
+  const recent = staleWhenUnblocked([permission()], { status: "working", now: Date.parse("2026-01-01T00:00:10Z") });
+  assert.deepEqual(recent, []);
+  const old = staleWhenUnblocked([permission()], { status: "idle", now: Date.parse("2026-01-01T00:05:00Z") });
+  assert.deepEqual(old.map((record) => record.recordId), ["permission_abc"]);
+});
+
+test("removing records deletes exactly the named files", (t) => {
+  const box = sandbox(t);
+  writeRecord(question(), box);
+  writeRecord(permission(), box);
+  assert.equal(removeRecords(SESSION, [permission()], box), 1);
+  assert.deepEqual(listRecords(SESSION, box).map((record) => record.kind), ["question"]);
+});
+
+test("a real screen's Type something and Chat rows, given as option numbers, are offered on the item", () => {
+  const record = question({ input: { questions: [{ header: "Fruit", question: "Which fruit for the gate?", options: [{ label: "Apple" }, { label: "Pear" }] }] } });
+  const [item] = foldPending({ sessionId: SESSION, records: [record], screen: liveScreen("live-q-single-normal.txt") });
+  assert.equal(item.freeText, true);
+  assert.equal(item.chat, true);
+  const [noRows] = foldPending({ sessionId: SESSION, records: [permission()], screen: liveScreen("live-perm-bash.txt") });
+  assert.equal(noRows.freeText, false);
+});
+
+test("a several-question call points at the question on screen, and the review step shows what will be sent", () => {
+  const record = question({ input: { questions: [
+    { header: "Size", question: "Which size?", options: [{ label: "Small" }, { label: "Large" }] },
+    { header: "Shape", question: "Which shape?", options: [{ label: "Round" }, { label: "Square" }] },
+  ] } });
+  const second = parseScreen(readFileSync(new URL("./fixtures/herdr/screens/live-q-two-questions.txt", import.meta.url), "utf8").replace("☐ Size  ☐ Shape", "☒ Size  ☐ Shape").replace("Which size?", "Which shape?"));
+  assert.equal(foldPending({ sessionId: SESSION, records: [record], screen: second })[0].current, 1);
+  assert.equal(foldPending({ sessionId: SESSION, records: [record], screen: liveScreen("live-q-two-questions.txt") })[0].current, 0);
+  const [review] = foldPending({ sessionId: SESSION, records: [record], screen: liveScreen("live-q-review-two.txt") });
+  assert.equal(review.step, "review");
+  assert.deepEqual(review.answers, [{ question: "Which size?", answer: "Large" }, { question: "Which shape?", answer: "Round" }]);
+});
+
+test("a screen ħares cannot read makes a terminal-only item, never answerable buttons", () => {
+  const [item] = foldPending({ sessionId: SESSION, records: [], screen: { kind: "unknown", raw: "" } });
+  assert.equal(item.answerable, false);
+  assert.match(item.reason, /terminal/);
 });

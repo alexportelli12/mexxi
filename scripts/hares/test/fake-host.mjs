@@ -1,102 +1,55 @@
-// A fake `claude` binary. Run as `node fake-host.mjs <fixture.jsonl> <report.json> [claude args...]`
-// (the adapter factory's binArgs supply the first two). It waits for the first
-// stdin line, replays the recording, pauses at each {"hares_fixture":"await_input"}
-// marker until another stdin line arrives, and exits when stdin closes. The report
-// holds the arguments it got and every stdin line, so tests can inspect both.
+// A fake `claude`: what fake-herdr's agent start runs in the tests that boot the
+// whole server (helpers.mjs startHares). It writes the session's transcript the
+// way Claude Code does, ~/.claude/projects/<cwd slug>/<session id>.jsonl under
+// the test's HOME, so the session layer reads it as it would a real one, and a
+// report of the arguments it was started with.
 //
-// A recording can also hold {"hares_fixture":"approve","tool_name":..,"input":..,"tool_use_id":..}.
-// There the fake host does what Claude Code does for a call outside the allow list: it starts
-// the `hares` MCP server from the --mcp-config file as a stdio client, calls the `approve`
-// tool, and writes the outcome to stdout as a tool_result (an error result for a denial).
-// The approver's replies are kept in the report.
+//   node fake-host.mjs <scenario.json> <report.json> --home <dir> --cwd <dir> --session <id> -- [claude args...]
 //
-// {"hares_fixture":"await_release"} stands for time passing while the host is idle, such as a background
-// command still running after the agent ended its turn: replay waits until the file <report.json>.release
-// exists (the release() of helpers.mjs's fakeAdapter writes it), then removes it and carries on.
-//
-// {"hares_fixture":"spawn_grandchild"} starts a child that ignores SIGINT and SIGTERM and would
-// outlive a kill of the host alone, the way an MCP server or a background shell can. Its pid is in
-// the report, so a test can check that a stop ended it.
-import { spawn } from "node:child_process";
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import readline from "node:readline";
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { getDefaultEnvironment, StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+// The scenario is a JSON array of steps after the first prompt (which is the last
+// argument, as claude takes it):
+//   {"say": "text"}                                  an assistant message
+//   {"tool": "Bash", "input": {...}, "result": "..."} a tool call and its result
+//   {"ask": [{question, header, options, multiSelect}]} an AskUserQuestion call, still open
+// A step's strings may hold __FAKE_TOKEN__, replaced by $FAKE_HOST_TOKEN, so a test can seed
+// a secret without a fixture ever holding one.
+import { mkdirSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
+import path from "node:path";
 
-const [fixture, reportFile, ...args] = process.argv.slice(2);
+const [scenarioFile, reportFile, ...rest] = process.argv.slice(2);
+const flag = (name) => rest[rest.indexOf(name) + 1];
+const home = flag("--home");
+const cwd = flag("--cwd");
+const sessionId = flag("--session");
+const args = rest.includes("--") ? rest.slice(rest.indexOf("--") + 1) : [];
 if (args[0] === "--version") {
-  process.stdout.write("2.1.309 (Claude Code)\n");
+  process.stdout.write("2.1.332 (Claude Code)\n");
   process.exit(0);
 }
-// A recording never holds a token-shaped value; __FAKE_TOKEN__ becomes $FAKE_HOST_TOKEN, so a test can seed one.
-const lines = readFileSync(fixture, "utf8").replaceAll("__FAKE_TOKEN__", process.env.FAKE_HOST_TOKEN ?? "").split("\n").filter((line) => line !== "");
-const stdin = [];
-const waiting = [];
-let available = 0;
-const haresEnv = Object.keys(process.env).filter((key) => key.startsWith("SEGWI_"));
-const approverReplies = [];
-let grandchild = null;
-// Real Claude Code waits for MCP_TOOL_TIMEOUT (hares sets it per run), not for the MCP SDK's 60 s default.
-const toolTimeout = Number(process.env.MCP_TOOL_TIMEOUT) > 0 ? Number(process.env.MCP_TOOL_TIMEOUT) : 2 * 60 * 60_000;
-const report = () => writeFileSync(reportFile, JSON.stringify({
-  args, stdin, haresEnv, approverReplies, grandchild,
-  cwd: process.cwd(), npmCache: process.env.npm_config_cache ?? null, nodeEnv: process.env.NODE_ENV ?? null,
-  ibniEnv: Object.keys(process.env).filter((key) => key.startsWith("IBNI_")),
-  gitConfig: { count: process.env.GIT_CONFIG_COUNT, first: [process.env.GIT_CONFIG_KEY_0, process.env.GIT_CONFIG_VALUE_0], second: [process.env.GIT_CONFIG_KEY_1, process.env.GIT_CONFIG_VALUE_1] },
-}));
-report();
+const steps = JSON.parse(readFileSync(scenarioFile, "utf8").replaceAll("__FAKE_TOKEN__", process.env.FAKE_HOST_TOKEN ?? ""));
+const dir = path.join(home, ".claude", "projects", cwd.replace(/[^A-Za-z0-9]/g, "-"));
+mkdirSync(dir, { recursive: true });
+const file = path.join(dir, `${sessionId}.jsonl`);
+writeFileSync(reportFile, JSON.stringify({ args, cwd, sessionId, transcript: file }));
 
-function nextInput() {
-  if (available > 0) { available -= 1; return Promise.resolve(); }
-  return new Promise((resolve) => waiting.push(resolve));
-}
-
-const reader = readline.createInterface({ input: process.stdin });
-reader.on("line", (line) => {
-  stdin.push(line);
-  report();
-  if (waiting.length) waiting.shift()();
-  else available += 1;
-});
-reader.on("close", () => process.exit(0));
-
-async function askApprover({ tool_name, input, tool_use_id }) {
-  const { command, args: serverArgs, env } = JSON.parse(readFileSync(args[args.indexOf("--mcp-config") + 1], "utf8")).mcpServers.segwi;
-  const client = new Client({ name: "fake-claude-code", version: "0.0.0" });
-  await client.connect(new StdioClientTransport({ command, args: serverArgs, env: { ...getDefaultEnvironment(), ...env } }));
-  const reply = JSON.parse((await client.callTool({ name: "approve", arguments: { tool_name, input, tool_use_id } }, undefined, { timeout: toolTimeout })).content[0].text);
-  await client.close();
-  approverReplies.push(reply);
-  report();
-  const allowed = reply.behavior === "allow";
-  const content = [{ type: "tool_result", tool_use_id, is_error: !allowed, content: allowed ? "(fake host) the call ran" : reply.message }];
-  process.stdout.write(`${JSON.stringify({ type: "user", message: { role: "user", content } })}\n`);
-}
-
-function spawnGrandchild() {
-  const script = "process.on('SIGINT', () => {}); process.on('SIGTERM', () => {}); setInterval(() => {}, 1000); process.stdout.write('ready\\n');";
-  const child = spawn(process.execPath, ["-e", script], { stdio: ["ignore", "pipe", "ignore"] });
-  return new Promise((resolve) => child.stdout.once("data", () => {
-    grandchild = child.pid;
-    report();
-    resolve();
-  }));
-}
-
-async function awaitRelease() {
-  const file = `${reportFile}.release`;
-  while (!existsSync(file)) await new Promise((resolve) => setTimeout(resolve, 20));
-  rmSync(file);
-}
-
-await nextInput();
-for (const line of lines) {
-  let marker = null;
-  let parsed = null;
-  try { parsed = JSON.parse(line); marker = parsed?.hares_fixture ?? null; } catch { /* a garbage line is replayed as is */ }
-  if (marker === "await_input") await nextInput();
-  else if (marker === "approve") await askApprover(parsed);
-  else if (marker === "spawn_grandchild") await spawnGrandchild();
-  else if (marker === "await_release") await awaitRelease();
-  else process.stdout.write(`${line}\n`);
+let clock = Date.parse("2026-11-28T10:00:00.000Z");
+const line = (entry) => {
+  clock += 1000;
+  appendFileSync(file, `${JSON.stringify({ isSidechain: false, sessionId, cwd, timestamp: new Date(clock).toISOString(), ...entry })}\n`);
+};
+// claude's positional prompt is the last argument; flags and their values come before it.
+const prompt = args.length && !args.at(-1).startsWith("-") && (args.length === 1 || !args.at(-2).startsWith("--")) ? args.at(-1) : null;
+writeFileSync(file, "");
+if (prompt) line({ type: "user", message: { role: "user", content: prompt } });
+let n = 0;
+for (const step of steps) {
+  n += 1;
+  if (step.say !== undefined) line({ type: "assistant", message: { role: "assistant", content: [{ type: "text", text: step.say }] } });
+  else if (step.tool) {
+    const id = `toolu_fake_${n}`;
+    line({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id, name: step.tool, input: step.input ?? {} }] } });
+    line({ type: "user", message: { role: "user", content: [{ type: "tool_result", tool_use_id: id, content: step.result ?? "" }] }, toolUseResult: { stdout: step.result ?? "", interrupted: false } });
+  } else if (step.ask) {
+    line({ type: "assistant", message: { role: "assistant", content: [{ type: "tool_use", id: `toolu_fake_ask_${n}`, name: "AskUserQuestion", input: { questions: step.ask } }] } });
+  }
 }

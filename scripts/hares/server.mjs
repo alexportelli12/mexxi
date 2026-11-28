@@ -10,12 +10,7 @@ export const COMMANDS = {
   serve: {
     implemented: true,
     summary: "Run the web app and MCP server on loopback.",
-    why: "A run stops whenever it needs a reply, so something has to stay up to start, follow and answer runs from your phone.",
-  },
-  approver: {
-    implemented: true,
-    summary: "Ask you to allow or deny a call the agent is not pre-approved to make.",
-    why: "The agent should never run an unusual command unseen, so each one waits for your answer.",
+    why: "A session stops whenever it needs an answer, so something has to stay up to follow, answer and start sessions from your phone.",
   },
   token: {
     implemented: true,
@@ -32,10 +27,10 @@ export const COMMANDS = {
     summary: "Store or remove the read-only GitHub token that readiness reads pull requests with.",
     why: "Whether a pull request is ready depends on CI and its state on GitHub, which hares can only read with a token you choose.",
   },
-  canary: {
+  doctor: {
     implemented: true,
-    summary: "Run a small real task to check the coding agent still behaves as hares expects.",
-    why: "The agent's command line can change between versions, and a nightly check finds out before you do.",
+    summary: "Check, read-only, that herdr, the question hook and Claude Code are what hares expects.",
+    why: "herdr's protocol, the hook in Claude Code's settings and Claude Code's screens can each change under hares, and this says which one did.",
   },
 };
 
@@ -107,11 +102,10 @@ export async function main(args = process.argv.slice(2)) {
     return;
   }
   if (first === "serve") return serve(args.slice(1));
-  if (first === "approver") return (await import("./lib/approver.mjs")).runApprover(args.slice(1));
   if (first === "vapid") return (await import("./lib/vapid-cli.mjs")).runVapid(args.slice(1));
   if (first === "github-token") return (await import("./lib/github-token-cli.mjs")).runGithubToken(args.slice(1));
   if (first === "token") return (await import("./lib/token-cli.mjs")).runToken(args.slice(1));
-  if (first === "canary") return void (await (await import("./lib/canary-cli.mjs")).runCanaryCommand(args.slice(1)));
+  if (first === "doctor") return void (await (await import("./lib/doctor.mjs")).runDoctorCommand(args.slice(1)));
   process.stderr.write(`hares ${first}: not yet implemented\n`);
   process.exitCode = 2;
   return undefined;

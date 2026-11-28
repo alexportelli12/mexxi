@@ -55,9 +55,18 @@
       "paths": ["README.md", "docs/**", "site/index.html", "skills/docs-writing/**", "scripts/docs/vale.mjs", ".vale.ini", ".vale/**"]
     },
     "hares": {
-      "command": "node --test scripts/hares/test/server.test.mjs scripts/hares/test/config.test.mjs scripts/hares/test/tokens.test.mjs scripts/hares/test/check-design.test.mjs scripts/hares/test/web-check.test.mjs scripts/hares/test/bundle-size.test.mjs scripts/hares/test/contract.test.mjs scripts/hares/test/ibni-contract.test.mjs scripts/hares/test/security.test.mjs scripts/hares/test/steps.test.mjs scripts/hares/test/settings.test.mjs scripts/hares/test/approver.test.mjs scripts/hares/test/approvals.test.mjs scripts/hares/test/risk.test.mjs scripts/hares/test/mcp.test.mjs scripts/hares/test/token.test.mjs scripts/hares/test/push.test.mjs scripts/hares/test/static.test.mjs scripts/hares/test/pwa.test.mjs scripts/hares/test/canary.test.mjs scripts/hares/test/audit.test.mjs scripts/hares/test/waiting.test.mjs scripts/hares/test/extensions.test.mjs scripts/hares/test/readiness.test.mjs scripts/hares/test/readiness-github.test.mjs",
-      "paths": ["scripts/hares/**", "scripts/ibni/**", "scripts/lib/config.mjs", "scripts/lib/redact.mjs", "scripts/lib/browser.mjs", "scripts/lib/secret-patterns.json", "config.schema.json", "site/tokens.css"],
+      "command": "node --test scripts/hares/test/server.test.mjs scripts/hares/test/config.test.mjs scripts/hares/test/tokens.test.mjs scripts/hares/test/check-design.test.mjs scripts/hares/test/web-check.test.mjs scripts/hares/test/bundle-size.test.mjs scripts/hares/test/contract.test.mjs scripts/hares/test/ibni-contract.test.mjs scripts/hares/test/security.test.mjs scripts/hares/test/steps.test.mjs scripts/hares/test/settings.test.mjs scripts/hares/test/risk.test.mjs scripts/hares/test/mcp.test.mjs scripts/hares/test/mcp-guardrails.test.mjs scripts/hares/test/mcp-new-tools.test.mjs scripts/hares/test/token.test.mjs scripts/hares/test/push.test.mjs scripts/hares/test/static.test.mjs scripts/hares/test/pwa.test.mjs scripts/hares/test/audit.test.mjs scripts/hares/test/extensions.test.mjs scripts/hares/test/notify.test.mjs scripts/hares/test/doctor.test.mjs scripts/hares/test/auth-browser-mark.test.mjs",
+      "paths": ["scripts/hares/**","scripts/ibni/**","scripts/lib/config.mjs","scripts/lib/redact.mjs","scripts/lib/browser.mjs","scripts/lib/secret-patterns.json","config.schema.json","site/tokens.css"],
       "exclude": ["scripts/hares/web/**"]
+    },
+    "hares-sessions": {
+      "command": "node --test scripts/hares/test/herdr-client.test.mjs scripts/hares/test/herdr-adapter.test.mjs scripts/hares/test/herdr-guard.test.mjs scripts/hares/test/herdr-screen.test.mjs scripts/hares/test/herdr-static.test.mjs scripts/hares/test/hook.test.mjs scripts/hares/test/install-hook.test.mjs scripts/hares/test/pending.test.mjs scripts/hares/test/transcript.test.mjs scripts/hares/test/sessions.test.mjs scripts/hares/test/sessions-lifecycle.test.mjs scripts/hares/test/run-view.test.mjs scripts/hares/test/links.test.mjs scripts/hares/test/store-migrations.test.mjs scripts/hares/test/approvals.test.mjs",
+      "paths": ["scripts/hares/**", "scripts/lib/host-hooks.mjs", "scripts/lib/config.mjs", "scripts/lib/redact.mjs", "scripts/lib/secret-patterns.json", "config.schema.json"],
+      "exclude": ["scripts/hares/web/**"]
+    },
+    "hares-github": {
+      "command": "node --test scripts/hares/test/github-board.test.mjs scripts/hares/test/github-write.test.mjs scripts/hares/test/html-sanitize.test.mjs scripts/hares/test/readiness.test.mjs scripts/hares/test/readiness-github.test.mjs",
+      "paths": ["scripts/hares/lib/**", "scripts/hares/test/github-*", "scripts/hares/test/html-sanitize.test.mjs", "scripts/hares/test/readiness*", "scripts/hares/test/fixtures/github/**", "scripts/hares/test/helpers.mjs"]
     },
     "hares-web": {
       "command": "node scripts/hares/web-check.mjs",
@@ -66,7 +75,7 @@
     "hares-e2e": {
       "command": "node --test scripts/hares/test/web.e2e.mjs",
       "dependsOn": ["hares-web"],
-      "paths": ["scripts/hares/web/**", "scripts/hares/lib/**", "scripts/hares/test/web.e2e.mjs", "scripts/hares/test/web-harness.mjs", "scripts/hares/test/fixtures/**", "scripts/hares/runners/**", "site/tokens.css", "claude/mods/run-pane/hooks/journey.ts"]
+      "paths": ["scripts/hares/web/**", "scripts/hares/lib/**", "scripts/hares/test/web.e2e.mjs", "scripts/hares/test/web-harness.mjs", "scripts/hares/test/fixtures/**", "site/tokens.css", "claude/mods/run-pane/hooks/journey.ts"]
     },
     "design": {
       "command": "node scripts/hares/check-design.mjs",

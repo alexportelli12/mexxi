@@ -194,52 +194,130 @@ function itemFor(record) {
   return { ...base, answerable: false, reason: record.message ?? "" };
 }
 
+// Two records for one prompt become one. In Code Mode PreToolUse fires for the
+// REPL call (its literal read from the code) and again for the AskUserQuestion
+// inside it (tool_use_id "repl_…", the real tool_input), seen live at gate 1
+// (F4): the inner record wins, and the REPL record it answers is dropped, paired
+// by question text, or by time when the literal could not be read. Records of
+// the same kind about the same tool and input (the same prompt reported twice)
+// keep only the newest.
+const questionTexts = (record) => (Array.isArray(record.input?.questions) ? record.input.questions.map((entry) => String(entry?.question ?? "").trim()) : []);
+const sameTexts = (a, b) => a.length > 0 && a.length === b.length && a.every((text, index) => text === b[index]);
+const promptKey = (record) => (record.kind === "hint" ? "hint" : JSON.stringify([record.kind, record.toolName ?? "", record.inputHash ?? hashInput(record.input), record.via ?? ""]));
+
+export function dedupeRecords(records) {
+  const inner = records.filter((record) => record.kind === "question" && record.via !== "repl" && /^repl_/.test(record.toolUseId ?? ""));
+  const dropped = new Set();
+  for (const answer of inner) {
+    const texts = questionTexts(answer);
+    const candidates = records.filter((record) => record.via === "repl" && record.kind === "question" && !dropped.has(record)
+      && String(record.at) <= String(answer.at));
+    const match = candidates.find((record) => sameTexts(questionTexts(record), texts)) ?? candidates.filter((record) => record.unparsed || record.truncated).at(-1);
+    if (match) dropped.add(match);
+  }
+  const newest = new Map();
+  // Records come oldest first, so a later one replaces an earlier one.
+  for (const record of records) if (!dropped.has(record)) newest.set(promptKey(record), record);
+  return records.filter((record) => newest.get(promptKey(record)) === record);
+}
+
+// Permission and hint records have no reliable end: a denied permission gets no
+// PostToolUse and no Stop (F7). Once herdr says the session left "blocked" they
+// are stale. A record younger than graceMs is kept while the status is not yet
+// blocked, because the hook can write it a moment before herdr notices.
+export const UNBLOCKED_GRACE_MS = 30_000;
+export function staleWhenUnblocked(records, { status, leftBlocked = false, now = Date.now(), graceMs = UNBLOCKED_GRACE_MS }) {
+  if (status === "blocked") return [];
+  return records.filter((record) => (record.kind === "permission" || record.kind === "hint")
+    && (leftBlocked || now - Date.parse(record.at) > graceMs));
+}
+
+/** Removes the given records' files; returns how many went. */
+export function removeRecords(sessionId, records, options) {
+  const ids = new Set(records.map((record) => record.recordId));
+  let removed = 0;
+  for (const { file, record } of recordFiles(sessionId, options)) {
+    if (!ids.has(record.recordId)) continue;
+    rmSync(file, { force: true });
+    removed += 1;
+  }
+  return removed;
+}
+
 // Combines a session's records with what herdr's screen shows (screen.mjs:
-// {kind, question, options:[{n,label,description}], freeText, chat}). The record
-// says what was asked; the screen says what can be pressed now, so its option
-// numbers win. The screen describes only the newest prompt. With no record the
-// screen alone makes the item; a hint shows only when nothing richer exists.
+// {kind, question, options:[{n,label,description}], freeText, chat, tabs?}). The
+// record says what was asked; the screen says what can be pressed now, so its
+// option numbers win. The screen describes only the newest prompt. With no
+// record the screen alone makes the item; a hint shows only when nothing richer
+// exists.
 export function foldPending({ sessionId, records, screen = null }) {
-  const actionable = records.filter((record) => record.kind !== "hint");
+  const folded = dedupeRecords(records);
+  const actionable = folded.filter((record) => record.kind !== "hint");
   const items = actionable.map(itemFor);
   if (!items.length) {
     const screenKind = screen?.kind;
     if (screenKind && screenKind !== "none") return [fromScreenOnly(sessionId, screen)];
-    const hint = records.findLast((record) => record.kind === "hint");
+    const hint = folded.findLast((record) => record.kind === "hint");
     return hint ? [itemFor(hint)] : [];
   }
   if (screen) items[items.length - 1] = mergeScreen(items.at(-1), screen);
   return items;
 }
 
+// screen.mjs gives the option number of "Type something." / "Chat about this"
+// (null when absent); older callers pass booleans.
+const offered = (value) => value === true || Number.isInteger(value);
+
 function screenQuestion(screen) {
-  return { header: "", question: String(screen.question ?? ""), multiSelect: false, options: (screen.options ?? []).map((option) => ({ n: option.n, label: option.label, description: option.description ?? "" })) };
+  return {
+    header: String(screen.header ?? ""), question: String(screen.question ?? ""), multiSelect: screen.multiSelect === true,
+    options: (screen.options ?? []).map((option) => ({ n: option.n, label: option.label, description: option.description ?? "" })),
+  };
 }
 
 function fromScreenOnly(sessionId, screen) {
+  const options = screen.options ?? [];
+  const readable = screen.kind !== "unknown" && options.length > 0;
   return {
     id: "screen_" + sessionId, sessionId, kind: screen.kind, at: null, toolUseId: null, paneId: null,
-    questions: screen.kind === "question" ? [screenQuestion(screen)] : [], screenOptions: screen.options ?? [],
-    freeText: screen.freeText === true, chat: screen.chat === true, answerable: (screen.options ?? []).length > 0,
-    reason: (screen.options ?? []).length ? "" : TERMINAL_ONLY, source: "screen",
+    questions: screen.kind === "question" ? [screenQuestion(screen)] : [], screenOptions: options,
+    freeText: offered(screen.freeText), chat: offered(screen.chat), answerable: readable,
+    reason: readable ? "" : TERMINAL_ONLY, source: "screen",
+    ...(screen.kind === "review" ? { step: "review", answers: screen.answers ?? [] } : {}),
   };
+}
+
+// Which question of a several-question call is on screen: the tab named by the
+// screen's header, else the one whose text matches, else the first.
+function currentIndex(questions, screen) {
+  if (questions.length < 2) return 0;
+  const byHeader = questions.findIndex((entry) => entry.header && entry.header === screen.header);
+  if (byHeader >= 0) return byHeader;
+  const flat = (text) => String(text ?? "").replace(/\s+/g, " ").trim();
+  const byText = questions.findIndex((entry) => flat(entry.question) === flat(screen.question));
+  return byText >= 0 ? byText : 0;
 }
 
 function mergeScreen(item, screen) {
   const merged = { ...item, screenOptions: screen.options ?? [], source: "hook+screen" };
-  if (screen.freeText !== undefined) merged.freeText = screen.freeText === true;
-  if (screen.chat !== undefined) merged.chat = screen.chat === true;
+  if (screen.freeText !== undefined) merged.freeText = offered(screen.freeText);
+  if (screen.chat !== undefined) merged.chat = offered(screen.chat);
   if (item.kind !== "question") return merged;
+  // Every tab answered: the form now asks to submit what was chosen.
+  if (screen.kind === "review") return { ...merged, step: "review", answers: screen.answers ?? [], freeText: false, chat: false };
+  if (screen.kind !== "question") return merged;
   if (!item.questions.length && (screen.options ?? []).length) {
-    return { ...merged, questions: [screenQuestion(screen)], answerable: true, reason: "" };
+    return { ...merged, questions: [screenQuestion(screen)], current: 0, answerable: true, reason: "" };
   }
-  if (item.questions.length === 1 && (screen.options ?? []).length) {
-    const [only] = item.questions;
-    const described = new Map(only.options.map((option) => [option.label, option.description]));
+  const current = currentIndex(item.questions, screen);
+  if (!(screen.options ?? []).length) return { ...merged, current };
+  const questions = item.questions.map((entry, index) => {
+    if (index !== current) return entry;
+    const described = new Map(entry.options.map((option) => [option.label, option.description]));
     const options = screen.options.map((option) => ({ n: option.n, label: option.label, description: option.description || described.get(option.label) || "" }));
-    return { ...merged, questions: [{ ...only, options }] };
-  }
-  return merged;
+    return { ...entry, options };
+  });
+  return { ...merged, questions, current };
 }
 
 // --- A literal reader for Code Mode ------------------------------------------

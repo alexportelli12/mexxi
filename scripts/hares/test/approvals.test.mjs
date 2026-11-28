@@ -1,190 +1,19 @@
-// Approvals end to end (plan section 11.7, fake-host half): a fake Claude Code
-// spawns the real approver from the rendered MCP config, a person answers through
-// the REST API, and the host receives the decision.
+// Approvals (plan §1, the approver table): permission prompts recorded by the
+// hook become approval rows for list_approvals and the web card, and only a
+// person's decision in the web app reaches the prompt, through the guard. The
+// approver MCP server and its fake-host tests were retired once every row of the
+// table below had a hook-era test here.
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync, writeFileSync } from "node:fs";
-import { spawn } from "node:child_process";
-import http from "node:http";
-import { Readable } from "node:stream";
-import path from "node:path";
+import { readFileSync } from "node:fs";
 import test from "node:test";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import { contentFor, displayLength, exactFor } from "../lib/approvals.mjs";
-import { createHandler } from "../lib/http.mjs";
-import { startServer } from "../lib/serve.mjs";
-import { fakeAdapter, makeRepo, makeSettings, request, tempDir, waitFor } from "./helpers.mjs";
+import { contentFor, createHookApprovals, DISPLAY_MAX, displayLength, exactFor, optionForDecision } from "../lib/approvals.mjs";
+import { createHerdrAdapter } from "../lib/herdr/adapter.mjs";
+import { parseScreen } from "../lib/herdr/screen.mjs";
+import { openStore } from "../lib/store.mjs";
+import { claudeAgent, startFakeHerdr } from "./fake-herdr.mjs";
 
 const TOKEN = `ghp_${"a1B2c3D4e5".repeat(4).slice(0, 36)}`;
-const noIbni = { findNewWorkspace: async () => null, summary: async () => { throw new Error("no ibni in this test"); }, list: async () => [] };
 const COMMAND = (token) => `curl https://example.com -H 'Authorization: token ${token}'`;
-
-async function boot(t, { fixture = "approval-loop", auth, limits, approvalTimeoutMs, token = "" } = {}) {
-  process.env.FAKE_HOST_TOKEN = token;
-  t.after(() => { delete process.env.FAKE_HOST_TOKEN; });
-  const repo = makeRepo(t);
-  const dir = tempDir(t, "hares-data-");
-  const host = fakeAdapter(t, fixture);
-  const settings = makeSettings({ repos: [{ name: "my-app", path: repo, actions: ["build", "ready", "ask"] }], auth, limits });
-  const server = await startServer({ settings, dataDir: dir, runner: host.adapter, ibni: noIbni, staticRoot: null, approvalTimeoutMs });
-  t.after(() => server.close());
-  return { server, host, dir, repo, settings };
-}
-
-// The host writes its report a moment after it starts.
-const replies = (host) => { try { return host.report().approverReplies; } catch { return []; } };
-const startRun = (server, task = "Look at example.com") => request(server, "POST", "/api/runs", { body: { repo: "my-app", action: "build", task } });
-const pending = async (server) => (await request(server, "GET", "/api/approvals?status=pending")).json.approvals;
-const decide = (server, id, decision, options) => request(server, "POST", `/api/approvals/${id}`, { body: { decision }, ...options });
-const waitForPending = (server) => waitFor(async () => (await pending(server))[0], { timeoutMs: 2000, what: "a pending approval" });
-
-test("a call outside the allow list reaches a person with its exact command, and a denial goes back to the host", async (t) => {
-  const { server, host, repo } = await boot(t);
-  const { json } = await startRun(server);
-  const runId = json.run.id;
-  const approval = await waitForPending(server);
-
-  assert.equal(approval.runId, runId);
-  assert.equal(approval.repo, "my-app");
-  assert.equal(approval.tool, "Bash");
-  assert.equal(approval.exact, COMMAND(""));
-  assert.equal(approval.risk, "network");
-  assert.equal(approval.riskLabel, "Reaches the internet");
-  assert.equal(approval.why, "Fetch the example page");
-  assert.equal(approval.cwd, repo);
-  assert.equal(approval.status, "pending");
-  assert.ok(Date.parse(approval.expiresAt) > Date.now());
-  assert.equal((await request(server, "GET", `/api/runs/${runId}`)).json.run.status, "needs_approval");
-
-  const answered = await decide(server, approval.id, "deny");
-  assert.equal(answered.status, 200);
-  assert.equal(answered.json.approval.status, "denied");
-  await waitFor(() => replies(host).length === 1, { what: "the host's reply" });
-  assert.deepEqual(host.report().approverReplies[0], { behavior: "deny", message: "A person denied this in hares." });
-  await waitFor(() => server.store.getRun(runId).status === "needs_input", { what: "the run to carry on" });
-  assert.deepEqual(await pending(server), []);
-});
-
-test("an allow returns the original input unchanged, for that one call", async (t) => {
-  const { server, host } = await boot(t);
-  await startRun(server);
-  const approval = await waitForPending(server);
-  assert.equal((await decide(server, approval.id, "allow")).json.approval.status, "allowed");
-  await waitFor(() => replies(host).length === 1);
-  const fixture = readFileSync(new URL("./fixtures/claude-code/approval-loop.jsonl", import.meta.url), "utf8").split("\n").map((line) => (line ? JSON.parse(line) : null));
-  const sent = fixture.find((line) => line?.hares_fixture === "approve").input;
-  assert.deepEqual(host.report().approverReplies[0], { behavior: "allow", updatedInput: { ...sent, command: COMMAND("") } });
-});
-
-test("an approval nobody answers expires, which denies it, and the run goes on", async (t) => {
-  const { server, host } = await boot(t, { approvalTimeoutMs: 150 });
-  const { json } = await startRun(server);
-  const runId = json.run.id;
-  await waitFor(() => replies(host).length === 1, { what: "the expiry reply" });
-  assert.deepEqual(host.report().approverReplies[0], { behavior: "deny", message: "No one answered in time, so hares denied it." });
-  const expired = (await request(server, "GET", "/api/approvals?status=expired")).json.approvals;
-  assert.equal(expired.length, 1);
-  assert.equal(expired[0].status, "expired");
-  await waitFor(() => server.store.getRun(runId).status === "needs_input");
-  assert.ok(server.store.listAudit(100).some((row) => row.action === "approval.expired" && row.actor === "system"));
-});
-
-test("a decided approval can't be decided again, and there is no bulk route", async (t) => {
-  const { server } = await boot(t);
-  await startRun(server);
-  const approval = await waitForPending(server);
-  assert.equal((await decide(server, approval.id, "deny")).status, 200);
-  assert.equal((await decide(server, approval.id, "allow")).status, 409);
-  assert.equal((await decide(server, "0".repeat(24), "allow")).status, 404);
-  for (const body of [{ decision: "always" }, { decision: "allow", remember: true }, { decision: "allow", all: true }, {}]) {
-    assert.equal((await request(server, "POST", `/api/approvals/${approval.id}`, { body })).status, 400, JSON.stringify(body));
-  }
-  for (const route of ["/api/approvals", "/api/approvals/all", "/api/approvals/allow-all"]) {
-    assert.ok([404, 405].includes((await request(server, "POST", route, { body: { decision: "allow" } })).status), route);
-  }
-});
-
-test("stopping a run expires what it was waiting on", async (t) => {
-  const { server } = await boot(t);
-  const { json } = await startRun(server);
-  await waitForPending(server);
-  assert.equal((await request(server, "POST", `/api/runs/${json.run.id}/stop`, { body: { confirm: true } })).status, 200);
-  assert.deepEqual(await pending(server), []);
-  assert.equal(server.store.listApprovals({ status: "expired" }).length, 1);
-});
-
-test("a decision is audited with who made it", async (t) => {
-  const { server } = await boot(t);
-  await startRun(server);
-  const approval = await waitForPending(server);
-  await decide(server, approval.id, "allow");
-  const rows = server.store.listAudit(100);
-  assert.ok(rows.some((row) => row.action === "approval.requested" && row.target === approval.id));
-  const decision = rows.find((row) => row.action === "approval.allowed");
-  assert.equal(decision.target, approval.id);
-  assert.equal(decision.actor, "local");
-  assert.equal(decision.origin, "web");
-  assert.ok(rows.some((row) => row.action === "POST /api/approvals/:id" && row.outcome === "ok"));
-});
-
-/** A recording that asks for each call in turn, as the fake host does for approval-loop. */
-function callsFixture(t, calls) {
-  const lines = readFileSync(new URL("./fixtures/claude-code/approval-loop.jsonl", import.meta.url), "utf8").split("\n").filter(Boolean);
-  const [init, intro, , , ...rest] = lines;
-  const asks = calls.flatMap(({ tool, input }, index) => [
-    JSON.stringify({ type: "assistant", message: { role: "assistant", type: "message", content: [{ type: "tool_use", id: `toolu_${index}`, name: tool, input }] }, session_id: "11111111-2222-4333-8444-555555555555" }),
-    JSON.stringify({ hares_fixture: "approve", tool_name: tool, input, tool_use_id: `toolu_${index}` }),
-  ]);
-  const file = path.join(tempDir(t, "hares-fixture-"), "calls.jsonl");
-  writeFileSync(file, `${[init, intro, ...asks, ...rest].join("\n")}\n`);
-  return file;
-}
-
-const ESC = "\u001b";
-const RAW_COMMANDS = [
-  `API_KEY=${TOKEN} npm run deploy`,
-  `curl -H 'Authorization: token ${TOKEN}' https://example.com/?token=${TOKEN}`,
-  `echo ${"Zm9vYmFy".repeat(400)}`, // a long opaque string
-  `printf '${ESC}[2J${ESC}]0;title\u0007' && echo done\r`, // escape sequences and a carriage return
-  "ls # \u202e\u2066txt.exe\u2069 \u200b", // right-to-left override, isolates, a zero-width space
-];
-
-test("the approval shows exactly what runs: raw secrets, long strings, control and bidi characters", async (t) => {
-  const calls = RAW_COMMANDS.map((command) => ({ tool: "Bash", input: { command, description: "check" } }));
-  const { server, host } = await boot(t, { fixture: callsFixture(t, calls) });
-  await startRun(server);
-  for (const [index, command] of RAW_COMMANDS.entries()) {
-    const approval = await waitFor(async () => (await pending(server)).find((item) => item.exact === command), { timeoutMs: 3000, what: `approval ${index}` });
-    assert.equal(approval.content, null);
-    await decide(server, approval.id, "allow");
-    await waitFor(() => replies(host).length === index + 1, { what: `reply ${index}` });
-    const executed = host.report().approverReplies[index].updatedInput.command;
-    assert.equal(executed, command, "the host runs the original command");
-    assert.equal(approval.exact, executed, "what was shown is what runs");
-  }
-});
-
-test("Write, Edit and NotebookEdit approvals carry the raw content they would write", async (t) => {
-  const calls = [
-    { tool: "Write", input: { file_path: "/tmp/hares-test-worktrees/a/.env", content: `TOKEN=${TOKEN}\nline two\u202e` } },
-    { tool: "Edit", input: { file_path: "/tmp/hares-test-worktrees/a/app.js", old_string: "const a = 1;", new_string: `const a = "${TOKEN}";`, replace_all: true } },
-    { tool: "NotebookEdit", input: { notebook_path: "/tmp/hares-test-worktrees/a/n.ipynb", cell_id: "c1", new_source: "print(1)", edit_mode: "replace" } },
-  ];
-  const expected = [
-    { kind: "write", text: `TOKEN=${TOKEN}\nline two\u202e` },
-    { kind: "edit", oldText: "const a = 1;", newText: `const a = "${TOKEN}";`, replaceAll: true },
-    { kind: "notebook", cellId: "c1", editMode: "replace", cellType: null, text: "print(1)" },
-  ];
-  const { server, host } = await boot(t, { fixture: callsFixture(t, calls) });
-  await startRun(server);
-  for (const [index, call] of calls.entries()) {
-    const approval = await waitFor(async () => (await pending(server)).find((item) => item.tool === call.tool), { timeoutMs: 3000, what: call.tool });
-    assert.equal(approval.exact, call.input.file_path ?? call.input.notebook_path);
-    assert.deepEqual(approval.content, expected[index]);
-    await decide(server, approval.id, "allow");
-    await waitFor(() => replies(host).length === index + 1);
-    assert.deepEqual(host.report().approverReplies[index].updatedInput, call.input);
-  }
-});
 
 test("a call with a field of an unexpected type, or a flag such as dangerouslyDisableSandbox, is shown whole", () => {
   const odd = [
@@ -199,200 +28,191 @@ test("a call with a field of an unexpected type, or a flag such as dangerouslyDi
   assert.equal(displayLength("abc", { kind: "edit", oldText: "edit", newText: "xy", replaceAll: false }), 9, "the kind's own name is not text, but text equal to it is");
 });
 
-test("a call with an unknown field is shown whole, and one too long to show is denied without asking", async (t) => {
-  const odd = { command: "ls", sneaky: "rm -rf ~" };
-  const long = { command: `echo ${"x".repeat(20_000)}` };
-  const { server, host } = await boot(t, { fixture: callsFixture(t, [{ tool: "Bash", input: odd }, { tool: "Bash", input: long }]) });
-  await startRun(server);
-  const approval = await waitForPending(server);
-  assert.equal(approval.exact, `Bash ${JSON.stringify(odd)}`);
-  await decide(server, approval.id, "deny");
-  await waitFor(() => replies(host).length === 2, { what: "the second reply" });
-  assert.equal(host.report().approverReplies[1].behavior, "deny");
-  assert.match(host.report().approverReplies[1].message, /^This call is 20005 characters, too long for hares to show you in full \(the limit is 20000\)/);
-  assert.equal(server.store.listApprovals({ status: "pending" }).length + server.store.listApprovals({ status: "denied" }).length, 1, "the long call never became an approval");
-  assert.ok(server.store.listAudit(100).some((row) => row.action === "approval.too_long" && row.outcome === "rejected"));
+// --- Herdr era: approvals fed by hook records (plan §1 approver table) ---------
+// A fake herdr serves real gate-1 screens; the guard is the real one, so every
+// key that would reach a pane is visible in fake.writes().
+
+const HOOK_SESSION = "44444444-4444-4444-8444-444444444444";
+const HOOK_PANE = "wT:p1";
+const liveScreenText = (name) => readFileSync(new URL("./fixtures/herdr/screens/" + name, import.meta.url), "utf8");
+const seenBlocked = { terminalId: "term_a1", sessionId: HOOK_SESSION, status: "blocked", seq: 700 };
+const bashRecord = (extra = {}) => ({
+  v: 1, at: new Date().toISOString(), event: "PermissionRequest", kind: "permission", sessionId: HOOK_SESSION, paneId: HOOK_PANE, toolUseId: null,
+  toolName: "Bash", input: { command: "touch gate-bash.txt", description: "Make the file" }, inputHash: "h1",
+  suggestions: [{ type: "addRules", rules: [{ toolName: "Bash", ruleContent: "touch:*" }], behavior: "allow", destination: "localSettings" }],
+  recordId: "permission_h1", ...extra,
 });
 
-test("a raw secret stays out of the stream and the audit log, and is redacted in the row once decided", async (t) => {
-  const { server, dir } = await boot(t, { token: TOKEN });
-  const chunks = [];
-  const stream = await new Promise((resolve) => {
-    const req = http.get({ host: "127.0.0.1", port: server.port, path: "/api/stream" }, (res) => { res.on("data", (chunk) => chunks.push(String(chunk))); resolve(req); });
+async function hookApprovals(t, { screen = "live-perm-bash.txt", agent = {} } = {}) {
+  const fake = await startFakeHerdr(t, {
+    agents: [claudeAgent({ paneId: HOOK_PANE, terminalId: "term_a1", sessionId: HOOK_SESSION, status: "blocked", seq: 700, ...agent })],
+    screens: { [HOOK_PANE]: typeof screen === "string" && screen.endsWith(".txt") ? liveScreenText(screen) : screen },
   });
-  t.after(() => stream.destroy());
-  await startRun(server);
-  const approval = await waitForPending(server);
-  assert.equal(approval.exact, COMMAND(TOKEN), "the person sees the raw command");
-  await waitFor(() => chunks.join("").includes('"approvalId"'), { what: "the approval on the stream" });
-  await decide(server, approval.id, "deny");
-  const rest = [(await request(server, "GET", "/api/approvals?status=denied")).text, (await request(server, "GET", "/api/audit")).text].join("\n");
-  assert.ok(rest.includes("[REDACTED]"));
-  assert.ok(!rest.includes(TOKEN), "REST after the decision");
-  assert.ok(!chunks.join("").includes(TOKEN), "SSE");
-  server.store.db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
-  for (const name of readdirSync(dir).filter((file) => file.startsWith("segwi.db"))) {
-    assert.ok(!readFileSync(path.join(dir, name)).includes(TOKEN), `${name} holds no token`);
-  }
-});
-
-test("waiting on a person doesn't count as idleness, but the hard limit still applies", async (t) => {
-  const { server } = await boot(t, { limits: { idleTimeoutMinutes: 0.01, hardTimeoutMinutes: 0.06 } });
-  const runId = (await startRun(server)).json.run.id;
-  await waitForPending(server);
-  await new Promise((resolve) => setTimeout(resolve, 900));
-  assert.equal(server.store.getRun(runId).status, "needs_approval", "idle timer paused");
-  await waitFor(() => server.store.getRun(runId).status === "timed_out", { what: "the hard limit" });
-  assert.equal(server.store.getRun(runId).reason, "Hit the time limit");
-  assert.deepEqual(await pending(server), []);
-});
-
-// --- the internal route and who may decide ---
-
-function secretOf(host, runId) {
-  const file = path.join(host.dir, "data", "runs", runId, "mcp.json");
-  return JSON.parse(readFileSync(file, "utf8")).mcpServers.segwi.env.SEGWI_RUN_SECRET;
+  const adapter = createHerdrAdapter({ socket: fake.socket, debounceMs: 5, backoff: { minMs: 5, maxMs: 20 } });
+  t.after(() => adapter.close());
+  await adapter.connect();
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const notified = [];
+  const service = createHookApprovals({
+    store, adapter, settings: { worktreeRoot: "/tmp/hares-test-worktrees" }, home: "/home/me",
+    notify: (kind, data) => notified.push([kind, data]), repoForSession: () => "my-app",
+  });
+  return { fake, adapter, store, service, notified };
 }
-const internal = (server, { runId, secret, headers = {} }) => request(server, "POST", "/internal/approvals", {
-  origin: false, headers: { ...(secret ? { Authorization: `Bearer ${secret}` } : {}), ...headers },
-  body: { runId, toolName: "Bash", input: { command: "echo hi" }, toolUseId: "toolu_x" },
+
+const decideWeb = (service, id, decision, extra = {}) => service.decide(id, decision, { identity: "me@example.com", origin: "web", expect: seenBlocked, ...extra });
+
+test("a permission record reaches list_approvals in the legacy shape, with no run and no expiry, and pushes once (rows 1, 11-13, 15, 16)", async (t) => {
+  const { service, store, notified } = await hookApprovals(t);
+  service.observe({ sessionId: HOOK_SESSION, cwd: "/home/me/my-app", records: [bashRecord()] });
+  service.observe({ sessionId: HOOK_SESSION, cwd: "/home/me/my-app", records: [bashRecord()] });
+  const [approval] = service.list();
+  assert.deepEqual(Object.keys(approval).sort(), ["content", "createdAt", "cwd", "decidedAt", "decidedBy", "exact", "expiresAt", "id", "repo", "risk", "riskLabel", "runId", "status", "tool", "why"]);
+  assert.equal(approval.runId, null);
+  assert.equal(approval.expiresAt, null);
+  assert.equal(approval.exact, "touch gate-bash.txt");
+  assert.equal(approval.cwd, "~/my-app");
+  assert.equal(approval.why, "Make the file");
+  assert.equal(approval.repo, "my-app");
+  assert.equal(approval.status, "pending");
+  assert.equal(notified.length, 1, "one push per prompt, not per observation");
+  assert.equal(store.listAudit().filter((row) => row.action === "approval.requested" && row.actor === "hook").length, 1);
 });
 
-test("the internal route takes only the run's own secret", async (t) => {
-  const { server, host } = await boot(t);
-  const first = (await startRun(server, "one")).json.run.id;
-  const second = (await startRun(server, "two")).json.run.id;
-  await waitFor(async () => (await pending(server)).length === 2, { what: "both approvals" });
-  const secrets = { first: secretOf(host, first), second: secretOf(host, second) };
-  assert.notEqual(secrets.first, secrets.second);
-  assert.equal(server.store.getRunSecretHash(first).includes(secrets.first), false, "only a hash is stored");
-
-  assert.equal((await internal(server, { runId: first })).status, 401, "no secret");
-  assert.equal((await internal(server, { runId: first, secret: "wrong" })).status, 401, "wrong secret");
-  assert.equal((await internal(server, { runId: first, secret: secrets.second })).status, 401, "another run's secret");
-  assert.equal((await internal(server, { runId: "no-such-run", secret: secrets.first })).status, 401, "unknown run");
-  assert.equal((await request(server, "GET", "/internal/approvals")).status, 404);
-  assert.equal((await internal(server, { runId: first, secret: secrets.first, headers: { "x-forwarded-for": "100.64.0.9" } })).status, 403, "proxied through tailscale serve");
-  assert.equal((await request(server, "GET", "/internal/other")).status, 404);
-  assert.equal((await pending(server)).length, 2, "nothing new was created");
-  assert.ok(server.store.listAudit(100).filter((row) => row.action === "POST /internal/approvals" && row.outcome === "rejected").length >= 4);
+test("Run once presses the screen's plain Yes for that one call and records it allowed (row 3)", async (t) => {
+  const { service, fake } = await hookApprovals(t);
+  service.observe({ sessionId: HOOK_SESSION, records: [bashRecord()] });
+  const [{ id }] = service.list();
+  const decided = await decideWeb(service, id, "once");
+  assert.equal(decided.status, "allowed");
+  assert.equal(decided.decidedVia, "once");
+  assert.deepEqual(fake.writes().map((entry) => entry.params.keys), [["1"]]);
 });
 
-test("the internal route refuses a peer that is not loopback and a run that is not active", async (t) => {
-  const { server, host } = await boot(t);
-  const runId = (await startRun(server)).json.run.id;
-  await waitForPending(server);
-  const secret = secretOf(host, runId);
-
-  const handler = createHandler({ store: server.store, settings: makeSettings({ repos: [] }), authenticate: () => "x", runs: server.runs, approvals: server.approvals, broker: { publish() {} }, staticRoot: null, version: "0" });
-  const body = JSON.stringify({ runId, toolName: "Bash", input: {}, toolUseId: "t" });
-  const outcome = { status: 0 };
-  const req = Object.assign(Readable.from([body]), { method: "POST", url: "/internal/approvals", headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" }, socket: { remoteAddress: "10.0.0.5" } });
-  const res = { headersSent: false, setHeader() {}, writeHead(status) { outcome.status = status; return this; }, end() {}, on() {}, writableEnded: false };
-  await handler(req, res);
-  assert.equal(outcome.status, 403);
-  assert.equal((await pending(server)).length, 1);
-
-  await request(server, "POST", `/api/runs/${runId}/stop`, { body: { confirm: true } });
-  assert.equal((await internal(server, { runId, secret })).status, 409, "a stopped run can't ask");
-});
-
-test("web identity and an MCP-style bearer can't use each other's doors", async (t) => {
-  const identity = { "Tailscale-User-Login": "you@example.com" };
-  const { server, host } = await boot(t, { auth: { mode: "tailscale-header", allowed: ["you@example.com"] } });
-  const created = await request(server, "POST", "/api/runs", { headers: identity, body: { repo: "my-app", action: "build", task: "x" } });
-  const runId = created.json.run.id;
-  const approval = await waitFor(async () => (await request(server, "GET", "/api/approvals", { headers: identity })).json.approvals[0], { timeoutMs: 2000 });
-  const secret = secretOf(host, runId);
-
-  // The web identity is not the run's secret.
-  assert.equal((await internal(server, { runId, headers: identity })).status, 403, "a proxied identity never reaches the run-secret check");
-  // A bearer, the run's own or any other, is not a web identity.
-  for (const bearer of [secret, "mcp-token"]) {
-    const response = await decide(server, approval.id, "allow", { headers: { Authorization: `Bearer ${bearer}` } });
-    assert.equal(response.status, 401);
-    assert.equal((await request(server, "GET", "/api/approvals", { headers: { Authorization: `Bearer ${bearer}` } })).status, 401);
-  }
-  assert.equal(server.store.getApproval(approval.id).status, "pending");
-  // The web identity decides; a forwarded address plays no part.
-  const ok = await decide(server, approval.id, "deny", { headers: identity });
-  assert.equal(ok.status, 200);
-  assert.equal(server.store.getApproval(approval.id).decidedBy, "you@example.com");
-});
-
-// --- the deny list ---
-
-test("a deny-listed command never makes an approval, and shows on the run as a refusal", async (t) => {
-  const { server, host } = await boot(t, { fixture: "deny-listed" });
-  const runId = (await startRun(server, "Push it")).json.run.id;
-  await waitFor(() => server.store.getRun(runId).status === "needs_input", { what: "the run to finish its turn" });
-  const { steps } = (await request(server, "GET", `/api/runs/${runId}`)).json.run;
-  assert.deepEqual(steps.filter((step) => step.type === "refusal").map((step) => step.detail), ["Refused: git push --force — a deny rule"]);
-  assert.equal(server.store.listApprovals({ status: "pending" }).length + server.store.listApprovals({ status: "expired" }).length, 0);
-  assert.deepEqual(host.report().approverReplies, []);
-});
-
-// --- auto mode ---
-
-test("in auto mode each refusal shows on the run as its own step and in the audit log, and the run waits for your reply", async (t) => {
-  const { server, host } = await boot(t, { fixture: "auto-refused" });
-  const runId = (await startRun(server, "Ship it")).json.run.id;
-  await waitFor(() => server.store.getRun(runId).status === "needs_input", { what: "the run to stop and ask" });
-  const args = host.report().args;
-  assert.equal(args[args.indexOf("--permission-mode") + 1], "auto");
-
-  const { steps } = (await request(server, "GET", `/api/runs/${runId}`)).json.run;
-  assert.deepEqual(steps.filter((step) => step.type === "refusal").map((step) => step.detail), [
-    "Refused: git push origin HEAD:main — auto mode: The server-side auto mode classifier judged this action dangerous (it gave no explanation)",
-    "Refused: npm publish — a deny rule",
-  ]);
-  const refusals = server.store.listAudit(100).filter((row) => row.action === "run.refused");
-  assert.equal(refusals.length, 2);
-  assert.ok(refusals.every((row) => row.target === runId && row.outcome === "rejected"));
-  assert.match(refusals.map((row) => row.detail).join("\n"), /Refused: npm publish — a deny rule/);
-  assert.equal(server.store.listApprovals({ status: "pending" }).length, 0, "nothing reached a person");
-});
-
-// The fake host must wait as long as real Claude Code does: MCP_TOOL_TIMEOUT, not the MCP SDK's 60 s default.
-// A short injected timeout keeps this fast: the first run proves the variable is what the host waits on,
-// the second that a hold longer than a too-short wait survives once the variable allows it.
-test("the fake host waits for the approver as long as MCP_TOOL_TIMEOUT says", async (t) => {
-  const dir = tempDir(t, "hares-slow-approver-");
-  const sdk = path.dirname(fileURLToPath(import.meta.resolve("@modelcontextprotocol/sdk/server/mcp.js")));
-  const zod = import.meta.resolve("zod");
-  const slowApprover = path.join(dir, "slow-approver.mjs");
-  writeFileSync(slowApprover, `
-    import { McpServer } from ${JSON.stringify(pathToFileURL(path.join(sdk, "mcp.js")).href)};
-    import { StdioServerTransport } from ${JSON.stringify(pathToFileURL(path.join(sdk, "stdio.js")).href)};
-    import { z } from ${JSON.stringify(zod)};
-    const server = new McpServer({ name: "segwi", version: "0.0.0" });
-    server.registerTool("approve", { inputSchema: { tool_name: z.string(), input: z.record(z.string(), z.unknown()), tool_use_id: z.string().optional() } },
-      async ({ input }) => { await new Promise((resolve) => setTimeout(resolve, 1200)); return { content: [{ type: "text", text: JSON.stringify({ behavior: "allow", updatedInput: input }) }] }; });
-    await server.connect(new StdioServerTransport());
-  `);
-  const mcpConfig = path.join(dir, "mcp.json");
-  writeFileSync(mcpConfig, JSON.stringify({ mcpServers: { segwi: { command: process.execPath, args: [slowApprover], env: {} } } }));
-  const fixture = path.join(dir, "approve.jsonl");
-  writeFileSync(fixture, `${JSON.stringify({ hares_fixture: "approve", tool_name: "Bash", input: { command: "ls" }, tool_use_id: "toolu_1" })}\n`);
-
-  const runHost = (name, toolTimeout) => new Promise((resolve) => {
-    const reportFile = path.join(dir, `${name}.json`);
-    const host = spawn(process.execPath, [fileURLToPath(new URL("./fake-host.mjs", import.meta.url)), fixture, reportFile, "--mcp-config", mcpConfig], {
-      env: { ...process.env, MCP_TOOL_TIMEOUT: String(toolTimeout) }, stdio: ["pipe", "pipe", "ignore"],
-    });
-    host.stdin.write('{"type":"user"}\n');
-    host.on("exit", (code) => {
-      let replies = [];
-      try { replies = JSON.parse(readFileSync(reportFile, "utf8")).approverReplies; } catch { /* no report */ }
-      resolve({ code, replies });
-    });
-    setTimeout(() => host.stdin.end(), 3000);
+test("always-allow without a person's confirmation sends nothing and returns the exact rule to confirm", async (t) => {
+  const { service, fake } = await hookApprovals(t);
+  service.observe({ sessionId: HOOK_SESSION, records: [bashRecord()] });
+  const [{ id }] = service.list();
+  await assert.rejects(decideWeb(service, id, "always"), (error) => {
+    assert.equal(error.status, 409);
+    assert.equal(error.confirm.rule, "Bash(touch:*)");
+    assert.match(error.confirm.label, /^Yes, and always allow/);
+    return true;
   });
+  assert.deepEqual(fake.writes(), []);
+  assert.equal(service.list()[0].status, "pending");
+});
 
-  const tooShort = await runHost("short", 300);
-  assert.notEqual(tooShort.code, 0, "a 300 ms wait can't outlast a 1.2 s approval");
-  assert.deepEqual(tooShort.replies, []);
-  const generous = await runHost("generous", 10_000);
-  assert.equal(generous.code, 0);
-  assert.equal(generous.replies[0].behavior, "allow");
+test("confirmed always-allow presses the always option found by its label on the fresh screen, never auto mode", async (t) => {
+  // The rule option and the auto-mode option trade places: an index chosen earlier would now pick auto mode.
+  const lines = liveScreenText("live-perm-bash-rule.txt").split("\n");
+  const rule = lines.findIndex((line) => line.includes("2. Yes, and don’t ask again"));
+  const auto = lines.findIndex((line) => line.includes("3. Yes, and switch to auto mode"));
+  [lines[rule], lines[auto]] = [lines[auto].replace("3.", "2."), lines[rule].replace("2.", "3.")];
+  const swapped = lines.join("\n");
+  assert.equal(parseScreen(swapped).options[2].label, "Yes, and don’t ask again for: ibni prepare *");
+  const { service, fake } = await hookApprovals(t, { screen: swapped });
+  const record = bashRecord({ input: { command: "ibni prepare --slug add-license" }, suggestions: [{ type: "addRules", rules: [{ toolName: "Bash", ruleContent: "ibni prepare *" }], behavior: "allow" }] });
+  service.observe({ sessionId: HOOK_SESSION, records: [record] });
+  const [{ id }] = service.list();
+  const decided = await decideWeb(service, id, "always", { confirm: true, rule: "Bash(ibni prepare *)" });
+  assert.equal(decided.decidedVia, "always");
+  assert.deepEqual(fake.writes().map((entry) => entry.params.keys), [["3"]]);
+});
+
+test("a confirmation for a different rule than the one on record sends nothing", async (t) => {
+  const { service, fake } = await hookApprovals(t);
+  service.observe({ sessionId: HOOK_SESSION, records: [bashRecord()] });
+  const [{ id }] = service.list();
+  await assert.rejects(decideWeb(service, id, "always", { confirm: true, rule: "Bash(*)" }), { status: 409 });
+  assert.deepEqual(fake.writes(), []);
+});
+
+test("auto mode is never what always-allow presses", () => {
+  const form = { options: [{ n: 1, label: "Yes" }, { n: 2, label: "Yes, and switch to auto mode", always: true }, { n: 3, label: "No" }] };
+  assert.equal(optionForDecision(form, "always"), null);
+  assert.equal(optionForDecision(parseScreen(liveScreenText("live-perm-write.txt")), "always").n, 2, "accept edits for the session is an always option");
+});
+
+test("deny presses No and records it denied", async (t) => {
+  const { service, fake, store } = await hookApprovals(t);
+  service.observe({ sessionId: HOOK_SESSION, records: [bashRecord()] });
+  const [{ id }] = service.list();
+  assert.equal((await decideWeb(service, id, "deny")).status, "denied");
+  assert.deepEqual(fake.writes().map((entry) => entry.params.keys), [["4"]]);
+  assert.ok(store.listAudit().some((row) => row.action === "approval.denied" && row.actor === "me@example.com"));
+});
+
+test("a decision from anywhere but the web app is refused and sends nothing (row 19)", async (t) => {
+  const { service, fake } = await hookApprovals(t);
+  service.observe({ sessionId: HOOK_SESSION, records: [bashRecord()] });
+  const [{ id }] = service.list();
+  for (const origin of ["mcp", "push", undefined]) {
+    await assert.rejects(service.decide(id, "once", { identity: "x", origin, expect: seenBlocked }), { status: 403 });
+  }
+  assert.deepEqual(fake.writes(), []);
+  await decideWeb(service, id, "once");
+  assert.equal(fake.writes().length, 1, "the same decision from the web app goes through");
+});
+
+test("a decision for a session whose state moved since the person looked sends nothing and stays pending (row 6)", async (t) => {
+  const { service, fake } = await hookApprovals(t, { agent: { seq: 701 } });
+  service.observe({ sessionId: HOOK_SESSION, records: [bashRecord()] });
+  const [{ id }] = service.list();
+  await assert.rejects(decideWeb(service, id, "once"), { status: 409 });
+  assert.deepEqual(fake.writes(), []);
+  assert.equal(service.list()[0].status, "pending");
+});
+
+test("a record whose prompt is not the one on screen can't steer keys to it (row 5)", async (t) => {
+  const { service, fake } = await hookApprovals(t, { screen: "live-perm-write.txt" });
+  service.observe({ sessionId: HOOK_SESSION, records: [bashRecord()] });
+  const [{ id }] = service.list();
+  await assert.rejects(decideWeb(service, id, "once"), { status: 409 });
+  assert.deepEqual(fake.writes(), []);
+});
+
+test("a Bash record for another command than the one on screen can't steer keys to that prompt (row 5)", async (t) => {
+  const { service, fake } = await hookApprovals(t);
+  service.observe({ sessionId: HOOK_SESSION, records: [bashRecord({ input: { command: "rm -rf build" } })] });
+  const [{ id }] = service.list();
+  await assert.rejects(decideWeb(service, id, "once"), { status: 409 });
+  assert.deepEqual(fake.writes(), []);
+});
+
+test("an approval too long to show in full makes no row and offers no Allow (row 7)", async (t) => {
+  const { service, store } = await hookApprovals(t);
+  const result = service.observe({ sessionId: HOOK_SESSION, records: [bashRecord({ input: { command: "x".repeat(DISPLAY_MAX + 1) } })] });
+  assert.deepEqual(result.tooLong, ["permission_h1"]);
+  assert.deepEqual(service.list(), []);
+  assert.equal(store.listAudit().filter((row) => row.action === "approval.too_long").length, 1);
+});
+
+test("a prompt answered in the terminal or gone expires its approval (row 9)", async (t) => {
+  const { service, store } = await hookApprovals(t);
+  service.observe({ sessionId: HOOK_SESSION, records: [bashRecord()] });
+  const result = service.observe({ sessionId: HOOK_SESSION, records: [] });
+  assert.equal(result.expired.length, 1);
+  const [expired] = service.list({ status: "expired" });
+  assert.equal(expired.decidedBy, "system");
+  assert.ok(store.listAudit().some((row) => row.action === "approval.expired"));
+  assert.deepEqual(service.list(), []);
+});
+
+test("a raw secret shows to the person while pending and is redacted once decided (row 14)", async (t) => {
+  const { service } = await hookApprovals(t);
+  service.observe({ sessionId: HOOK_SESSION, records: [bashRecord({ input: { command: COMMAND(TOKEN) } })] });
+  const [pending] = service.list();
+  assert.equal(pending.exact, COMMAND(TOKEN));
+  await assert.rejects(decideWeb(service, pending.id, "once"), { status: 409 }, "the screen shows another command, so it is refused");
+  service.observe({ sessionId: HOOK_SESSION, records: [] });
+  const [expired] = service.list({ status: "expired" });
+  assert.equal(expired.exact.includes(TOKEN), false);
+});
+
+test("an always-allow that opens a folder says which folder (F6)", async (t) => {
+  const { service } = await hookApprovals(t);
+  service.observe({ sessionId: HOOK_SESSION, records: [bashRecord({ suggestions: [{ type: "addDirectories", directories: ["/tmp/hares-gate1/repo"], destination: "session" }] })] });
+  assert.equal(service.forSession(HOOK_SESSION)[0].suggestedRule, "Allow access to /tmp/hares-gate1/repo from this project");
 });

@@ -79,8 +79,6 @@
       "host": "127.0.0.1",
       "port": 4280
     },
-    "runner": "claude-code",
-    "model": "",
     "repositories": [],
     "extensions": [],
     "auth": {
@@ -94,19 +92,26 @@
     "limits": {
       "concurrentRuns": 2,
       "runsPerDay": 20,
-      "maxTurns": 80,
-      "idleTimeoutMinutes": 30,
-      "hardTimeoutMinutes": 120,
-      "approvalTimeoutMinutes": 60,
       "taskMaxChars": 8000,
       "inputMaxChars": 4000
     },
-    "canary": {
-      "model": "haiku",
-      "maxTurns": 6
-    },
     "push": true,
     "vapidSubject": "",
+    "notifications": {
+      "events": {
+        "asks": true,
+        "finishes": true,
+        "mainRed": true,
+        "prReady": false,
+        "newBump": false
+      },
+      "quietHours": {
+        "enabled": false,
+        "start": "23:00",
+        "end": "07:00"
+      },
+      "timeZone": ""
+    },
     "service": {
       "systemdUserUnit": false
     }

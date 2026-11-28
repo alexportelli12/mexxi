@@ -41,6 +41,10 @@ export function claudeHooks(config) {
 // go through the same ownership merge as the guard's, so turning hares off
 // removes exactly these and leaves herdr's own SessionStart group, and anything
 // else the user added, alone. Stop and UserPromptSubmit take no matcher.
+// PostToolUse listens only to the three tools that leave a record: "*" would
+// start node after every tool call in every session. A permission record has
+// no Post hook of its own (a denied one never gets one), so the server drops it
+// when herdr says the session is no longer blocked (gate 1 finding F7).
 export function haresHookGroups(checkout) {
   const hook = { type: "command", command: ["node", path.join(checkout, "scripts/hares/hook.mjs")].map(shellQuote).join(" "), timeout: 5 };
   const group = (matcher) => ({ ...(matcher ? { matcher } : {}), hooks: [hook] });
@@ -48,8 +52,8 @@ export function haresHookGroups(checkout) {
     PreToolUse: [group("AskUserQuestion|ExitPlanMode|REPL")],
     PermissionRequest: [group("*")],
     Notification: [group("permission_prompt|idle_prompt|elicitation_dialog")],
-    PostToolUse: [group("*")],
-    PostToolUseFailure: [group("*")],
+    PostToolUse: [group("AskUserQuestion|ExitPlanMode|REPL")],
+    PostToolUseFailure: [group("AskUserQuestion|ExitPlanMode|REPL")],
     UserPromptSubmit: [group()],
     Stop: [group()],
     SessionEnd: [group()],

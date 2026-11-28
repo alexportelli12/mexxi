@@ -227,8 +227,8 @@
       "deprecated": true
     },
     "hares": {
-      "description": "hares, a local web app and MCP server for starting and following mexxi runs from your phone.",
-      "why": "A run takes minutes to an hour and stops whenever it needs a reply or a permission, so without hares you have to be at the terminal to keep it moving.",
+      "description": "hares, a local web app and MCP server for every Claude Code session on this machine (read through herdr) and your pull requests, issues and CI, from your phone.",
+      "why": "A session stops whenever it needs an answer or a permission, so without hares you have to be at the terminal to keep it moving.",
       "scope": "Experimental, and off by default",
       "type": "object",
       "additionalProperties": false,
@@ -245,8 +245,6 @@
             "port": { "description": "Port to listen on.", "type": "integer", "minimum": 1024, "maximum": 65535, "default": 4280 }
           }
         },
-        "runner": { "description": "Which coding agent hares starts. Only Claude Code exists so far.", "type": "string", "enum": ["claude-code"], "default": "claude-code" },
-        "model": { "description": "Model every run uses, such as sonnet. Empty uses your coding agent's own default, which may cost more than a run needs.", "type": "string", "pattern": "^[A-Za-z0-9._-]*$", "default": "" },
         "repositories": {
           "description": "The only repositories a run may start in, each with a name, the path of its control checkout and the actions allowed there (build, ready or ask).",
           "type": "array",
@@ -256,6 +254,7 @@
             "properties": {
               "name": { "description": "Short name shown in the app.", "type": "string", "pattern": "^[A-Za-z0-9._-]+$", "default": "my-app" },
               "path": { "description": "Control checkout of the repository.", "type": "string", "pattern": "^(~/|/)", "default": "~/workspace/my-app" },
+              "github": { "description": "The repository on GitHub as owner/name, for its pull requests, issues and CI. Empty reads it from the checkout's origin remote.", "type": "string", "pattern": "^$|^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$", "default": "" },
               "actions": { "description": "What a run may do here: build runs /wettaq, ready runs /lesti, ask answers a question without changing anything.", "type": "array", "items": { "type": "string", "enum": ["build", "ready", "ask"] }, "default": ["build", "ready", "ask"] }
             }
           },
@@ -288,33 +287,18 @@
           }
         },
         "limits": {
-          "description": "Caps that keep a run, or a runaway client, from costing more than you meant.",
+          "description": "Caps that keep a runaway client from starting more sessions than you meant.",
           "type": "object",
           "additionalProperties": false,
           "default": {},
           "properties": {
-            "concurrentRuns": { "description": "Runs that may work at the same time.", "type": "integer", "minimum": 1, "default": 2 },
-            "runsPerDay": { "description": "Runs that may start in one day.", "type": "integer", "minimum": 1, "default": 20 },
-            "maxTurns": { "description": "Agent turns one run may take before it stops.", "type": "integer", "minimum": 1, "default": 80 },
-            "idleTimeoutMinutes": { "description": "Minutes a run may sit without activity or a reply before hares stops it.", "type": "integer", "minimum": 1, "default": 30 },
-            "hardTimeoutMinutes": { "description": "Minutes a run may last in total.", "type": "integer", "minimum": 1, "default": 120 },
-            "approvalTimeoutMinutes": { "description": "Minutes an approval waits for you before it counts as denied.", "type": "integer", "minimum": 1, "default": 60 },
+            "concurrentRuns": { "description": "Sessions hares started that may be open at the same time.", "type": "integer", "minimum": 1, "default": 2 },
+            "runsPerDay": { "description": "Sessions hares may start in one day.", "type": "integer", "minimum": 1, "default": 20 },
             "taskMaxChars": { "description": "Longest task text a run accepts.", "type": "integer", "minimum": 1, "default": 8000 },
             "inputMaxChars": { "description": "Longest reply a run accepts.", "type": "integer", "minimum": 1, "default": 4000 }
           }
         },
-        "canary": {
-          "description": "The nightly check that your coding agent still works the way hares expects.",
-          "why": "The agent's command line and output can change between versions, and a small real run each night finds that out before you do.",
-          "type": "object",
-          "additionalProperties": false,
-          "default": {},
-          "properties": {
-            "model": { "description": "Model the canary run uses. A small one keeps the nightly cost to a few cents.", "type": "string", "pattern": "^[A-Za-z0-9._-]*$", "default": "haiku" },
-            "maxTurns": { "description": "Agent turns the canary run may take before it stops.", "type": "integer", "minimum": 1, "default": 6 }
-          }
-        },
-        "push": { "description": "Send a push notification when a run needs you, finishes or fails.", "type": "boolean", "default": true },
+        "push": { "description": "Send push notifications at all; which events push is hares.notifications.", "type": "boolean", "default": true },
         "vapidSubject": {
           "description": "Contact address sent with every push, as a mailto: address or an https:// URL you own. Empty leaves push off.",
           "why": "Push services refuse a push without a real contact they can reach about it, and refuse placeholders such as an address at localhost.",
@@ -322,13 +306,46 @@
           "pattern": "^(|https://\\S+|mailto:\\S+@\\S+)$",
           "default": ""
         },
+        "notifications": {
+          "description": "Which events push to your phone, and quiet hours when they wait on the Now screen instead. These are the defaults; each person can change them in the app.",
+          "type": "object",
+          "additionalProperties": false,
+          "default": {},
+          "properties": {
+            "events": {
+              "description": "Events that push.",
+              "type": "object",
+              "additionalProperties": false,
+              "default": {},
+              "properties": {
+                "asks": { "description": "A session asks a question or for a permission.", "type": "boolean", "default": true },
+                "finishes": { "description": "A session stops working.", "type": "boolean", "default": true },
+                "mainRed": { "description": "A default branch's CI goes red.", "type": "boolean", "default": true },
+                "prReady": { "description": "A pull request becomes ready to merge.", "type": "boolean", "default": false },
+                "newBump": { "description": "A new dependency bump pull request arrives.", "type": "boolean", "default": false }
+              }
+            },
+            "quietHours": {
+              "description": "Hours when pushes wait on the Now screen instead of arriving.",
+              "type": "object",
+              "additionalProperties": false,
+              "default": {},
+              "properties": {
+                "enabled": { "description": "Hold pushes during quiet hours.", "type": "boolean", "default": false },
+                "start": { "description": "When quiet hours start, as HH:MM.", "type": "string", "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$", "default": "23:00" },
+                "end": { "description": "When quiet hours end, as HH:MM.", "type": "string", "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$", "default": "07:00" }
+              }
+            },
+            "timeZone": { "description": "Time zone quiet hours are in, such as Europe/Malta. Empty uses this machine's.", "type": "string", "default": "" }
+          }
+        },
         "service": {
           "description": "Running hares in the background.",
           "type": "object",
           "additionalProperties": false,
           "default": {},
           "properties": {
-            "systemdUserUnit": { "description": "Let the installer add systemd user units for the server and its nightly check. Linux only.", "type": "boolean", "default": false }
+            "systemdUserUnit": { "description": "Let the installer add a systemd user unit for the server. Linux only.", "type": "boolean", "default": false }
           }
         }
       }
