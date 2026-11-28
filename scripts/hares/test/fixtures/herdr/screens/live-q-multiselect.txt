@@ -1,0 +1,45 @@
+
+ ▐▛███▛█   Claude Code v2.1.332
+▝▜██████▀  Opus 5.5 · Claude Max
+ ▝▝   ▝▝   /tmp/hares-gate1/repo
+
+⚠ Code Mode (experimental) is on · this session can be resumed only with Code Mode on
+
+❯ Call the AskUserQuestion tool exactly once with one question: question 'Which toppings should the gate pizza have?', header 'Toppings', multiSelect
+  TRUE, options Olives (Black olives), Basil (Fresh basil), Chilli (Red chilli). After the answer, reply with just the chosen toppings.
+
+  Working · 19s…
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☐ Toppings  ✔ Submit  →
+
+Which toppings should the gate pizza have?
+
+❯ 1. [ ] Olives
+         Black olives
+  2. [ ] Basil
+         Fresh basil
+  3. [ ] Chilli
+         Red chilli
+  4. [ ] Type something
+     Submit
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel

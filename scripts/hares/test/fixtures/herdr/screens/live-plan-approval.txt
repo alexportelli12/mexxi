@@ -1,0 +1,45 @@
+  Writing plan and requesting approval · 20s
+  ⎿  Updated plan
+▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔
+
+  ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   Ready to code?
+
+   Here is Claude's plan:
+  ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+   Plan: add a LICENSE file
+
+   Context
+
+   The repo (gate1) holds only README.md and has no license, so others have no legal right to use it. No license was specified, so this plan uses MIT,
+   the most common permissive default. The copyright holder is the git user, A. Person, and the year is 2026. If you want a different license
+   (Apache-2.0, GPL-3.0, proprietary), say so when you review the plan.
+
+   Steps
+
+   1. Create the worktree and add the file. main is checked out, so run ibni prepare --slug add-license from /tmp/hares-gate1/repo and work in the
+      worktreePath it prints. There, create LICENSE at the root containing the standard MIT text (from choosealicense.com / SPDX MIT), with Copyright
+      (c) 2026 A. Person. Nothing else changes; the README is left as is.
+   2. Verify and deliver. Run ibni verify. The repo has no package.json or .mexxi.json, so there may be no verify command; if so, report that and don't
+      work around it. Then run ibni record-evidence and ibni publish (commit: "Add MIT license"), open the PR with gh, and run ibni mark-pr. I won't
+      merge it.
+
+   Verification
+
+   - git diff main --stat shows only LICENSE added.
+   - Compare the file with the SPDX MIT text. The only differences should be the year and name.
+   - GitHub's repo sidebar shows "MIT license" once the PR is merged.
+  ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+
+
+
+
+  ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   Claude has written up a plan and is ready to execute. Would you like to proceed?
+
+   ❯ 1. Yes, and use auto mode
+     2. Yes, manually approve edits
+     3. Tell Claude what to change
+        shift+tab to approve with this feedback
+
+   ctrl+g to edit in Vim · ~/.claude/plans/plan-example.md

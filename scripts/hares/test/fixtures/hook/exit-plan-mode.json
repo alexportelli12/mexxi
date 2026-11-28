@@ -1,0 +1,12 @@
+{
+  "session_id": "11111111-2222-4333-8444-555555555555",
+  "transcript_path": "/home/user/.claude/projects/-tmp-demo/11111111-2222-4333-8444-555555555555.jsonl",
+  "cwd": "/tmp/demo",
+  "permission_mode": "default",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "ExitPlanMode",
+  "tool_use_id": "toolu_plan1",
+  "tool_input": {
+    "plan": "1. Add the hook\n2. Test it"
+  }
+}

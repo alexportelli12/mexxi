@@ -1,0 +1,18 @@
+● Some earlier output.
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ☐ Toppings
+
+Which toppings should go on the pizza?
+
+❯ 1. [ ] Cheese
+     Mozzarella
+  2. [✔] Mushrooms
+     Sliced button mushrooms
+  3. [ ] Olives
+  4. [ ] Type something
+     Submit
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  5. Chat about this
+
+Enter to select · ↑/↓ to navigate · Esc to cancel

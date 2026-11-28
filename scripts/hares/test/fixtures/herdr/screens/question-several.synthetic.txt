@@ -1,0 +1,17 @@
+● Some earlier output.
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+←  ☒ Colour  ☐ Size  ✔ Submit  →
+
+What size should the banner be? This question is long enough that the pane wraps it onto a
+second line.
+
+❯ 1. Small
+     Fits a phone screen
+  2. Large
+     Fills a desktop screen
+  3. Type something.
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  4. Chat about this
+
+Enter to select · Tab/Arrow keys to navigate · Esc to cancel
