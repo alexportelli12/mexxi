@@ -4,7 +4,7 @@
    Where a nested component used the same class name (a sheet inside a page), one of the two was renamed. */
 
 /* Shared */
-.gh-page{max-width:1280px;margin:0 auto;padding:12px 20px 120px;color:var(--text);font-family:var(--font);font-feature-settings:'tnum' 1,'ss01' 1}
+.gh-page{max-width:1280px;margin:0 auto;padding:12px 20px 120px;color:var(--text);font-family:var(--font);font-feature-settings:'ss01' 1}
 .gh-page :where(button,input,textarea){font-family:inherit}
 .gh-page :focus-visible,.gh-sheet :focus-visible{outline:2px solid var(--amber);outline-offset:3px;border-radius:12px}
 .gh-page :where(h1,h2,h3){text-wrap:balance}
@@ -33,6 +33,7 @@
 .gh-chip[aria-selected=true],.gh-chip[aria-checked=true]{background:var(--text);color:var(--bg);font-weight:600}
 .gh-chip b{font-weight:600;opacity:.6}
 .gh-tabs.seg .gh-chip{border-radius:12px;background:transparent;color:var(--muted);padding:0 2px;gap:4px;font-size:14.5px;min-width:0}
+@media (max-width:420px){.gh-tabs.seg .gh-chip{font-size:13.5px;gap:3px}}
 .gh-tabs.seg .gh-chip[aria-selected=true],.gh-tabs.seg .gh-chip[aria-checked=true]{background:var(--raised);color:var(--text)}
 .gh-sqs{display:inline-flex;gap:2px;min-width:38px;flex:none}
 .gh-sq{width:8px;height:8px;border-radius:2px;background:var(--teal)}

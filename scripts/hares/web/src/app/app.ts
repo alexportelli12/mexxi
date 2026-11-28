@@ -17,8 +17,11 @@ interface NavItem {
   exact: boolean;
 }
 
-/** The screens the bottom bar belongs to on a phone; a session, Start and Settings use the whole screen. */
-const NAV_PATHS = /^\/(?:$|\?|prs|issues|ci)/;
+/**
+ * The screens the bottom bar belongs to on a phone; a session, Start, Settings and a pull request's detail
+ * (which has its own Review and Merge bar) use the whole screen.
+ */
+const NAV_PATHS = /^\/(?:$|\?|prs(?:$|[?#])|issues|ci)/;
 
 @Component({
   imports: [RouterOutlet, RouterLink, RouterLinkActive, Banner, Icon, Lantern],

@@ -168,6 +168,29 @@ e2e("the desktop header's links are each 44 pixels wide and tall, including CI w
   await close();
 });
 
+e2e("on a phone, a pull request's own Review and Merge bar is not covered by the bottom bar", async () => {
+  await scenario("waiting");
+  const { page, close } = await open("/prs/thats-fair/148");
+  const review = page.getByRole("button", { name: "Review", exact: true }).last();
+  await review.waitFor();
+  const onTop = await review.evaluate((el) => {
+    const box = el.getBoundingClientRect();
+    const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+    return Boolean(hit && el.contains(hit));
+  });
+  assert.equal(onTop, true, "the Review button is the element a tap at its centre reaches");
+  await close();
+});
+
+e2e("running text on the GitHub screens has no tabular figures, which put a space before commas and full stops", async () => {
+  await scenario("waiting");
+  const { page, close } = await open("/prs", { width: 1440, height: 900 });
+  await page.locator(".gh-page").waitFor();
+  const features = await page.locator(".gh-page").evaluate((el) => getComputedStyle(el).fontFeatureSettings);
+  assert.doesNotMatch(features, /tnum/);
+  await close();
+});
+
 e2e("an answer is sent with the status and sequence the person saw, for the question they picked, and the card goes away", async () => {
   await scenario("waiting");
   const { page, close } = await open("/");
