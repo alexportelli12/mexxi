@@ -312,11 +312,14 @@ e2e("the terminal sends one key from its keycap, and a lit Ctrl turns the next t
 e2e("starting from a command sends the repo, the command and what it is for, and opens the new session", async () => {
   await scenario("waiting");
   const { page, close } = await open("/start");
+  await page.getByRole("tab", { name: "mexxi" }).waitFor();
+  await settle(page); // taps right after load are dropped on purpose, as a person's would be
   await page.getByRole("tab", { name: "mexxi" }).click();
   await page.getByRole("radio", { name: "eduline-ai-shop" }).click();
   await page.getByRole("radio", { name: /lesti/ }).click();
   await page.getByLabel("For").fill("#152");
-  assert.match(await page.locator("code").last().innerText(), /claude "\/lesti #152"/);
+  // The preview re-renders after the input; wait for it rather than read it once.
+  await page.locator("code", { hasText: 'claude "/lesti #152"' }).last().waitFor({ timeout: 5000 });
   await page.getByRole("button", { name: "Start session" }).click();
   await page.waitForURL(/\/s\/00000000-0000-4000-8000-0000000001/);
   assert.deepEqual({ ...demo.calls[0].body, clientId: "x" }, { clientId: "x", repo: "eduline-ai-shop", kind: "command", command: "lesti", args: "#152" });
