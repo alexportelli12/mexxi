@@ -48,7 +48,19 @@ export function defaultSocket(home = os.homedir()) {
 
 let nextId = 0;
 
+/**
+ * A test must never reach the real herdr: it would open real panes and start real Claude sessions
+ * beside the person's own. `node --test` marks the processes it runs with NODE_TEST_CONTEXT, so there
+ * the real socket is refused before anything connects, and a test that forgot its fake fails loudly.
+ */
+function refuseRealSocketUnderTest(socket) {
+  if (!process.env.NODE_TEST_CONTEXT) return;
+  if (path.resolve(socket) !== path.resolve(defaultSocket())) return;
+  throw new HerdrError("real_socket_in_test", "A test tried to reach the real herdr socket; give it a fake herdr (test/fake-herdr.mjs)");
+}
+
 function roundTrip(method, params, { socket = defaultSocket(), timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
+  try { refuseRealSocketUnderTest(socket); } catch (error) { return Promise.reject(error); }
   return new Promise((resolve, reject) => {
     const id = `hares_${process.pid}_${++nextId}`;
     const conn = net.createConnection(socket);
@@ -105,6 +117,7 @@ export function herdrWrite(method, params, options = {}) {
  * connection ends, unless close() ended it.
  */
 export function herdrSubscribe(subscriptions, { socket = defaultSocket(), onLine, onClose, timeoutMs = REQUEST_TIMEOUT_MS } = {}) {
+  refuseRealSocketUnderTest(socket);
   const id = `hares_sub_${process.pid}_${++nextId}`;
   const conn = net.createConnection(socket);
   let buffer = "";
