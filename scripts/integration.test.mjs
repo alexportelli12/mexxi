@@ -12,7 +12,7 @@ import { playwrightArguments, registrationCommands } from "./lib/browser.mjs";
 import { ConfigError, loadConfig, resolveConfig } from "./lib/config.mjs";
 import { renderHostFiles } from "./lib/render.mjs";
 import { claudeHooks } from "./lib/host-hooks.mjs";
-import { pathEnvironment, serviceSearchPath } from "./lib/segwi-install.mjs";
+import { pathEnvironment, serviceSearchPath } from "./lib/hares-install.mjs";
 import { check } from "./check-config.mjs";
 
 const checkout = fileURLToPath(new URL("../", import.meta.url));
@@ -1300,7 +1300,7 @@ test("a failing mod step leaves the rest installed, reports the failure and stay
   await install({ ...options, check: true });
 });
 
-// segwi is opt-in: the key must change nothing a default install records or
+// hares is opt-in: the key must change nothing a default install records or
 // renders, so everyone who leaves it unset (or spells out its defaults) gets
 // exactly what they had.
 async function snapshot(home) {
@@ -1320,7 +1320,7 @@ async function snapshot(home) {
   return entries;
 }
 
-test("with segwi unset, or set to its defaults, the install records and renders exactly what it did before", async (t) => {
+test("with hares unset, or set to its defaults, the install records and renders exactly what it did before", async (t) => {
   const installed = async (config) => {
     const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-optin-off-"));
     t.after(() => rm(home, { recursive: true, force: true }));
@@ -1333,173 +1333,173 @@ test("with segwi unset, or set to its defaults, the install records and renders 
     return { result, files: await snapshot(home) };
   };
   const unset = await installed({});
-  const defaults = await installed({ segwi: JSON.parse(await readFile(path.join(checkout, "config.example.json"), "utf8")).segwi });
+  const defaults = await installed({ hares: JSON.parse(await readFile(path.join(checkout, "config.example.json"), "utf8")).hares });
   assert.deepEqual(defaults.files, unset.files);
   assert.equal(defaults.result.created, unset.result.created);
-  // Nothing of segwi is linked, rendered or recorded.
+  // Nothing of hares is linked, rendered or recorded.
   assert.ok(unset.files.size > 0);
-  for (const [name, content] of unset.files) assert.doesNotMatch(`${name}\n${content}`, /segwi/i, name);
-  assert.doesNotMatch(JSON.stringify(unset.result).replaceAll(path.resolve(checkout), "<checkout>"), /segwi/i);
+  for (const [name, content] of unset.files) assert.doesNotMatch(`${name}\n${content}`, /\bhares\b/i, name);
+  assert.doesNotMatch(JSON.stringify(unset.result).replaceAll(path.resolve(checkout), "<checkout>"), /\bhares\b/i);
   // No systemd user directory and no unit state either.
-  for (const name of unset.files.keys()) assert.doesNotMatch(name, /systemd|segwi-units/, name);
+  for (const name of unset.files.keys()) assert.doesNotMatch(name, /systemd|hares-units/, name);
 });
 
-// segwi opted in: the `segwi` link, and optionally three systemd user units
+// hares opted in: the `hares` link, and optionally three systemd user units
 // recorded in a state file. A stand-in systemctl logs its calls; none of
 // these tests reaches the real systemd or the real home.
-const segwiLinkTarget = path.join(path.resolve(checkout), "scripts/segwi/server.mjs");
-const unitNames = ["segwi-canary.service", "segwi-canary.timer", "segwi.service"];
+const haresLinkTarget = path.join(path.resolve(checkout), "scripts/hares/server.mjs");
+const unitNames = ["hares-canary.service", "hares-canary.timer", "hares.service"];
 
 function systemctlStub(result = { available: true, status: 0, stderr: "" }) {
   const calls = [];
   return { calls, systemctl: (args) => { calls.push(args); return result; } };
 }
 
-async function segwiHome(t, segwi) {
-  const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-segwi-"));
+async function haresHome(t, hares) {
+  const home = await mkdtemp(path.join(os.tmpdir(), "mexxi-hares-"));
   t.after(() => rm(home, { recursive: true, force: true }));
-  await configure(home, { segwi });
+  await configure(home, { hares });
   await registerPlaywright(home);
   const stub = systemctlStub();
   const options = { home, checkout, hookDirectory: path.join(home, "git-hooks"), systemctl: stub.systemctl, platform: "linux", nodePath: "/opt/node/bin/node", searchPath: "/home/someone/.local/bin:/usr/bin" };
-  return { home, options, stub, reconfigure: (next) => configure(home, { segwi: next }) };
+  return { home, options, stub, reconfigure: (next) => configure(home, { hares: next }) };
 }
 
 const withService = { enabled: true, service: { systemdUserUnit: true } };
 const unitFile = (home, name) => path.join(home, ".config/systemd/user", name);
-const stateFile = (home) => path.join(home, ".local/share/mexxi/state/segwi-units.json");
+const stateFile = (home) => path.join(home, ".local/share/mexxi/state/hares-units.json");
 
-test("enabling segwi without the service adds the link and nothing else", async (t) => {
-  const baseline = await segwiHome(t, {});
+test("enabling hares without the service adds the link and nothing else", async (t) => {
+  const baseline = await haresHome(t, {});
   await install(baseline.options);
   const before = await snapshot(baseline.home);
 
-  const on = await segwiHome(t, { enabled: true });
-  assert.equal((await install(on.options)).segwi, undefined);
+  const on = await haresHome(t, { enabled: true });
+  assert.equal((await install(on.options)).hares, undefined);
   const after = await snapshot(on.home);
 
   const added = [...after.keys()].filter((name) => !before.has(name));
-  assert.deepEqual(added, [process.platform === "win32" ? ".local/bin/segwi.cmd" : ".local/bin/segwi"]);
-  if (process.platform !== "win32") assert.equal(await readlink(path.join(on.home, ".local/bin/segwi")), segwiLinkTarget);
+  assert.deepEqual(added, [process.platform === "win32" ? ".local/bin/hares.cmd" : ".local/bin/hares"]);
+  if (process.platform !== "win32") assert.equal(await readlink(path.join(on.home, ".local/bin/hares")), haresLinkTarget);
   assert.deepEqual(on.stub.calls, []);
   assert.equal((await install(on.options)).created, 0);
   await install({ ...on.options, check: true });
 });
 
 test("enabling the service writes three recorded units and starts them through systemctl", async (t) => {
-  const { home, options, stub } = await segwiHome(t, withService);
+  const { home, options, stub } = await haresHome(t, withService);
   const result = await install(options);
 
   assert.deepEqual((await readdir(path.join(home, ".config/systemd/user"))).sort(), unitNames);
-  const service = await readFile(unitFile(home, "segwi.service"), "utf8");
+  const service = await readFile(unitFile(home, "hares.service"), "utf8");
   assert.ok(service.startsWith("# Managed by mexxi's installer. Edits are overwritten.\n"));
-  assert.match(service, new RegExp(`^ExecStart=${"/opt/node/bin/node".replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} ${segwiLinkTarget.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} serve$`, "m"));
+  assert.match(service, new RegExp(`^ExecStart=${"/opt/node/bin/node".replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} ${haresLinkTarget.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} serve$`, "m"));
   for (const line of ["Restart=on-failure", "RestartSec=5", "NoNewPrivileges=yes", "LockPersonality=yes", "UMask=0077", "Environment=NODE_ENV=production", 'Environment="PATH=/opt/node/bin:/home/someone/.local/bin:/usr/bin"']) {
     assert.match(service, new RegExp(`^${line}$`, "m"), line);
   }
   // A run works with your own access, as a session you start by hand does.
   assert.doesNotMatch(service, /^(ProtectHome|ProtectSystem|PrivateTmp|RestrictSUIDSGID)=/m);
-  const canary = await readFile(unitFile(home, "segwi-canary.service"), "utf8");
+  const canary = await readFile(unitFile(home, "hares-canary.service"), "utf8");
   assert.match(canary, /^Type=oneshot$/m);
   assert.match(canary, /^Environment="PATH=\/opt\/node\/bin:\/home\/someone\/\.local\/bin:\/usr\/bin"$/m);
-  assert.match(canary, /^ExecStart=\S+ \S+\/scripts\/segwi\/server\.mjs canary$/m);
-  const timer = await readFile(unitFile(home, "segwi-canary.timer"), "utf8");
+  assert.match(canary, /^ExecStart=\S+ \S+\/scripts\/hares\/server\.mjs canary$/m);
+  const timer = await readFile(unitFile(home, "hares-canary.timer"), "utf8");
   for (const line of ["OnCalendar=*-*-* 03:30", "RandomizedDelaySec=15m", "Persistent=true", "WantedBy=timers.target"]) assert.ok(timer.includes(`\n${line}\n`), line);
   for (const name of unitNames) assert.ok((await readFile(unitFile(home, name), "utf8")).startsWith("# Managed by mexxi's installer."), name);
 
   const state = JSON.parse(await readFile(stateFile(home), "utf8"));
-  assert.deepEqual(state.units.map((unit) => unit.path), ["segwi.service", "segwi-canary.service", "segwi-canary.timer"].map((name) => unitFile(home, name)));
+  assert.deepEqual(state.units.map((unit) => unit.path), ["hares.service", "hares-canary.service", "hares-canary.timer"].map((name) => unitFile(home, name)));
   for (const unit of state.units) assert.equal(unit.sha256, createHash("sha256").update(await readFile(unit.path)).digest("hex"));
 
-  assert.deepEqual(stub.calls, [["daemon-reload"], ["enable", "--now", "segwi.service", "segwi-canary.timer"]]);
-  assert.equal(result.segwi.systemctl, "ran");
+  assert.deepEqual(stub.calls, [["daemon-reload"], ["enable", "--now", "hares.service", "hares-canary.timer"]]);
+  assert.equal(result.hares.systemctl, "ran");
   // Running it again changes and runs nothing, and --check is green.
-  assert.equal((await install(options)).segwi, undefined);
+  assert.equal((await install(options)).hares, undefined);
   assert.equal(stub.calls.length, 2);
   await install({ ...options, check: true });
 });
 
 test("--dry-run lists the units and the systemctl commands and writes nothing", async (t) => {
-  const { home, options, stub } = await segwiHome(t, withService);
+  const { home, options, stub } = await haresHome(t, withService);
   const before = await snapshot(home);
   const result = await install({ ...options, dryRun: true });
-  assert.deepEqual(result.segwi.units, { write: ["segwi.service", "segwi-canary.service", "segwi-canary.timer"].map((name) => unitFile(home, name)), remove: [] });
-  assert.deepEqual(result.segwi.commands, ["systemctl --user daemon-reload", "systemctl --user enable --now segwi.service segwi-canary.timer"]);
+  assert.deepEqual(result.hares.units, { write: ["hares.service", "hares-canary.service", "hares-canary.timer"].map((name) => unitFile(home, name)), remove: [] });
+  assert.deepEqual(result.hares.commands, ["systemctl --user daemon-reload", "systemctl --user enable --now hares.service hares-canary.timer"]);
   assert.deepEqual(await snapshot(home), before);
   assert.deepEqual(stub.calls, []);
   await assert.rejects(lstat(path.join(home, ".config/systemd")), /ENOENT/);
 });
 
-test("turning the service off, or segwi off, removes exactly the recorded units and stops them first", async (t) => {
-  const { home, options, stub, reconfigure } = await segwiHome(t, withService);
+test("turning the service off, or hares off, removes exactly the recorded units and stops them first", async (t) => {
+  const { home, options, stub, reconfigure } = await haresHome(t, withService);
   await install(options);
-  // The user's own unit and an unrelated segwi-named file are not ours.
+  // The user's own unit and an unrelated hares-named file are not ours.
   await writeFile(unitFile(home, "mine.service"), "[Service]\nExecStart=/bin/true\n");
   stub.calls.length = 0;
 
   await reconfigure({ enabled: true, service: { systemdUserUnit: false } });
-  await assert.rejects(install({ ...options, check: true }), /segwi\.service was added by mexxi and config\.json no longer asks for it/);
+  await assert.rejects(install({ ...options, check: true }), /hares\.service was added by mexxi and config\.json no longer asks for it/);
   const result = await install(options);
   assert.deepEqual((await readdir(path.join(home, ".config/systemd/user"))).sort(), ["mine.service"]);
   assert.deepEqual(JSON.parse(await readFile(stateFile(home), "utf8")), { units: [] });
-  assert.deepEqual(stub.calls, [["disable", "--now", "segwi.service", "segwi-canary.timer"], ["daemon-reload"]]);
-  assert.deepEqual(result.segwi.units.remove.sort(), unitNames.map((name) => unitFile(home, name)).sort());
-  // The link stays while segwi stays enabled.
-  if (process.platform !== "win32") assert.equal(await readlink(path.join(home, ".local/bin/segwi")), segwiLinkTarget);
+  assert.deepEqual(stub.calls, [["disable", "--now", "hares.service", "hares-canary.timer"], ["daemon-reload"]]);
+  assert.deepEqual(result.hares.units.remove.sort(), unitNames.map((name) => unitFile(home, name)).sort());
+  // The link stays while hares stays enabled.
+  if (process.platform !== "win32") assert.equal(await readlink(path.join(home, ".local/bin/hares")), haresLinkTarget);
   await install({ ...options, check: true });
 
-  // Turning segwi itself off retires the link, and a second pass has nothing left to do.
+  // Turning hares itself off retires the link, and a second pass has nothing left to do.
   await reconfigure({ enabled: false });
-  await assert.rejects(install({ ...options, check: true }), /segwi.*\(stale\)/);
+  await assert.rejects(install({ ...options, check: true }), /hares.*\(stale\)/);
   await install(options);
-  await assert.rejects(lstat(path.join(home, ".local/bin/segwi")), /ENOENT/);
+  await assert.rejects(lstat(path.join(home, ".local/bin/hares")), /ENOENT/);
   await install({ ...options, check: true });
   assert.equal(await readFile(unitFile(home, "mine.service"), "utf8"), "[Service]\nExecStart=/bin/true\n");
 });
 
-test("a segwi.service mexxi did not write is a conflict: nothing is written and the file survives", async (t) => {
-  const { home, options, stub } = await segwiHome(t, withService);
-  await mkdir(path.dirname(unitFile(home, "segwi.service")), { recursive: true });
-  await writeFile(unitFile(home, "segwi.service"), "[Service]\nExecStart=/usr/bin/my-own-segwi\n");
-  await assert.rejects(install(options), new RegExp(`existing configuration differs[\\s\\S]*${unitFile(home, "segwi.service").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} exists and mexxi did not write it`));
+test("a hares.service mexxi did not write is a conflict: nothing is written and the file survives", async (t) => {
+  const { home, options, stub } = await haresHome(t, withService);
+  await mkdir(path.dirname(unitFile(home, "hares.service")), { recursive: true });
+  await writeFile(unitFile(home, "hares.service"), "[Service]\nExecStart=/usr/bin/my-own-hares\n");
+  await assert.rejects(install(options), new RegExp(`existing configuration differs[\\s\\S]*${unitFile(home, "hares.service").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} exists and mexxi did not write it`));
   await assert.rejects(install({ ...options, dryRun: true }), /did not write it/);
-  assert.equal(await readFile(unitFile(home, "segwi.service"), "utf8"), "[Service]\nExecStart=/usr/bin/my-own-segwi\n");
-  assert.deepEqual(await readdir(path.join(home, ".config/systemd/user")), ["segwi.service"]);
+  assert.equal(await readFile(unitFile(home, "hares.service"), "utf8"), "[Service]\nExecStart=/usr/bin/my-own-hares\n");
+  assert.deepEqual(await readdir(path.join(home, ".config/systemd/user")), ["hares.service"]);
   await assert.rejects(readFile(stateFile(home)), /ENOENT/);
-  await assert.rejects(lstat(path.join(home, ".local/bin/segwi")), /ENOENT/);
+  await assert.rejects(lstat(path.join(home, ".local/bin/hares")), /ENOENT/);
   assert.deepEqual(stub.calls, []);
 });
 
 test("--check reports a unit that was edited or deleted by hand, and the next install repairs it", async (t) => {
-  const { home, options, stub } = await segwiHome(t, withService);
+  const { home, options, stub } = await haresHome(t, withService);
   await install(options);
   await install({ ...options, check: true });
-  await writeFile(unitFile(home, "segwi.service"), "# edited\n");
-  await rm(unitFile(home, "segwi-canary.timer"));
+  await writeFile(unitFile(home, "hares.service"), "# edited\n");
+  await rm(unitFile(home, "hares-canary.timer"));
   await assert.rejects(install({ ...options, check: true }), (error) => {
-    assert.match(error.message, /segwi\.service differs from what mexxi renders/);
-    assert.match(error.message, /segwi-canary\.timer is missing/);
+    assert.match(error.message, /hares\.service differs from what mexxi renders/);
+    assert.match(error.message, /hares-canary\.timer is missing/);
     return true;
   });
   stub.calls.length = 0;
   await install(options);
   await install({ ...options, check: true });
-  assert.ok((await readFile(unitFile(home, "segwi.service"), "utf8")).includes("ExecStart="));
-  // The timer was missing, so enable --now starts it; segwi.service changed under a running service.
-  assert.deepEqual(stub.calls, [["daemon-reload"], ["enable", "--now", "segwi.service", "segwi-canary.timer"], ["restart", "segwi.service"]]);
+  assert.ok((await readFile(unitFile(home, "hares.service"), "utf8")).includes("ExecStart="));
+  // The timer was missing, so enable --now starts it; hares.service changed under a running service.
+  assert.deepEqual(stub.calls, [["daemon-reload"], ["enable", "--now", "hares.service", "hares-canary.timer"], ["restart", "hares.service"]]);
 });
 
 test("a unit that changed is restarted after the reload, and --dry-run shows it", async (t) => {
-  const { options, stub } = await segwiHome(t, withService);
+  const { options, stub } = await haresHome(t, withService);
   await install(options);
   stub.calls.length = 0;
-  // A new PATH changes both services: segwi.service is restarted, the oneshot canary is not.
+  // A new PATH changes both services: hares.service is restarted, the oneshot canary is not.
   const moved = { ...options, searchPath: "/home/someone/.local/bin:/usr/local/bin:/usr/bin" };
   const dryRun = await install({ ...moved, dryRun: true });
-  assert.deepEqual(dryRun.segwi.commands, ["systemctl --user daemon-reload", "systemctl --user enable --now segwi.service segwi-canary.timer", "systemctl --user restart segwi.service"]);
+  assert.deepEqual(dryRun.hares.commands, ["systemctl --user daemon-reload", "systemctl --user enable --now hares.service hares-canary.timer", "systemctl --user restart hares.service"]);
   assert.deepEqual(stub.calls, []);
   await install(moved);
-  assert.deepEqual(stub.calls, [["daemon-reload"], ["enable", "--now", "segwi.service", "segwi-canary.timer"], ["restart", "segwi.service"]]);
+  assert.deepEqual(stub.calls, [["daemon-reload"], ["enable", "--now", "hares.service", "hares-canary.timer"], ["restart", "hares.service"]]);
   stub.calls.length = 0;
   await install(moved);
   assert.deepEqual(stub.calls, [], "nothing changed, so nothing restarts");
@@ -1525,54 +1525,90 @@ test("the PATH line is quoted and escaped for systemd's Environment=", () => {
 });
 
 test("without systemctl the units are still written, and the commands are handed back to run", async (t) => {
-  const { home, options } = await segwiHome(t, withService);
+  const { home, options } = await haresHome(t, withService);
   const result = await install({ ...options, systemctl: () => ({ available: false, status: null, stderr: "" }) });
   assert.deepEqual((await readdir(path.join(home, ".config/systemd/user"))).sort(), unitNames);
-  assert.equal(result.segwi.systemctl, "missing");
-  assert.deepEqual(result.segwi.commands, ["systemctl --user daemon-reload", "systemctl --user enable --now segwi.service segwi-canary.timer"]);
+  assert.equal(result.hares.systemctl, "missing");
+  assert.deepEqual(result.hares.commands, ["systemctl --user daemon-reload", "systemctl --user enable --now hares.service hares-canary.timer"]);
   await install({ ...options, check: true });
 });
 
 test("a failing systemctl is reported, never an install failure", async (t) => {
-  const { options } = await segwiHome(t, withService);
+  const { options } = await haresHome(t, withService);
   const result = await install({ ...options, systemctl: () => ({ available: true, status: 1, stderr: "Failed to connect to bus" }) });
-  assert.equal(result.segwi.systemctl, "failed");
-  assert.match(result.segwi.failed[0], /Failed to connect to bus/);
+  assert.equal(result.hares.systemctl, "failed");
+  assert.match(result.hares.failed[0], /Failed to connect to bus/);
 });
 
 test("the units are Linux only, and the real systemctl is never reached from a throwaway home", async (t) => {
-  const { home, options, stub } = await segwiHome(t, withService);
+  const { home, options, stub } = await haresHome(t, withService);
   await install({ ...options, platform: "darwin" });
   await assert.rejects(lstat(path.join(home, ".config/systemd")), /ENOENT/);
   assert.deepEqual(stub.calls, []);
   // Without an injected runner a home other than the real one gets no systemctl at all.
-  const bare = await segwiHome(t, withService);
+  const bare = await haresHome(t, withService);
   const { systemctl, ...withoutRunner } = bare.options;
   const result = await install(withoutRunner);
-  assert.equal(result.segwi.systemctl, "missing");
+  assert.equal(result.hares.systemctl, "missing");
 });
 
-test("with segwi off, only a `segwi` link into this clone is retired", async (t) => {
+test("with hares off, only a `hares` link into this clone is retired", async (t) => {
   if (process.platform === "win32") return;
-  const { home, options } = await segwiHome(t, {});
+  const { home, options } = await haresHome(t, {});
   await mkdir(path.join(home, ".local/bin"), { recursive: true });
-  await symlink(segwiLinkTarget, path.join(home, ".local/bin/segwi"));
+  await symlink(haresLinkTarget, path.join(home, ".local/bin/hares"));
   await install(options);
-  await assert.rejects(lstat(path.join(home, ".local/bin/segwi")), /ENOENT/);
+  await assert.rejects(lstat(path.join(home, ".local/bin/hares")), /ENOENT/);
 
-  const mine = await segwiHome(t, {});
+  const mine = await haresHome(t, {});
   await mkdir(path.join(mine.home, ".local/bin"), { recursive: true });
-  await writeFile(path.join(mine.home, "my-segwi"), "#!/bin/sh\n");
-  await symlink(path.join(mine.home, "my-segwi"), path.join(mine.home, ".local/bin/segwi"));
+  await writeFile(path.join(mine.home, "my-hares"), "#!/bin/sh\n");
+  await symlink(path.join(mine.home, "my-hares"), path.join(mine.home, ".local/bin/hares"));
   await install(mine.options);
-  assert.equal(await readlink(path.join(mine.home, ".local/bin/segwi")), path.join(mine.home, "my-segwi"));
+  assert.equal(await readlink(path.join(mine.home, ".local/bin/hares")), path.join(mine.home, "my-hares"));
   await install({ ...mine.options, check: true });
 });
 
-test("an enabled segwi refuses to take over a `segwi` that is not its link", async (t) => {
+// hares was installed as segwi. The installer recorded that link and those units, so it retires them
+// (decision 0003) and moves the state file, and it leaves a `segwi` that is the user's own.
+test("an install retires the segwi link and units it recorded and moves their state to hares-units.json", async (t) => {
   if (process.platform === "win32") return;
-  const { home, options } = await segwiHome(t, { enabled: true });
+  const { home, options, stub } = await haresHome(t, withService);
+  const bin = path.join(home, ".local/bin");
+  await mkdir(bin, { recursive: true });
+  await symlink(path.join(path.resolve(checkout), "scripts/segwi/server.mjs"), path.join(bin, "segwi"));
+  const legacyNames = ["segwi.service", "segwi-canary.service", "segwi-canary.timer"];
+  await mkdir(path.dirname(unitFile(home, "x")), { recursive: true });
+  for (const name of legacyNames) await writeFile(unitFile(home, name), "# Managed by mexxi's installer. Edits are overwritten.\n");
+  const legacyState = path.join(home, ".local/share/mexxi/state/segwi-units.json");
+  await mkdir(path.dirname(legacyState), { recursive: true });
+  await writeFile(legacyState, JSON.stringify({ units: legacyNames.map((name) => ({ path: unitFile(home, name), sha256: "old" })) }));
+
+  const result = await install(options);
+
+  await assert.rejects(lstat(path.join(bin, "segwi")), /ENOENT/, "the recorded segwi link is retired");
+  await assert.rejects(lstat(legacyState), /ENOENT/, "the old state file is gone");
+  assert.deepEqual((await readdir(path.join(home, ".config/systemd/user"))).sort(), ["hares-canary.service", "hares-canary.timer", "hares.service"]);
+  assert.deepEqual(JSON.parse(await readFile(stateFile(home), "utf8")).units.map((unit) => path.basename(unit.path)), ["hares.service", "hares-canary.service", "hares-canary.timer"]);
+  assert.deepEqual(stub.calls[0], ["disable", "--now", "segwi.service", "segwi-canary.timer"]);
+  assert.deepEqual(result.hares.units.remove.map((file) => path.basename(file)).sort(), legacyNames.slice().sort());
+  await install({ ...options, check: true });
+});
+
+test("an install leaves a segwi link that points somewhere else alone", async (t) => {
+  if (process.platform === "win32") return;
+  const { home, options } = await haresHome(t, {});
   await mkdir(path.join(home, ".local/bin"), { recursive: true });
-  await writeFile(path.join(home, ".local/bin/segwi"), "#!/bin/sh\n");
-  await assert.rejects(install(options), /existing configuration differs[\s\S]*\.local\/bin\/segwi/);
+  await writeFile(path.join(home, "my-segwi"), "#!/bin/sh\n");
+  await symlink(path.join(home, "my-segwi"), path.join(home, ".local/bin/segwi"));
+  await install(options);
+  assert.equal(await readlink(path.join(home, ".local/bin/segwi")), path.join(home, "my-segwi"));
+});
+
+test("an enabled hares refuses to take over a `hares` that is not its link", async (t) => {
+  if (process.platform === "win32") return;
+  const { home, options } = await haresHome(t, { enabled: true });
+  await mkdir(path.join(home, ".local/bin"), { recursive: true });
+  await writeFile(path.join(home, ".local/bin/hares"), "#!/bin/sh\n");
+  await assert.rejects(install(options), /existing configuration differs[\s\S]*\.local\/bin\/hares/);
 });

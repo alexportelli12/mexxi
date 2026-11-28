@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import { spawnSync } from "node:child_process";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { ConfigError, configPath, loadConfig, minimalConfig, resolveConfig } from "./lib/config.mjs";
 
 const home = path.join(path.sep, "home", "someone");
@@ -151,4 +153,32 @@ test("a config with keys retired by 0021 and 0022 still loads, ignores them and 
   assert.deepEqual(config.guard.deny, ["npm publish"]);
   assert.deepEqual(config.mods, ["run-pane"]);
   assert.equal("jev" in config, false);
+});
+
+// Break caught: the rename of segwi to hares locking out configs that still use the old key, or
+// a notice that repeats on every load, or both keys quietly picking one.
+const configModule = fileURLToPath(new URL("./lib/config.mjs", import.meta.url));
+const loadTwice = (file) => spawnSync(process.execPath, ["--input-type=module", "-e",
+  `import { loadConfig } from ${JSON.stringify(configModule)};
+   const a = await loadConfig({ file: process.argv[1] }); await loadConfig({ file: process.argv[1] });
+   console.log(JSON.stringify(a.config.hares.bind.port));`, file], { encoding: "utf8" });
+
+test("a config with only the old segwi key loads as hares and prints one rename notice per process", async (t) => {
+  const file = await temporaryFile(t, JSON.stringify({ segwi: { bind: { port: 4999 } } }));
+  const run = loadTwice(file);
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.stdout.trim(), "4999");
+  assert.equal(run.stderr.match(/rename the segwi key in config\.json to hares/gi)?.length, 1, run.stderr);
+});
+
+test("a config with the hares key loads without a notice", async (t) => {
+  const file = await temporaryFile(t, JSON.stringify({ hares: { bind: { port: 4998 } } }));
+  const run = loadTwice(file);
+  assert.equal(run.status, 0, run.stderr);
+  assert.equal(run.stdout.trim(), "4998");
+  assert.equal(run.stderr, "");
+});
+
+test("a config that sets both hares and segwi is an error naming the key to delete", async () => {
+  await assert.rejects(resolveConfig({ hares: {}, segwi: {} }, { home }), (error) => error instanceof ConfigError && /and both are set; delete the segwi key/.test(error.message));
 });

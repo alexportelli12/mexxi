@@ -24,7 +24,7 @@ A specialist role, such as the code-reviewer, that a coding agent can hand part 
 
 ## approval
 
-A question segwi asks you about one call in a run, when Claude Code's auto mode leaves the decision to you after refusing several calls in a row. It shows the exact command, and only a person can answer it, in the web app. No answer within the time limit counts as a denial, so a run never gets more freedom by waiting. See [segwi](segwi.md).
+A question ħares asks you about one call in a run, when Claude Code's auto mode leaves the decision to you after refusing several calls in a row. It shows the exact command, and only a person can answer it, in the web app. No answer within the time limit counts as a denial, so a run never gets more freedom by waiting. See [ħares](hares.md).
 
 ## baseline
 
@@ -52,7 +52,7 @@ The folder where a run keeps screenshots, recordings and notes, outside the repo
 
 ## extension
 
-A folder of your own that segwi serves as an extra page, such as a dashboard of your machine, behind its own sign-in. It saves running and securing a second server. See [segwi](segwi.md#add-your-own-page).
+A folder of your own that ħares serves as an extra page, such as a dashboard of your machine, behind its own sign-in. It saves running and securing a second server. See [ħares](hares.md#add-your-own-page).
 
 ## forge
 
@@ -80,7 +80,7 @@ A hook that counts identical failing shell commands. When the same command fails
 
 ## MCP
 
-The Model Context Protocol: a standard way to give a coding agent extra tools. mexxi uses Playwright MCP to let the agent drive a browser. [segwi](#segwi) offers an MCP server too, so other tools can start and follow runs.
+The Model Context Protocol: a standard way to give a coding agent extra tools. mexxi uses Playwright MCP to let the agent drive a browser. [ħares](#hares) offers an MCP server too, so other tools can start and follow runs.
 
 ## merge call
 
@@ -114,9 +114,9 @@ One of the few places, two by default, for an install or a check to run at once 
 
 The systemd group an install or a check runs in on Linux. It gives the run a lower CPU priority than your sessions and a memory limit, and stopping it ends every server or browser the run started. [Decision 0019](decisions/0019-runs-in-a-systemd-scope.md).
 
-## segwi
+## ħares
 
-An opt-in tool that starts, follows and answers mexxi runs from your phone or any MCP client, on a machine you own. It is a launcher and viewer: the workflow, the worktrees and the pull request stay the same. It listens on your own machine only. See [segwi](segwi.md) and [decision 0011](decisions/0011-segwi.md).
+An opt-in tool that starts, follows and answers mexxi runs from your phone or any MCP client, on a machine you own. It is a launcher and viewer: the workflow, the worktrees and the pull request stay the same. It listens on your own machine only. See [ħares](hares.md) and [decision 0011](decisions/0011-segwi.md).
 
 ## session
 

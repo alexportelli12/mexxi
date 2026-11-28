@@ -13,7 +13,7 @@ export const schemaFile = fileURLToPath(new URL("../../config.schema.json", impo
 // problem a group solves, and who it applies to.
 export const supportedKeywords = new Set([
   "$schema", "title", "description", "why", "scope", "type", "properties", "additionalProperties",
-  "items", "enum", "pattern", "minimum", "maximum", "minLength", "default",
+  "items", "enum", "pattern", "minimum", "maximum", "minLength", "default", "deprecated",
 ]);
 
 export class ConfigError extends Error {
@@ -80,7 +80,8 @@ export function withDefaults(value, schema) {
   if (schema.type !== "object" || !schema.properties) return value === undefined ? structuredClone(schema.default) : value;
   const result = {};
   for (const [key, property] of Object.entries(schema.properties)) {
-    if (key === "$schema") continue;
+    // A deprecated alias is read by withHaresKey and never takes a default of its own.
+    if (key === "$schema" || property.deprecated) continue;
     result[key] = withDefaults(value?.[key], property);
   }
   return result;
@@ -96,10 +97,10 @@ export function abbreviateHome(value, home = os.homedir()) {
   return relative && !relative.startsWith("..") && !path.isAbsolute(relative) ? `~/${relative.split(path.sep).join("/")}` : value;
 }
 
-// Keys segwi's sandbox and permission modes used, retired by decision 0016. For one release a config that still
-// names them loads: they are dropped before validation, and segwi warns about each (see segwi/lib/settings.mjs).
+// Keys hares's sandbox and permission modes used, retired by decision 0016. For one release a config that still
+// names them loads: they are dropped before validation, and hares warns about each (see hares/lib/settings.mjs).
 // Remove this shim, and let the schema refuse them again, after 2026-12-01.
-const RETIRED_SEGWI_KEYS = ["permissions", "mcpPermissions", "branchPrefixes", "allowUnsandboxed", "allowedDomains"];
+const RETIRED_HARES_KEYS = ["permissions", "mcpPermissions", "branchPrefixes", "allowUnsandboxed", "allowedDomains"];
 const RETIRED_REPOSITORY_KEYS = ["permissions", "allowedDomains"];
 
 const isObject = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -109,18 +110,34 @@ const omit = (value, keys) => Object.fromEntries(Object.entries(value).filter(([
 // loads, the keys are dropped, and the installer names each one to delete. Remove after 2027-01-15.
 const RETIRED_MODEL_KEYS = ["crossFamilyReviewer"];
 
-function withoutRetiredSegwiKeys(value, retired) {
-  const segwi = isObject(value) ? value.segwi : undefined;
-  if (!isObject(segwi)) return value;
+// hares was called segwi before it was renamed. For now the old `segwi` key still loads, as an alias of
+// `hares`, with a one-time notice; setting both is ambiguous, so it is an error.
+let noticePrinted = false;
+export function withHaresKey(value, source = "config") {
+  if (!isObject(value) || !("segwi" in value)) return value;
+  if ("hares" in value) {
+    throw new ConfigError(`${source} is invalid:\nconfig.segwi: \"segwi\" is the old name of \"hares\" and both are set; delete the segwi key`);
+  }
+  if (!noticePrinted) {
+    noticePrinted = true;
+    process.stderr.write(`mexxi: ${source} uses the deprecated "segwi" key. Rename the segwi key in config.json to hares.\n`);
+  }
+  const { segwi, ...rest } = value;
+  return { ...rest, hares: segwi };
+}
+
+function withoutRetiredHaresKeys(value, retired) {
+  const hares = isObject(value) ? value.hares : undefined;
+  if (!isObject(hares)) return value;
   const before = retired.length;
-  retired.push(...RETIRED_SEGWI_KEYS.filter((key) => key in segwi).map((key) => `segwi.${key}`));
-  const repositories = Array.isArray(segwi.repositories) ? segwi.repositories.map((repository, index) => {
+  retired.push(...RETIRED_HARES_KEYS.filter((key) => key in hares).map((key) => `hares.${key}`));
+  const repositories = Array.isArray(hares.repositories) ? hares.repositories.map((repository, index) => {
     if (!isObject(repository)) return repository;
-    retired.push(...RETIRED_REPOSITORY_KEYS.filter((key) => key in repository).map((key) => `segwi.repositories[${index}].${key}`));
+    retired.push(...RETIRED_REPOSITORY_KEYS.filter((key) => key in repository).map((key) => `hares.repositories[${index}].${key}`));
     return omit(repository, RETIRED_REPOSITORY_KEYS);
-  }) : segwi.repositories;
+  }) : hares.repositories;
   if (retired.length === before) return value;
-  return { ...value, segwi: { ...omit(segwi, RETIRED_SEGWI_KEYS), ...(repositories ? { repositories } : {}) } };
+  return { ...value, hares: { ...omit(hares, RETIRED_HARES_KEYS), ...(repositories ? { repositories } : {}) } };
 }
 
 function withoutRetiredReviewKeys(value, retired) {
@@ -161,13 +178,13 @@ function withoutRetiredCommandFixerKeys(value, retired) {
 /** The retired keys `value` still sets, as paths to delete, and `value` without them. */
 export function withoutRetiredKeys(value) {
   const retired = [];
-  const cleaned = withoutRetiredCommandFixerKeys(withoutRetiredReviewKeys(withoutRetiredSegwiKeys(value, retired), retired), retired);
+  const cleaned = withoutRetiredCommandFixerKeys(withoutRetiredReviewKeys(withoutRetiredHaresKeys(value, retired), retired), retired);
   return { value: retired.length ? cleaned : value, retired };
 }
 
 export async function resolveConfig(input, { home = os.homedir(), source = "config" } = {}) {
   const schema = await loadSchema();
-  const { value } = withoutRetiredKeys(input);
+  const { value } = withoutRetiredKeys(withHaresKey(input, source));
   const errors = validate(value, schema);
   if (errors.length) throw new ConfigError(`${source} is invalid:\n${errors.join("\n")}`);
   const config = withDefaults(value, schema);
@@ -206,7 +223,7 @@ export async function loadConfig({ file = configPath(), home = os.homedir() } = 
   } catch (error) {
     throw new ConfigError(`${file} is not valid JSON: ${error.message}`);
   }
-  return { file, exists: true, config: await resolveConfig(value, { home, source: file }), retired: withoutRetiredKeys(value).retired };
+  return { file, exists: true, config: await resolveConfig(value, { home, source: file }), retired: withoutRetiredKeys(withHaresKey(value, file)).retired };
 }
 
 // What the installer writes on first run: only where the clone is, so every

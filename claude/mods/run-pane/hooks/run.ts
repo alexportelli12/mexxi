@@ -1,6 +1,6 @@
 // What the run pane reads from ibni and how it words it, apart from the hooks
 // so tests can feed recorded `ibni info` / `ibni stats` answers directly. How a
-// run's journey reads lives in journey.ts, which segwi's web app shares.
+// run's journey reads lives in journey.ts, which hares's web app shares.
 import { isDelivered, record } from './journey'
 import type { Tone } from './journey'
 import type { RunPaneSnapshot } from '../types'

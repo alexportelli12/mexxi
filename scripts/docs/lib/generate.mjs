@@ -19,8 +19,8 @@ const UNDER_THE_HOOD = ["Principles", "Decisions", "History"];
 // Hand-written pages are Start here pages unless listed here.
 // The session statistics behind the problems are evidence, not a first read,
 // and only people moving an old install need the migration guide.
-// segwi is opt-in and has its own settings, so its guide sits with the configuration pages.
-const HANDWRITTEN_SECTIONS = { "host-details": "Configuration", "migrating-from-coding-agent-config": "History", segwi: "Configuration", "where-the-problems-come-from": "Principles" };
+// hares is opt-in and has its own settings, so its guide sits with the configuration pages.
+const HANDWRITTEN_SECTIONS = { "host-details": "Configuration", "migrating-from-coding-agent-config": "History", hares: "Configuration", "where-the-problems-come-from": "Principles" };
 // Hand-written opening of the generated configuration page, not a page itself.
 const CONFIGURATION_GUIDE = "docs/configuration-guide.md";
 
@@ -202,7 +202,7 @@ function describeHelp(root) {
 function schemaRows(schema, prefix = "") {
   const rows = [];
   for (const [key, property] of Object.entries(schema.properties ?? {})) {
-    if (key === "$schema") continue;
+    if (key === "$schema" || property.deprecated) continue;
     const name = `${prefix}${key}`;
     if (property.type === "object" && property.properties) rows.push(...schemaRows(property, `${name}.`));
     else rows.push({ name, type: [].concat(property.type ?? "any").join(" or "), default: property.default, description: property.description });
@@ -284,11 +284,13 @@ export async function generatePages({ root, files }) {
     const { body } = parseFrontmatter(get(file));
     add({ route, title: titleOf(body, route), nav: titleOf(body, route), section: HANDWRITTEN_SECTIONS[route] ?? "Start here", markdown: rewriteLinks(body, context(file, route)) });
   }
+  // hares was called segwi, and the accepted decision records (never edited) still link to its old page.
+  add({ route: "segwi", title: "segwi is now ħares", nav: "segwi (now ħares)", section: "History", markdown: `# segwi is now ħares\n\nħares was called segwi until it was renamed. Its guide is [ħares](${pageLink("segwi", "hares")}).\n` });
   // The names page is a small dictionary: one entry per name, each with the
   // page where you meet it.
   const nameLink = (entry) => {
-    // segwi is a CLI too, but it has a guide of its own instead of a generated reference.
-    if (entry.name === "segwi") return `[the segwi guide](${pageLink("names", "segwi")})`;
+    // hares is a CLI too, but it has a guide of its own instead of a generated reference.
+    if (entry.name === "hares") return `[the hares guide](${pageLink("names", "hares")})`;
     const target = { command: `commands/${entry.name}`, skill: `skills/${entry.name}`, cli: "cli/index", repo: "index" }[entry.kind];
     const label = { command: `the /${entry.name} command`, skill: `the ${entry.name} skill`, cli: "the ibni CLI", repo: "the overview" }[entry.kind];
     return `[${label}](${pageLink("names", target)})`;
@@ -566,7 +568,7 @@ export async function generatePages({ root, files }) {
   // then every key from the schemas, then what the installer links.
   const { links } = await import(pathToFileURL(path.join(root, "scripts/install.mjs")).href);
   const installation = await links({ home: "~", checkout: root, generated: "<generated>", hosts: { opencode: true, claude: true, codex: true } });
-  const groups = Object.entries(schema.properties).filter(([key]) => key !== "$schema");
+  const groups = Object.entries(schema.properties).filter(([key, property]) => key !== "$schema" && !property.deprecated);
   const guide = parseFrontmatter(get(CONFIGURATION_GUIDE)).body;
   const keyRows = (properties) => schemaRows({ properties }).map((row) => `| ${codeCell(row.name)} | ${row.type} | ${codeCell(JSON.stringify(row.default))} | ${row.description.replace(/\|/g, "\\|")} |`);
   const keyTable = ["| Key | Type | Default | What it sets |", "| --- | --- | --- | --- |"];

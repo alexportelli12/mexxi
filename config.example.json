@@ -73,7 +73,7 @@
   "forge": {
     "hosts": {}
   },
-  "segwi": {
+  "hares": {
     "enabled": false,
     "bind": {
       "host": "127.0.0.1",

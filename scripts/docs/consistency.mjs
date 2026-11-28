@@ -4,9 +4,9 @@
 const decodeAttribute = (text) => text.replace(/&#10;/g, "\n").replace(/&quot;/g, '"').replace(/&amp;/g, "&");
 const visibleText = (html) => html.replace(/<(script|style)[\s\S]*?<\/\1>/g, "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&#?\w+;/g, "").replace(/\s+/g, " ");
 
-// The landing page keeps mexxi's pitch focused, so the opt-in segwi stays off it
+// The landing page keeps mexxi's pitch focused, so the opt-in hares stays off it
 // for now (decision 0011); its entry lives on the generated names page.
-const NOT_ON_LANDING_PAGE = new Set(["segwi"]);
+const NOT_ON_LANDING_PAGE = new Set(["hares"]);
 
 export function checkConsistency(files) {
   const problems = [];
