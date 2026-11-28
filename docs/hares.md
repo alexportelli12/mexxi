@@ -70,7 +70,7 @@ The unit runs with the `PATH` the installer ran with, so ħares finds the same `
 loginctl enable-linger "$USER"
 ```
 
-Turn `service.systemdUserUnit` or `enabled` off and the next install removes exactly what it recorded. Without the service, start the server yourself with `hares serve`. ħares reads its config only when it starts, so restart it with `systemctl --user restart hares.service` after a change. The first start moves an existing `mexxi/segwi` data folder to `mexxi/hares`, once, and logs it. Run `hares doctor` to check the setup. It confirms that herdr answers on the protocol ħares speaks, that the hook is installed and that your Claude Code version is one ħares was tested with.
+Turn `service.systemdUserUnit` or `enabled` off and the next install removes exactly what it recorded. Without the service, start the server yourself with `hares serve`. ħares reads its config only when it starts, so restart it with `systemctl --user restart hares.service` after a change. The first start moves an existing `mexxi/segwi` data folder to `mexxi/hares`, once, and logs it. It still moves when the hook has already made `mexxi/hares` for its records, and it never moves over a `mexxi/hares` that holds a store of its own. Run `hares doctor` to check the setup. It confirms that herdr answers on the protocol ħares speaks, that the hook is installed and that your Claude Code version is one ħares was tested with.
 
 The server listens on `127.0.0.1:<port>`. In the commands and addresses below, `<port>` is `hares.bind.port`, which is 4280 by default.
 
@@ -152,6 +152,8 @@ A session starts four ways, from the **Start** page or from MCP:
 - **A free session** in a repository you listed, with no command.
 - **An issue.** The session starts on `/wettaq` for that issue number, in the repository that holds it.
 - **A pull request.** The session starts on its review comments or its failing check, whichever you pick.
+
+Each way needs an action that the repository lists under `actions`, from the web app and from MCP alike. A read-only question needs `ask` and `/lesti` needs `ready`. A free session, an issue, a pull request and any other command can change the repository, so they need `build`. A start the repository doesn't allow gets a 400, and the refusal is written to the activity log.
 
 Sessions that ħares starts open as tabs in one workspace of its own, labelled ħares, so they never resize your panes. ħares counts only these sessions against `hares.limits.concurrentRuns` and `runsPerDay`, and a request over a cap gets a 429.
 

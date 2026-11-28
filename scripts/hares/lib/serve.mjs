@@ -16,6 +16,7 @@ import { createGithubBoard } from "./github-board.mjs";
 import { createGithubWriter, runGh } from "./github-write.mjs";
 import { slugForRepository } from "./github.mjs";
 import { createHerdrAdapter } from "./herdr/adapter.mjs";
+import { createIbniLink } from "./ibni-link.mjs";
 import { defaultSocket } from "./herdr/client.mjs";
 import { createLinkResolver } from "./links.mjs";
 import { createMcpHandler } from "./mcp.mjs";
@@ -47,9 +48,14 @@ function workspaceStoreFor(store) {
  * derives by evidence (links.mjs). Refreshed in the background, so readiness and the board can ask
  * synchronously. It is also readiness.mjs's store interface: sessionForPr, sessionFacts,
  * gateAcceptance and acceptGateChange, over store.mjs and the session service.
+ *
+ * sessionFacts carries ibni's snapshot of the workspace a session works in (the worktree its folder is in),
+ * read through ibni-link.mjs on each refresh, for the sessions linked to a pull request: readiness's
+ * reviewed-head and review-findings-closed checks read it. `ibni` is injected by tests.
  */
-export function createLinkIndex({ sessions, store, approvals, log = () => {} }) {
+export function createLinkIndex({ sessions, store, approvals, settings, ibni = createIbniLink(), log = () => {} }) {
   const links = new Map();
+  let snapshots = new Map();
   let latest = new Map();
   let timer = null;
   let running = null;
@@ -68,11 +74,44 @@ export function createLinkIndex({ sessions, store, approvals, log = () => {} }) 
             log(`links for ${session.id}: ${error.message}`);
           }
         }
+        snapshots = await snapshotsFor(list);
       } finally {
         running = null;
       }
     })();
     return running;
+  }
+
+  /** ibni's snapshot per session linked to a pull request, from the ibni workspace whose worktree holds the session's folder. */
+  async function snapshotsFor(list) {
+    const found = new Map();
+    const byRepo = new Map();
+    for (const session of list) {
+      if (!session.cwd || !links.get(session.id)?.pull) continue;
+      byRepo.set(session.repo, [...(byRepo.get(session.repo) ?? []), session]);
+    }
+    for (const [repo, group] of byRepo) {
+      const repository = settings.hares.repositories.find((candidate) => candidate.name === repo);
+      if (!repository) continue;
+      let workspaces;
+      try {
+        workspaces = await ibni.list(repository.path);
+      } catch (error) {
+        log(`ibni list in ${repo}: ${error.message}`);
+        continue;
+      }
+      for (const session of group) {
+        const workspace = workspaces.find((entry) => typeof entry?.worktreePath === "string" && typeof entry.sessionId === "string"
+          && (session.cwd === entry.worktreePath || session.cwd.startsWith(entry.worktreePath + path.sep)));
+        if (!workspace) continue;
+        try {
+          found.set(session.id, (await ibni.summary(repository.path, workspace.sessionId)).snapshot ?? null);
+        } catch (error) {
+          log(`ibni info for ${session.id}: ${error.message}`);
+        }
+      }
+    }
+    return found;
   }
 
   const sessionWhere = (test) => {
@@ -93,7 +132,7 @@ export function createLinkIndex({ sessions, store, approvals, log = () => {} }) 
       const session = latest.get(sessionId);
       if (!session) return null;
       const state = session.alive ? session.status : "closed";
-      return { state, snapshot: null, pendingPermissions: approvals.forSession(sessionId).length };
+      return { state, snapshot: snapshots.get(sessionId) ?? null, pendingPermissions: approvals.forSession(sessionId).length };
     },
     gateAcceptance: (repo, number, headSha) => store.prGateAcceptance(repo, number, headSha),
     acceptGateChange: (fields) => store.acceptPrGateChange(fields),
@@ -163,7 +202,7 @@ export async function startServer({
   sessions = createSessionService({
     adapter, store, settings, approvals, links, home, pendingOptions, slugFor, ...(checkout ? { checkout } : {}), now, log,
   });
-  const linkIndex = createLinkIndex({ sessions, store, approvals, log });
+  const linkIndex = createLinkIndex({ sessions, store, approvals, settings, log });
   readiness = createReadinessService({ store: linkIndex, settings, stateDir, fetch: githubFetch });
   const writer = createGithubWriter({
     settings, exec: ghExec,

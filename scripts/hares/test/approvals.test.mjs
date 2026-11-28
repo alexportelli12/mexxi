@@ -10,6 +10,7 @@ import { contentFor, createHookApprovals, DISPLAY_MAX, displayLength, exactFor, 
 import { createHerdrAdapter } from "../lib/herdr/adapter.mjs";
 import { parseScreen } from "../lib/herdr/screen.mjs";
 import { openStore } from "../lib/store.mjs";
+import { webPending } from "../lib/web-api.mjs";
 import { claudeAgent, startFakeHerdr } from "./fake-herdr.mjs";
 
 const TOKEN = `ghp_${"a1B2c3D4e5".repeat(4).slice(0, 36)}`;
@@ -127,6 +128,28 @@ test("a confirmation for a different rule than the one on record sends nothing",
   const [{ id }] = service.list();
   await assert.rejects(decideWeb(service, id, "always", { confirm: true, rule: "Bash(*)" }), { status: 409 });
   assert.deepEqual(fake.writes(), []);
+});
+
+// Break caught: the card offers a setMode-only prompt's always option by its label, but decide() compares the
+// rule the card sends back with the hook's rule (null here), so "switch to accept edits" always fails with 409.
+test("a Write prompt with only a setMode suggestion can be always-allowed with the text the card showed, after confirming", async (t) => {
+  const { service, fake } = await hookApprovals(t, { screen: "live-perm-write.txt" });
+  const record = bashRecord({
+    toolName: "Write", input: { file_path: "/tmp/hares-gate1/repo/notes.txt", content: "hello gate\n" }, inputHash: "hw", recordId: "permission_hw",
+    suggestions: [{ type: "setMode", mode: "acceptEdits", destination: "session" }],
+  });
+  service.observe({ sessionId: HOOK_SESSION, records: [record] });
+  const [{ id }] = service.list();
+  const [approval] = service.forSession(HOOK_SESSION);
+  const item = { id: record.recordId, kind: "permission", answerable: true, screenOptions: parseScreen(liveScreenText("live-perm-write.txt")).options };
+  const shown = webPending(item, { id: HOOK_SESSION, repo: "my-app", alive: true, expect: seenBlocked }, approval).permission.always.text;
+  assert.match(shown, /^Yes, and switch to accept edits/);
+
+  await assert.rejects(decideWeb(service, id, "always"), (error) => error.status === 409 && error.confirm.rule === shown);
+  assert.deepEqual(fake.writes(), [], "nothing is pressed before the person confirms");
+  const decided = await decideWeb(service, id, "always", { confirm: true, rule: shown });
+  assert.equal(decided.decidedVia, "always");
+  assert.deepEqual(fake.writes().map((entry) => entry.params.keys), [["2"]]);
 });
 
 test("auto mode is never what always-allow presses", () => {

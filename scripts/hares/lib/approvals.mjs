@@ -103,6 +103,15 @@ export function alwaysText(suggestions) {
   return folders.length ? `Allow access to ${folders.join(", ")} from this project` : null;
 }
 
+/**
+ * The text the always-allow confirm sheet shows and sends back as `rule`: the hook's rule or folders when it
+ * gave any, else the screen's own always option (a setMode-only prompt, such as Write's "switch to accept
+ * edits"). web-api.mjs shows it and decide() checks against it, so the two can never disagree.
+ */
+export function alwaysGrantText(suggestedRule, option) {
+  return suggestedRule ?? option?.label ?? null;
+}
+
 /** What a person would read for a permission record, and whether it is too long to show in full (then no Allow is offered). */
 export function permissionDisplay(record) {
   if (record.truncated || !record.input || typeof record.input !== "object") return { exact: "", content: null, length: 0, tooLong: Boolean(record.truncated) };
@@ -221,16 +230,17 @@ export function createHookApprovals({ store, adapter, settings, notify = () => {
       }
       const option = optionForDecision(form, decision);
       if (!option) throw new HttpError(422, "This prompt has no such choice here; answer it in the terminal.");
+      const grant = alwaysGrantText(approval.suggestedRule, option);
       if (decision === "always") {
-        if (confirm !== true) throw new ConfirmRequired({ label: option.label, rule: approval.suggestedRule });
-        if (rule !== undefined && rule !== approval.suggestedRule) throw new HttpError(409, "The rule changed since you confirmed it; check it again.");
+        if (confirm !== true) throw new ConfirmRequired({ label: option.label, rule: grant });
+        if (rule !== undefined && rule !== grant) throw new HttpError(409, "The rule changed since you confirmed it; check it again.");
       }
       await adapter.guard.answer({
         paneId: pane.paneId, expect,
         answer: { kind: "permission", question: form.question, optionLabel: option.label, confirmAlways: decision === "always" && confirm === true },
       });
       store.decideApproval(id, decision === "deny" ? "denied" : "allowed", identity, decision);
-      const what = decision === "always" ? ` (always: ${approval.suggestedRule ?? option.label})` : "";
+      const what = decision === "always" ? ` (always: ${grant})` : "";
       audit(store, { actor: identity, origin: "web", action: decision === "deny" ? "approval.denied" : "approval.allowed", target: id, outcome: "ok", detail: `${approval.tool}: ${approval.exact}${what}` });
       return view(store.getApproval(id));
     },

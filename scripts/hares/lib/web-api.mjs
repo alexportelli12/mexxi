@@ -2,7 +2,7 @@
 // activity in the shapes scripts/hares/web/src/app/core/api.ts and
 // pages/github/github-api.ts name (the frontend is the contract). Pure mapping:
 // nothing here talks to herdr or GitHub, and nothing decides anything.
-import { optionForDecision } from "./approvals.mjs";
+import { alwaysGrantText, optionForDecision } from "./approvals.mjs";
 import { cleanText } from "./clean.mjs";
 
 const UNKNOWN_EXPECT = { terminalId: null, sessionId: null, status: "unknown", seq: 0 };
@@ -91,8 +91,8 @@ export function webTranscript(rows) {
 /** What "always" grants on this prompt, from the screen's own option and the hook's rule; null when nothing to offer. */
 function alwaysRule(item, approval) {
   const option = optionForDecision({ options: item.screenOptions ?? [] }, "always");
-  if (!option && !approval?.suggestedRule) return null;
-  const text = approval?.suggestedRule ?? option?.label ?? null;
+  // The same text decide() checks the confirmed rule against (approvals.mjs alwaysGrantText).
+  const text = alwaysGrantText(approval?.suggestedRule ?? null, option);
   if (!text) return null;
   return { text, scope: /^Allow access to /.test(text) || /session/i.test(option?.label ?? "") ? "session" : "rule" };
 }

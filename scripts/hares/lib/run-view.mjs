@@ -152,6 +152,12 @@ export function createRunView({ sessions, store, settings, checkout = checkoutSt
       return { ...runFromSession(page.session, page.links), steps: stepsFromRows(rows) };
     },
 
+    /** The Claude session id behind a run id (start_run's launch id, or the session id itself); null for a run from before ħares. */
+    async sessionIdOf(id) {
+      if (legacyRun(id)) return null;
+      return (await session(id)).session.id;
+    },
+
     async events(id, since = 0) {
       if (legacyRun(id)) return store.listEvents(id, since, 1000);
       await session(id);

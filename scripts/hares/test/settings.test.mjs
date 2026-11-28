@@ -58,6 +58,27 @@ test("data left in mexxi/segwi moves to mexxi/hares once, and never over a hares
   assert.equal(existsSync(path.join(base, "mexxi", "segwi")), true);
 });
 
+// Break caught: the hook writes mexxi/hares/pending before ħares first starts, and the move from mexxi/segwi is
+// skipped because mexxi/hares exists, stranding segwi's store, push subscriptions and extension data.
+test("segwi's data still moves to mexxi/hares when only the hook's pending folder is there, and the hook's records stay", (t) => {
+  const base = mkdtempSync(path.join(os.tmpdir(), "hares-migrate-"));
+  t.after(() => rmSync(base, { recursive: true, force: true }));
+  const env = { XDG_DATA_HOME: base };
+  const segwi = path.join(base, "mexxi", "segwi");
+  const hares = path.join(base, "mexxi", "hares");
+  mkdirSync(path.join(segwi, "ext", "atlas-ops"), { recursive: true });
+  writeFileSync(path.join(segwi, "segwi.db"), "old-data");
+  writeFileSync(path.join(segwi, "ext", "atlas-ops", "state.json"), "{}");
+  mkdirSync(path.join(hares, "pending", "11111111-1111-4111-8111-111111111111"), { recursive: true });
+  writeFileSync(path.join(hares, "pending", "11111111-1111-4111-8111-111111111111", "question_toolu_1.json"), "hook-record");
+
+  assert.equal(dataDir({ env, home }), hares);
+  assert.equal(readFileSync(path.join(hares, "segwi.db"), "utf8"), "old-data");
+  assert.equal(readFileSync(path.join(hares, "ext", "atlas-ops", "state.json"), "utf8"), "{}");
+  assert.equal(readFileSync(path.join(hares, "pending", "11111111-1111-4111-8111-111111111111", "question_toolu_1.json"), "utf8"), "hook-record");
+  assert.equal(existsSync(segwi), false);
+});
+
 test("the store versions its schema and keeps run ids, event sequences and client ids unique", () => {
   const store = openStore(":memory:");
   assert.equal(store.db.prepare("PRAGMA user_version").get().user_version, 8);

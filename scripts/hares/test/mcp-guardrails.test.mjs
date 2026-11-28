@@ -164,18 +164,28 @@ test("send_input and stop_run reach only sessions ħares started (D3); a session
   assert.equal(keysSent(box).length, 0, "the hand-started pane was neither typed into nor closed");
 });
 
-test("no MCP call reaches a web-only route: the bearer token opens neither decisions, GitHub writes nor settings", async (t) => {
-  const box = await startHares(t);
+// Break caught: a web route accepts the MCP bearer token in place of a signed-in person, so an MCP client could
+// decide a permission, merge, review, accept a gate change or change settings. The requests are otherwise valid
+// (loopback Host, same Origin, JSON), so only the missing identity can refuse them.
+test("no MCP call reaches a web-only route: the bearer token alone is no identity, so decisions, GitHub writes and settings answer 401", async (t) => {
+  const box = await startHares(t, { auth: { mode: "tailscale-header", allowed: ["you@example.com"] } });
   const auth = { Authorization: `Bearer ${box.token}` };
   const { request } = await import("./helpers.mjs");
-  for (const [method, route, payload] of [
+  const origin = { Origin: `http://127.0.0.1:${box.server.port}` };
+  const routes = [
     ["POST", "/api/approvals/abc", { decision: "once" }],
     ["POST", "/api/prs/my-app/1/merge", { headSha: "a".repeat(40), method: "squash" }],
     ["POST", "/api/prs/my-app/1/review", { event: "APPROVE", body: "" }],
     ["POST", "/api/prs/my-app/1/accept-gate", { headSha: "a".repeat(40) }],
     ["PUT", "/api/notifications/prefs", {}],
-  ]) {
-    const answer = await request(box.server, method, route, { headers: { ...auth, Host: "evil.example" }, body: payload, origin: false });
-    assert.equal(answer.status, 403, `${method} ${route}`);
+  ];
+  for (const [method, route, payload] of routes) {
+    const answer = await request(box.server, method, route, { headers: { ...auth, ...origin }, body: payload, origin: false });
+    assert.equal(answer.status, 401, `${method} ${route}`);
+    assert.match(answer.json.error ?? answer.text, /Tailscale-User-Login header is missing/, `${method} ${route}`);
   }
+  // The same request with a person's identity gets past the identity check (what it then does is not this test's).
+  const signedIn = await request(box.server, "POST", "/api/approvals/abc", { headers: { ...origin, "Tailscale-User-Login": "you@example.com" }, body: { decision: "once" }, origin: false });
+  assert.notEqual(signedIn.status, 401);
+  assert.notEqual(signedIn.status, 403);
 });

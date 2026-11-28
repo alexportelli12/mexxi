@@ -11,6 +11,8 @@ import path from "node:path";
 import test from "node:test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { createMcpHandler } from "../lib/mcp.mjs";
+import { openStore } from "../lib/store.mjs";
 import { rotate } from "../lib/token.mjs";
 import { WRITE } from "./fake-herdr.mjs";
 import { request, startHares, tempDir, waitFor } from "./helpers.mjs";
@@ -272,6 +274,55 @@ test("extra fields, over-length text and unlisted repos or actions are rejected 
   assert.equal(mcpAudit(box.server).filter((row) => row.outcome === "rejected" && row.action !== "http-method").length, bad.length);
   const unknown = await call(client, "get_run", { id: "11111111-2222-4333-8444-555555555555" });
   assert.equal(unknown.isError, true);
+});
+
+// Break caught: the four new ways to start skip the repository's actions, so an MCP client starts edit-capable
+// work (a session, /wettaq, an issue or pull request fix) on a repository that allows only ask.
+test("on an ask-only repository start_run refuses a session, a command, an issue and a pull request fix, and audits each", async (t) => {
+  const box = await boot(t, { actions: ["ask"] });
+  const client = await connect(t, box.server, box.token);
+  const refused = [
+    { repo: "my-app", action: "session", task: "Hi" },
+    { repo: "my-app", action: "command", command: "wettaq", task: "do it" },
+    { repo: "my-app", action: "command", command: "lesti" },
+    { repo: "my-app", action: "issue", issue: 3 },
+    { repo: "my-app", action: "pr", pr: 4, ask: "failing-check" },
+  ];
+  for (const args of refused) {
+    const result = await call(client, "start_run", args);
+    assert.equal(result.isError, true, JSON.stringify(args));
+    assert.match(allText(result), /action/, JSON.stringify(args));
+  }
+  const rejections = mcpAudit(box.server).filter((row) => row.outcome === "rejected" && row.action === "start_run");
+  assert.equal(rejections.length, refused.length);
+  assert.equal(box.server.store.listLaunches().length, 0, "nothing started");
+  assert.equal(box.fake.writes().length, 0, "nothing reached herdr");
+  // The action the repository does allow still starts.
+  assert.equal((await call(client, "start_run", { repo: "my-app", action: "ask", task: "What is here?" })).isError, undefined);
+  assert.equal(box.server.store.listLaunches().length, 1);
+});
+
+// Break caught: get_run asks readiness about the launch id start_run returned, which readiness doesn't know
+// (it keys sessions by their Claude session id), so a launched session's pull request never shows ready.
+test("get_run's readiness for a launched session is asked under its Claude session id, not the launch id", async (t) => {
+  const LAUNCH = "11111111-2222-4333-8444-555555555555";
+  const CLAUDE = "99999999-8888-4777-8666-555555555555";
+  const stateDir = tempDir(t, "hares-state-");
+  const token = rotate(stateDir);
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const run = { id: LAUNCH, repo: "my-app", action: "build", task: "t", status: "needs_input", clientId: null, branch: "fix", prUrl: "https://github.com/example/my-app/pull/7",
+    verify: null, costUsd: null, reason: null, waitingOn: null, createdAt: null, updatedAt: null, lastActivityAt: null, endedAt: null, snapshot: null, steps: [] };
+  const runs = { get: async () => run, sessionIdOf: async (id) => (id === LAUNCH ? CLAUDE : null) };
+  // Readiness as the link index gives it: it knows the session only by its Claude id.
+  const readiness = { forPr: async ({ sessionId }) => ({ ready: sessionId === CLAUDE, checks: [{ name: "run-completed", pass: sessionId === CLAUDE, detail: "" }] }) };
+  const handler = createMcpHandler({ store, settings: { hares: { repositories: [], limits: { taskMaxChars: 100, inputMaxChars: 100 } } }, runs, approvals: { list: () => [] }, readiness, stateDir });
+  const server = http.createServer((req, res) => void handler(req, res));
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const client = await connect(t, { url: `http://127.0.0.1:${server.address().port}` }, token);
+  const shown = JSON.parse(untrusted(await call(client, "get_run", { id: LAUNCH }), `segwi run ${LAUNCH}`));
+  assert.equal(shown.readiness.ready, true);
 });
 
 test("a seeded token in the task and in the session's transcript is absent from every MCP result, and a closing tag is escaped", async (t) => {

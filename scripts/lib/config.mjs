@@ -132,19 +132,21 @@ export function withHaresKey(value, source = "config") {
 }
 
 function withoutRetiredHaresKeys(value, retired) {
-  const hares = isObject(value) ? value.hares : undefined;
+  // A file that still uses the old segwi key is told the paths under that key, which is what it must edit.
+  const name = isObject(value) && !("hares" in value) && "segwi" in value ? "segwi" : "hares";
+  const hares = isObject(value) ? value[name] : undefined;
   if (!isObject(hares)) return value;
   const before = retired.length;
-  retired.push(...[...RETIRED_HARES_KEYS, ...RETIRED_HERDR_ERA_KEYS].filter((key) => key in hares).map((key) => `hares.${key}`));
+  retired.push(...[...RETIRED_HARES_KEYS, ...RETIRED_HERDR_ERA_KEYS].filter((key) => key in hares).map((key) => `${name}.${key}`));
   const limits = isObject(hares.limits) ? omit(hares.limits, RETIRED_LIMIT_KEYS) : hares.limits;
-  if (isObject(hares.limits)) retired.push(...RETIRED_LIMIT_KEYS.filter((key) => key in hares.limits).map((key) => `hares.limits.${key}`));
+  if (isObject(hares.limits)) retired.push(...RETIRED_LIMIT_KEYS.filter((key) => key in hares.limits).map((key) => `${name}.limits.${key}`));
   const repositories = Array.isArray(hares.repositories) ? hares.repositories.map((repository, index) => {
     if (!isObject(repository)) return repository;
-    retired.push(...RETIRED_REPOSITORY_KEYS.filter((key) => key in repository).map((key) => `hares.repositories[${index}].${key}`));
+    retired.push(...RETIRED_REPOSITORY_KEYS.filter((key) => key in repository).map((key) => `${name}.repositories[${index}].${key}`));
     return omit(repository, RETIRED_REPOSITORY_KEYS);
   }) : hares.repositories;
   if (retired.length === before) return value;
-  return { ...value, hares: { ...omit(hares, [...RETIRED_HARES_KEYS, ...RETIRED_HERDR_ERA_KEYS]), ...(repositories ? { repositories } : {}), ...(limits ? { limits } : {}) } };
+  return { ...value, [name]: { ...omit(hares, [...RETIRED_HARES_KEYS, ...RETIRED_HERDR_ERA_KEYS]), ...(repositories ? { repositories } : {}), ...(limits ? { limits } : {}) } };
 }
 
 function withoutRetiredReviewKeys(value, retired) {
@@ -230,7 +232,8 @@ export async function loadConfig({ file = configPath(), home = os.homedir() } = 
   } catch (error) {
     throw new ConfigError(`${file} is not valid JSON: ${error.message}`);
   }
-  return { file, exists: true, config: await resolveConfig(value, { home, source: file }), retired: withoutRetiredKeys(withHaresKey(value, file)).retired };
+  // Retired keys are named as the file spells them (segwi.runner in a file still on the old key).
+  return { file, exists: true, config: await resolveConfig(value, { home, source: file }), retired: withoutRetiredKeys(value).retired };
 }
 
 // What the installer writes on first run: only where the clone is, so every

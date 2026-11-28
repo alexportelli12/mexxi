@@ -161,6 +161,31 @@ async function launched(server, id) {
   }, { what: "the session to start" });
 }
 
+// Break caught: the web app's start (and the old run route) skip the repository's actions for the new ways to
+// start, so a plain session, a mexxi command, an issue or a pull request fix runs on an ask-only repository.
+test("on an ask-only repository the web app refuses a session, a command, an issue and a pull request fix with an audited 400", async (t) => {
+  const { server, fake } = await boot(t, { actions: ["ask"] });
+  const sessionStarts = [
+    { repo: "my-app", kind: "prompt", prompt: "Hi" },
+    { repo: "my-app", kind: "command", command: "wettaq", args: "do it" },
+    { repo: "my-app", kind: "command", command: "lesti" },
+    { repo: "my-app", kind: "issue", issue: 3 },
+    { repo: "my-app", kind: "pr", pr: 4, ask: "failing-check" },
+  ];
+  for (const body of sessionStarts) {
+    assert.equal((await request(server, "POST", "/api/sessions", { body })).status, 400, JSON.stringify(body));
+    assert.equal(lastRejected(server).action, "POST /api/sessions");
+    assert.match(lastRejected(server).detail, /^400 Invalid kind/);
+  }
+  for (const change of [{ action: "session", task: "Hi" }, { action: "command", command: "wettaq" }, { action: "issue", issue: 3, task: undefined }, { action: "pr", pr: 4, task: undefined }]) {
+    assert.equal((await startRun(server, change)).status, 400, JSON.stringify(change));
+    assert.equal(lastRejected(server).action, "POST /api/runs");
+  }
+  assert.equal(server.store.listLaunches().length, 0);
+  assert.equal(fake.writes().length, 0, "nothing reached herdr");
+  assert.equal((await startRun(server)).status, 201, "ask, which the repository allows, still starts");
+});
+
 test("an unlisted repo or action, an extra field, and over-length input are 400 and audited", async (t) => {
   const { server, fake } = await boot(t, { actions: ["ask"], limits: { taskMaxChars: 20, inputMaxChars: 10 } });
   const cases = [

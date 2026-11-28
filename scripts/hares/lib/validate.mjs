@@ -4,8 +4,17 @@ import { z } from "zod";
 import { HttpError } from "./errors.mjs";
 
 const STATUSES = ["queued", "running", "needs_input", "needs_approval", "completed", "failed", "stopped", "timed_out"];
-/** The configured actions a repository may allow; the herdr-era ways to start are open to every repository. */
-const CONFIGURED_ACTIONS = new Set(["build", "ready", "ask"]);
+/**
+ * The configured action (a repository's `actions`: build, ready or ask) each way to start needs. A plain session,
+ * an issue, a pull request and any mexxi command can edit the repository, so they need build; /lesti is ready's
+ * own command, so it needs ready. Checked for MCP and the web app alike.
+ */
+export function actionNeeded({ kind, command }) {
+  if (kind === "build" || kind === "ready" || kind === "ask") return kind;
+  if (kind === "command") return command === "lesti" ? "ready" : "build";
+  if (kind === "session" || kind === "prompt" || kind === "issue" || kind === "pr") return "build";
+  return null;
+}
 /** Ways to start that need no task: a plain session, an issue or a pull request (their number says what to do). */
 const TASK_OPTIONAL = new Set(["session", "issue", "pr"]);
 const SESSION_STATUSES = ["blocked", "working", "idle", "done", "unknown"];
@@ -15,8 +24,10 @@ export function schemas(settings) {
   const repoAllows = (value, ctx) => {
     const repository = repositories.find((candidate) => candidate.name === value.repo);
     if (!repository) ctx.addIssue({ code: "custom", path: ["repo"], message: "repo is not configured" });
-    else if (CONFIGURED_ACTIONS.has(value.action ?? value.kind) && !repository.actions.includes(value.action ?? value.kind)) {
-      ctx.addIssue({ code: "custom", path: ["action"], message: "action is not allowed for this repo" });
+    else {
+      const kind = value.action ?? value.kind;
+      const needed = actionNeeded({ kind, command: value.command });
+      if (needed && !repository.actions.includes(needed)) ctx.addIssue({ code: "custom", path: [value.action ? "action" : "kind"], message: "action is not allowed for this repo" });
     }
   };
   // start_run's input (and the legacy POST /api/runs): build, ready and ask as before, plus the four ways
@@ -64,9 +75,7 @@ export function schemas(settings) {
       issue: z.number().int().min(1).max(10_000_000).optional(),
       pr: z.number().int().min(1).max(10_000_000).optional(),
       ask: z.enum(["review-comments", "failing-check"]).optional(),
-    }).superRefine((value, ctx) => {
-      if (!repositories.some((candidate) => candidate.name === value.repo)) ctx.addIssue({ code: "custom", path: ["repo"], message: "repo is not configured" });
-    }),
+    }).superRefine(repoAllows),
     answer: z.strictObject({ questionId: z.string().min(1).max(200), expect, answers: z.array(answer).min(1).max(20) }),
     steer: z.strictObject({ expect, text: z.string().min(1).max(limits.inputMaxChars) }),
     keys: z.strictObject({ expect, keys: z.array(z.string().min(1).max(20)).max(20).optional(), text: z.string().min(1).max(limits.inputMaxChars).optional() }),

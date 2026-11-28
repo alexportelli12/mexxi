@@ -72,3 +72,16 @@ test("an old config with the retired sandbox and permissions keys still loads, i
   writeFileSync(file, JSON.stringify({ hares: { sandbox: true } }));
   await assert.rejects(readSettings({ file, home, warn: () => {} }), /hares\.sandbox: unknown key/);
 });
+
+// Break caught: a config still on the old segwi key is told to delete hares.runner, a path it doesn't have,
+// so the person can't find the key to delete.
+test("a config still on the segwi key names its retired keys under segwi, the key the file uses", async (t) => {
+  const file = path.join(mkdtempSync(path.join(os.tmpdir(), "hares-config-")), "config.json");
+  t.after(() => rmSync(path.dirname(file), { recursive: true, force: true }));
+  writeFileSync(file, JSON.stringify({ segwi: { enabled: true, runner: "claude", limits: { maxTurns: 40 }, repositories: [{ name: "old", path: "~/old", actions: ["ask"], permissions: "sandboxed" }] } }));
+  const warnings = [];
+  const settings = await readSettings({ file, home, warn: (message) => warnings.push(message) });
+  assert.equal(settings.hares.repositories[0].name, "old", "the old key still loads");
+  assert.equal(warnings.length, 1);
+  assert.equal(warnings[0], `hares ignores these keys in ${file}, which no longer do anything; delete them: segwi.runner, segwi.limits.maxTurns, segwi.repositories[0].permissions`);
+});

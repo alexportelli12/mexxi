@@ -295,7 +295,8 @@ export function createHandler({
     const run = await runView(identity).get(id);
     const pull = run.prUrl ? parsePullUrl(run.prUrl) : null;
     if (!pull || !run.repo) throw new HttpError(404, "This run has no pull request.");
-    const target = { repo: run.repo, number: pull.number, sessionId: run.id };
+    // Readiness keys a session by its Claude session id, not the launch id a run may carry.
+    const target = { repo: run.repo, number: pull.number, sessionId: (await runView(identity).sessionIdOf(id)) ?? null };
     return accept ? readiness.accept(target, accept, identity) : readiness.forPr(target);
   }
 

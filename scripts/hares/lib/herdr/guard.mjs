@@ -34,6 +34,22 @@ export class StaleStateError extends HttpError {
 }
 
 const squash = (text) => String(text ?? "").replace(/\s+/g, " ").trim();
+/** The fewest characters of a long typed answer the row must show before Enter goes. */
+const TYPED_PREFIX_MIN = 20;
+
+/**
+ * Whether the free-text row (option `n`, under the cursor) shows what was typed: the row alone, never the line
+ * after it, and never empty. The whole text when it fits on the row; a text too long for it must show at
+ * least its first TYPED_PREFIX_MIN characters.
+ */
+function rowShowsTyped(screenText, n, text) {
+  const row = new RegExp(`^[ \\t]*❯[ \\t]*${n}\\.[ \\t]+(\\S[^\\n]*)$`, "m").exec(screenText);
+  if (!row) return false;
+  const shown = squash(row[1]).replace(/…$/, "").trimEnd();
+  const typed = squash(text);
+  if (shown === typed) return true;
+  return typed.length > shown.length && shown.length >= TYPED_PREFIX_MIN && typed.startsWith(shown);
+}
 
 function checkExpectation(expect) {
   const complete = expect
@@ -195,8 +211,7 @@ export function createGuard({ socket, request = herdrRequest, write = herdrWrite
       await send("pane.send_text", { pane_id: paneId, text });
       // The row now reads the typed text; anything else means the form moved under us.
       const typed = await read("pane.read", { pane_id: paneId, source: "visible" });
-      const row = new RegExp(`^\\s*❯\\s*${form.freeText}\\.\\s+(.*)$`, "m").exec(typed?.read?.text ?? "");
-      if (!row || !squash(text).startsWith(squash(row[1]).slice(0, 40))) throw new StaleStateError("typed_text_missing");
+      if (!rowShowsTyped(typed?.read?.text ?? "", form.freeText, text)) throw new StaleStateError("typed_text_missing");
       await send("pane.send_keys", { pane_id: paneId, keys: ["enter"] });
       return { ok: true };
     },

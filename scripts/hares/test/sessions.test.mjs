@@ -136,6 +136,25 @@ test("MCP reaches only sessions ħares started (D3): a hand-started session's qu
   assert.deepEqual(box.fake.writes().map((entry) => entry.params.keys), [["1"]]);
 });
 
+// Break caught: a new Claude session in a launch's pane (after /clear, or a new claude there) inherits the
+// launch through the pane-id fallback, and with it MCP's reach to a session ħares never started.
+test("a new Claude session in a launched pane is not that launch: MCP can't steer it, while a launch with no Claude id yet still finds its pane", async (t) => {
+  const box = await boot(t);
+  const OLD = "77777777-7777-4777-8777-777777777777";
+  box.store.createLaunch({ id: "aaaaaaaa-0000-4000-8000-000000000002", sessionId: OLD, repo: "my-app", action: "build", task: "x" });
+  box.store.updateLaunch("aaaaaaaa-0000-4000-8000-000000000002", { paneId: PANE });
+  const session = (await box.service.list()).find((candidate) => candidate.id === SESSION);
+  assert.equal(session.launchId, null);
+  assert.equal(session.startedBy, "you");
+  await assert.rejects(box.service.steer(SESSION, { text: "hi", expect: session.expect }, { origin: "mcp" }), { status: 409 });
+  assert.deepEqual(box.fake.writes(), []);
+
+  const starting = await boot(t);
+  starting.store.createLaunch({ id: "aaaaaaaa-0000-4000-8000-000000000003", sessionId: null, repo: "my-app", action: "build", task: "x" });
+  starting.store.updateLaunch("aaaaaaaa-0000-4000-8000-000000000003", { paneId: PANE });
+  assert.equal((await starting.service.list()).find((candidate) => candidate.id === SESSION).launchId, "aaaaaaaa-0000-4000-8000-000000000003");
+});
+
 test("a multi-select answer toggles the chosen boxes, then moves to the review step", async (t) => {
   const box = await boot(t, blocked("live-q-multiselect.txt"));
   box.record({ ...fruitRecord, input: { questions: [{ header: "Toppings", question: "Which toppings should the gate pizza have?", multiSelect: true, options: [{ label: "Olives" }, { label: "Basil" }, { label: "Chilli" }] }] } });

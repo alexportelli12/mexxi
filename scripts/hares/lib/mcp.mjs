@@ -187,7 +187,7 @@ function toolsFor({ settings, runs, approvals, readiness, github, confirmations,
         const shown = steps.slice(-STEPS_SHOWN).map(({ seq, type, title, ok, from }) => ({ seq, type, title, ok, from }));
         const ibni = { branch, prUrl, verify: verifyResult, snapshot: snapshot ?? null };
         // Computed from recorded and fetched facts only; fail-closed, so a check it can't determine fails (readiness.mjs).
-        const { ready, checks } = await readinessFor(readiness, record, prUrl);
+        const { ready, checks } = await readinessFor(readiness, record, prUrl, await runs.sessionIdOf(runId));
         return { result: untrusted(`segwi run ${runId}`, { ...record, ibni, readiness: { ready, checks }, stepCount: steps.length, steps: shown }), target: runId };
       },
     },
@@ -335,11 +335,12 @@ export function htmlToText(html) {
  * get_run's readiness, in its old shape: for the pull request the session made, or, with none linked,
  * every check failing with that reason (readiness is fail-closed and no tool can set it).
  */
-async function readinessFor(readiness, record, prUrl) {
+async function readinessFor(readiness, record, prUrl, sessionId) {
   const pull = prUrl ? parsePullUrl(prUrl) : null;
   if (pull && record.repo) {
     try {
-      const { ready, checks } = await readiness.forPr({ repo: record.repo, number: pull.number, sessionId: record.id });
+      // Readiness knows sessions by their Claude session id, never by the launch id start_run returned.
+      const { ready, checks } = await readiness.forPr({ repo: record.repo, number: pull.number, sessionId });
       return { ready, checks };
     } catch (error) {
       if (!(error instanceof HttpError)) throw error;

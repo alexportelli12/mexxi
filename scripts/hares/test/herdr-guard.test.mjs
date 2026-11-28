@@ -30,6 +30,43 @@ async function assertRefused(promise, reason, fake) {
   assert.deepEqual(fake.writes(), [], "nothing may reach the pane after a refusal");
 }
 
+// "Type something.": what the row shows after the text is typed decides whether Enter goes.
+const MOTTO = "What should the gate motto be?";
+async function typingInto(t, rowAfterTyping) {
+  const fake = await startFakeHerdr(t, {
+    agents: [claudeAgent({ paneId: PANE, terminalId: "term_t1", sessionId: SESSION, status: "blocked", seq: 500 })],
+    screens: { [PANE]: screen("live-q-type-something.txt") },
+  });
+  fake.afterNext(WRITE.paneSendText, (state) => {
+    state.screens[PANE] = screen("live-q-type-something.txt").replace("❯ 1. Fast", "  1. Fast").replace("  3. Type something.", rowAfterTyping);
+  });
+  return { fake, guard: createGuard({ socket: fake.socket }) };
+}
+const enterSent = (fake) => fake.writes().some((entry) => entry.params.keys?.includes("enter"));
+
+// Break caught: an empty row passes the check (every text starts with ""), or the match runs on into the next
+// line, so Enter submits whatever the row really holds.
+test("a typed answer is not submitted when the row shows nothing, or only part of a text that fits on it", async (t) => {
+  for (const row of ["❯ 3. ", "❯ 3.", "❯ 3. Be"]) {
+    const { fake, guard } = await typingInto(t, row);
+    await assert.rejects(guard.answerText({ paneId: PANE, expect: seen, answer: { question: MOTTO, text: "Be kind" } }), (error) => error.reason === "typed_text_missing");
+    assert.equal(enterSent(fake), false, JSON.stringify(row));
+  }
+});
+
+test("a typed answer is submitted when the row shows all of it, or at least its first 20 characters when it is too long for the row", async (t) => {
+  const whole = await typingInto(t, "❯ 3. Be  kind");
+  await whole.guard.answerText({ paneId: PANE, expect: seen, answer: { question: MOTTO, text: "Be kind" } });
+  assert.equal(enterSent(whole.fake), true);
+  const long = "Always leave the codebase a little better than you found it, and say why";
+  const cut = await typingInto(t, `❯ 3. ${long.slice(0, 30)}…`);
+  await cut.guard.answerText({ paneId: PANE, expect: seen, answer: { question: MOTTO, text: long } });
+  assert.equal(enterSent(cut.fake), true);
+  const tooLittle = await typingInto(t, `❯ 3. ${long.slice(0, 12)}`);
+  await assert.rejects(tooLittle.guard.answerText({ paneId: PANE, expect: seen, answer: { question: MOTTO, text: long } }), (error) => error.reason === "typed_text_missing");
+  assert.equal(enterSent(tooLittle.fake), false);
+});
+
 test("answers by label with the digit of that option on the fresh screen", async (t) => {
   const { fake, guard } = await blockedOnQuestion(t);
   const result = await guard.answer({ paneId: PANE, expect: seen, answer: question });

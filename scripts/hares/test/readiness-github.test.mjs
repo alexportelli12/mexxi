@@ -9,7 +9,10 @@ import { Readable } from "node:stream";
 import test from "node:test";
 import { githubTokenFile, readGithubToken, saveGithubToken } from "../lib/github.mjs";
 import { runGithubToken } from "../lib/github-token-cli.mjs";
+import { ibniSnapshot } from "../lib/ibni-link.mjs";
 import { createReadinessService } from "../lib/readiness.mjs";
+import { createLinkIndex } from "../lib/serve.mjs";
+import { openStore } from "../lib/store.mjs";
 import { tempDir } from "./helpers.mjs";
 
 const HEAD = "c".repeat(40);
@@ -116,6 +119,33 @@ test("a session with a permission still waiting, or one still working, keeps the
   const readiness = await working.service.forPr(target);
   assert.equal(readiness.ready, false);
   assert.match(detailOf(readiness, "run-completed"), /linked session is working/);
+});
+
+// Break caught: the link index ħares serves readiness from drops ibni's snapshot (it was always null), so
+// reviewed-head and review-findings-closed fail and no pull request a session made can ever be ready.
+test("a pull request a session made, with a review recorded at its head by ibni in the session's worktree, can be ready through the link index", async (t) => {
+  const SESSION = "11111111-1111-4111-8111-111111111111";
+  const worktree = "/worktrees/my-app/fix-thing";
+  const session = { id: SESSION, repo: "my-app", cwd: `${worktree}/src`, alive: true, status: "idle" };
+  const sessions = { list: async () => [session], get: async () => ({ links: { pull: { number: 7 } } }), on: () => () => {} };
+  const asked = [];
+  // ibni's own JSON for that workspace, read the way ibni-link.mjs reads it (ibniSnapshot).
+  const ibni = {
+    list: async (repoPath) => [{ sessionId: "other", worktreePath: "/worktrees/my-app/other" }, { sessionId: "ws-1", worktreePath: worktree, repoPath }],
+    summary: async (repoPath, workspaceId) => {
+      asked.push([repoPath, workspaceId]);
+      return { snapshot: ibniSnapshot({ branch: "fix-thing" }, { review: { rounds: 1, findings: 1, accepted: 1, history: [{ findings: 1, open: 0, accepted: 1, headSha: HEAD }] } }) };
+    },
+  };
+  const store = openStore(":memory:");
+  t.after(() => store.close());
+  const linkIndex = createLinkIndex({ sessions, store, approvals: { forSession: () => [] }, settings: { hares: { repositories: [REPO] } }, ibni });
+  await linkIndex.refresh();
+  const { service } = boot(t, { store: linkIndex });
+  const readiness = await service.forPr(target);
+  for (const entry of readiness.checks) assert.equal(entry.pass, true, `${entry.name}: ${entry.detail}`);
+  assert.equal(readiness.ready, true);
+  assert.deepEqual(asked, [[REPO.path, "ws-1"]], "ibni was asked about the workspace that holds the session's folder");
 });
 
 test("a token hares can't trust is refused before any request: a classic token, or a file others can read", async (t) => {

@@ -26,6 +26,7 @@ import { checkoutProblem, checkoutState } from "./checkout.mjs";
 import { HttpError } from "./errors.mjs";
 import { parseScreen } from "./herdr/screen.mjs";
 import { assertWithinCaps } from "./limits.mjs";
+import { actionNeeded } from "./validate.mjs";
 import { createLinkResolver } from "./links.mjs";
 import { foldPending, gcResolved, listRecords, pendingRoot, removeRecords, staleWhenUnblocked } from "./pending.mjs";
 import { displayTitle, locateTranscript, openTail, TranscriptFolder } from "./transcript.mjs";
@@ -188,12 +189,19 @@ export function createSessionService({
 
   // --- The list ---------------------------------------------------------------
 
+  /**
+   * Whether a launch may still be found by its pane alone: only while the launch has no Claude id yet, or the
+   * pane shows none or that same one. After /clear, or a new claude in the same pane, the pane runs another
+   * session, which must not inherit the launch (and with it MCP's reach, decision D3).
+   */
+  const samePaneSession = (launch, pane) => !launch.sessionId || !pane.sessionId || pane.sessionId === launch.sessionId;
+
   /** Follows herdr for ħares's launches: the Claude id once known, the pane after a move, and the end of a pane that went. */
   function upkeepLaunches(panes) {
     const connected = adapter.status().connected;
     for (const launch of store.openLaunches()) {
       const pane = (launch.sessionId && panes.find((candidate) => candidate.sessionId === launch.sessionId))
-        || (launch.paneId && panes.find((candidate) => candidate.paneId === launch.paneId))
+        || (launch.paneId && panes.find((candidate) => candidate.paneId === launch.paneId && samePaneSession(launch, candidate)))
         || null;
       if (pane) {
         const fields = {};
@@ -257,7 +265,7 @@ export function createSessionService({
     const seen = new Set();
     for (const pane of panes) {
       const launch = (pane.sessionId && launches.find((candidate) => candidate.sessionId === pane.sessionId))
-        || launches.find((candidate) => candidate.paneId === pane.paneId && !candidate.endedAt) || null;
+        || launches.find((candidate) => candidate.paneId === pane.paneId && !candidate.endedAt && samePaneSession(candidate, pane)) || null;
       const session = await view(pane, launch);
       seen.add(session.id);
       if (launch) seen.add(launch.id);
@@ -626,6 +634,8 @@ export function createSessionService({
       if (existing()) return { session: await view(null, existing()), created: false };
       const repository = repositories.find((candidate) => candidate.name === repo);
       if (!repository) throw new HttpError(400, "That repository is not configured.");
+      // The repository's actions bound every way to start, the review sheet's "start a session" too.
+      if (!repository.actions.includes(actionNeeded({ kind, command }))) throw new HttpError(400, "That action is not allowed for this repository.");
       if (NEEDS_CLEAN_CHECKOUT.has(kind)) {
         const problem = checkoutProblem(await checkout(repository.path));
         if (problem) throw new HttpError(409, problem);
