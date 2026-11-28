@@ -38,7 +38,7 @@ const NAV_PATHS = /^\/(?:$|\?|prs|issues|ci)/;
           <nav class="flex gap-7" aria-label="Main">
             @for (item of nav; track item.path) {
               <a [routerLink]="item.path" routerLinkActive="font-semibold text-text shadow-[inset_0_-2px_0_var(--amber)]" [routerLinkActiveOptions]="{ exact: item.exact }" ariaCurrentWhenActive="page"
-                class="-mx-1.5 inline-flex min-h-16 items-center px-1.5 text-[15px] font-medium text-muted no-underline hover:text-text">
+                class="-mx-1.5 inline-flex min-h-16 min-w-11 items-center justify-center px-1.5 text-[15px] font-medium text-muted no-underline hover:text-text">
                 {{ item.label }}
                 @if (item.path === '/prs' && live.boardCount()) {
                   <span class="ml-1.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-amber px-1.5 text-xs font-bold text-on-amber">{{ live.boardCount() }}<span class="sr-only"> to review</span></span>
@@ -53,7 +53,7 @@ const NAV_PATHS = /^\/(?:$|\?|prs|issues|ci)/;
           <span class="inline-flex items-center gap-1.5 text-[13px] font-medium" [class]="live.offline() ? 'text-red' : 'text-teal'">
             <span aria-hidden="true" class="size-1.5 rounded-full" [class]="live.offline() ? 'bg-red' : 'bg-teal'"></span>{{ host() }} {{ live.offline() ? 'offline' : 'live' }}
           </span>
-          <a routerLink="/settings" aria-label="Settings" class="inline-flex size-11 items-center justify-center rounded-full text-muted no-underline hover:text-text"><hares-icon name="gear" [size]="22" /></a>
+          <a routerLink="/settings" aria-label="Settings" title="Settings" class="inline-flex size-11 items-center justify-center rounded-full text-muted no-underline hover:text-text"><hares-icon name="gear" [size]="22" /></a>
           <a routerLink="/start" class="inline-flex min-h-11 items-center gap-2 rounded-[14px] bg-amber pr-4.5 pl-3.5 text-[15px] font-semibold text-on-amber no-underline shadow-[0_10px_30px_-16px_var(--amber)]">
             <hares-icon name="plus" [size]="18" />Start a session<span class="ml-1 font-medium opacity-60" aria-hidden="true">N</span>
           </a>

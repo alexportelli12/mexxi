@@ -52,6 +52,6 @@ describe('CiPage', () => {
 
   it('shows how far a running run has got', async () => {
     const { element } = await render();
-    expect(element.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('60');
+    expect(element.querySelector('progress')?.value).toBe(60);
   });
 });

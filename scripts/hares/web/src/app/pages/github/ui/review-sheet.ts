@@ -30,13 +30,6 @@ const CTA: Record<ReviewEvent, string> = { COMMENT: 'Post comment', REQUEST_CHAN
       <button type="button" class="gh-btn primary go" [disabled]="busy()" (click)="submit()">{{ cta() }}</button>
     </hares-gh-sheet>
   `,
-  styles: `
-    .kinds{display:block;margin-top:16px}
-    textarea{display:block;width:100%;box-sizing:border-box;margin-top:12px}
-    .check{margin-top:12px;display:flex;align-items:center;gap:12px;min-height:44px;font-size:15px}
-    .check input{width:20px;height:20px;accent-color:var(--amber)}
-    .go{width:100%;margin-top:16px;min-height:56px;border-radius:16px;font-size:16.5px}
-  `,
 })
 export class ReviewSheet {
   private readonly api = inject(GithubApi);

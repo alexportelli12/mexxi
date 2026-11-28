@@ -23,14 +23,6 @@ import { GhSheet } from './gh-sheet';
       }
     </hares-gh-sheet>
   `,
-  styles: `
-    .note{margin:8px 0 0;font-size:15px;line-height:1.45;color:var(--muted)}
-    .note .gh-code{font-size:13.5px;color:var(--text)}
-    .sha{margin:8px 0 0;font-size:13.5px;line-height:1.45;color:var(--faint)}
-    .big{width:100%;min-height:52px;border-radius:16px;font-size:16px}
-    .primary.big{margin-top:24px;min-height:56px;font-size:16.5px}
-    .ghost.big{margin-top:8px}
-  `,
 })
 export class MergeSheet {
   private readonly api = inject(GithubApi);

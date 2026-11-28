@@ -38,17 +38,6 @@ import { Prose } from './prose';
       }
     </article>
   `,
-  styles: `
-    .card{border-radius:18px;background:var(--surface);padding:16px;display:flex;flex-direction:column;gap:12px}
-    .path{align-self:flex-start;color:var(--muted);overflow-wrap:anywhere}
-    .comment{display:flex;flex-direction:column;gap:4px}
-    .comment b{color:var(--text);font-weight:600}
-    .reply{padding-left:12px;border-left:2px solid var(--line)}
-    .state{font-size:13.5px}
-    .open{align-self:flex-start;margin-left:-14px}
-    textarea{width:100%;box-sizing:border-box}
-    .row{display:flex;justify-content:flex-end;gap:8px}
-  `,
 })
 export class ThreadCard {
   private readonly api = inject(GithubApi);

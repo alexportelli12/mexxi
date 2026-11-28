@@ -47,7 +47,7 @@ type TabKey = 'description' | 'comments' | 'files' | 'checks';
           }
         </section>
 
-        <hares-gh-tabs class="gh-m seg" [items]="tabs()" [selected]="tab()" label="Pull request" [segmented]="true" panelPrefix="panel-" (picked)="tab.set($any($event))" />
+        <hares-gh-tabs class="gh-m seg-wrap" [items]="tabs()" [selected]="tab()" label="Pull request" [segmented]="true" panelPrefix="panel-" (picked)="tab.set($any($event))" />
 
         @if (actionError()) { <p class="gh-err" role="alert">{{ actionError() }}</p> }
 
@@ -105,7 +105,7 @@ type TabKey = 'description' | 'comments' | 'files' | 'checks';
             <section id="panel-files" role="tabpanel" aria-labelledby="files-title" class="panel" [class.off]="tab() !== 'files'">
               <div class="gh-sub"><h2 id="files-title" class="side-h">Files</h2><span class="gh-faint"><span class="gh-add">+{{ p.additions }}</span> <span class="gh-del">−{{ p.deletions }}</span> in {{ p.changedFiles }} {{ p.changedFiles === 1 ? 'file' : 'files' }}</span></div>
               @for (file of p.files; track file.path) {
-                <a class="line link" [href]="p.url + '/files'" target="_blank" rel="noopener noreferrer"><code class="gh-code path">{{ file.path }}</code><span class="gh-faint stat"><span class="gh-add">+{{ file.additions }}</span> <span class="gh-del">−{{ file.deletions }}</span></span></a>
+                <a class="line link" [href]="p.url + '/files'" target="_blank" rel="noopener noreferrer"><code class="gh-code file-path">{{ file.path }}</code><span class="gh-faint stat"><span class="gh-add">+{{ file.additions }}</span> <span class="gh-del">−{{ file.deletions }}</span></span></a>
               }
               @if (p.changedFiles > p.files.length) { <a class="out more" [href]="p.url + '/files'" target="_blank" rel="noopener noreferrer">See all {{ p.changedFiles }} files on GitHub</a> }
             </section>
@@ -115,9 +115,9 @@ type TabKey = 'description' | 'comments' | 'files' | 'checks';
         <div class="barfix gh-m">
           @if (canMerge() && !p.readiness.ready) { <p class="gh-faint">{{ notReady() }}</p> }
           <div class="row">
-            <button type="button" class="gh-btn big" (click)="openReview('COMMENT')">Review</button>
-            @if (fixable()) { <button type="button" class="gh-btn big" [disabled]="starting()" (click)="fix()">Fix in a session</button> }
-            @if (canMerge()) { <button type="button" class="gh-btn primary big grow2" [disabled]="!p.readiness.ready" (click)="merging.set(true)">Merge</button> }
+            <button type="button" class="gh-btn bar-big" (click)="openReview('COMMENT')">Review</button>
+            @if (fixable()) { <button type="button" class="gh-btn bar-big" [disabled]="starting()" (click)="fix()">Fix in a session</button> }
+            @if (canMerge()) { <button type="button" class="gh-btn primary bar-big grow2" [disabled]="!p.readiness.ready" (click)="merging.set(true)">Merge</button> }
           </div>
         </div>
 
@@ -127,61 +127,6 @@ type TabKey = 'description' | 'comments' | 'files' | 'checks';
         <p class="gh-empty" role="status">Loading pull request</p>
       }
     </div>
-  `,
-  styles: `
-    .topbar{display:flex;align-items:center;justify-content:space-between;margin:-4px -6px 0}
-    .back{min-height:44px;display:inline-flex;align-items:center;gap:4px;padding:0 8px 0 2px;color:var(--muted);text-decoration:none;font-size:16px}
-    .out{min-height:44px;display:inline-flex;align-items:center;padding:0 6px;color:var(--muted);text-decoration:none;font-size:15px}
-    .out:hover,.back:hover{color:var(--text)}
-    .intro{padding-top:12px;display:flex;flex-direction:column;align-items:flex-start}
-    .intro h1{margin:6px 0 0;font-size:26px;line-height:1.15;font-weight:600;letter-spacing:-.024em;text-wrap:balance}
-    .meta{font-size:14px;color:var(--faint)}
-    .status{margin-top:12px;display:flex;align-items:center;gap:10px;font-size:14px}
-    .opened{margin:8px 0 0;font-size:14px;color:var(--faint)}
-    .session{margin-top:12px;display:inline-flex;align-items:center;gap:8px;min-height:44px;padding:0 12px 0 10px;border-radius:12px;background:var(--surface);color:var(--text);text-decoration:none;font-size:14.5px;font-weight:500}
-    .dot{width:8px;height:8px;border-radius:4px;background:var(--teal);flex:none}
-    .dot.waiting{background:var(--amber)}
-    .dot.idle,.dot.done{background:var(--faint)}
-    .seg{display:block;margin-top:20px}
-    .grid{margin-top:24px;display:flex;flex-direction:column}
-    .main{min-width:0}
-    .aside{display:flex;flex-direction:column;gap:28px;min-width:0}
-    @media (max-width:1023.98px){.off{display:none}.aside{gap:0}}
-    .heading{margin-bottom:16px}
-    .threads{display:flex;flex-direction:column;gap:16px}
-    .none{margin:8px 0}
-    .compose{margin-top:16px;display:flex;gap:8px}
-    .compose input{flex:1;min-width:0}
-    .side-h{margin:0;font-size:17px;font-weight:600}
-    .line{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--line);font-size:15px;color:var(--text);text-decoration:none;min-height:44px;box-sizing:border-box}
-    .line .gh-sq{flex:none}
-    .grow{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-    .detail{font-size:13.5px}
-    .path{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13.5px}
-    .stat{flex:none}
-    .ready{margin-top:28px}
-    .more{margin-top:4px}
-    .barfix{position:fixed;left:0;right:0;bottom:0;z-index:5;padding:14px 20px 28px;background:var(--bg);border-top:1px solid var(--line)}
-    .barfix p{margin:0 0 8px;font-size:13.5px}
-    .barfix .row{display:flex;gap:8px}
-    .big{flex:1;min-height:54px;border-radius:16px;font-size:16px}
-    .primary.big{font-size:16.5px}
-    .grow2{flex:1.2}
-    @media (min-width:1024px){
-      .topbar{margin:0}
-      .intro{padding-top:8px;gap:8px}
-      .intro h1{margin:0;font-size:34px;line-height:1.08;letter-spacing:-.03em}
-      .session{margin-top:8px}
-      .grid{flex-direction:row;flex-wrap:wrap;gap:56px;align-items:flex-start;border-top:1px solid var(--line);margin-top:28px;padding-top:32px}
-      .main{flex:1 1 560px;display:flex;flex-direction:column;gap:40px}
-      .main section{max-width:680px}
-      .aside{flex:0 1 340px;min-width:300px}
-      .actions{display:flex;flex-direction:column;gap:8px}
-      .merge{min-height:52px;border-radius:16px;font-size:16px;box-shadow:0 10px 30px -16px var(--amber)}
-      .actions .gh-faint{margin:0}
-      .pair{display:flex;gap:8px}
-      .pair .gh-btn{flex:1;min-height:46px;border-radius:14px;font-weight:500;font-size:15px}
-    }
   `,
 })
 export class PrDetailPage {

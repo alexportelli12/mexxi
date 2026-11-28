@@ -32,7 +32,7 @@ import { desktopSignal } from './ui/viewport';
           }
           @if (actionError()) { <p class="gh-err" role="alert">{{ actionError() }}</p> }
 
-          <div id="prs-list" role="tabpanel" class="list">
+          <div id="prs-list" role="tabpanel" class="prs-list">
             @if (prs() === null && !error()) {
               <p class="gh-empty" role="status">Loading pull requests</p>
             } @else if (prs() !== null && rows().length === 0) {
@@ -77,34 +77,6 @@ import { desktopSignal } from './ui/viewport';
     </ng-template>
 
     <hares-gh-merge-sheet [pr]="merging()" (dismissed)="merging.set(null)" (merged)="merged()" />
-  `,
-  styles: `
-    .layout{display:flex;flex-wrap:wrap;gap:56px;align-items:flex-start}
-    .prs{flex:1.45 1 600px;min-width:0}
-    .issues{flex:1 1 380px;min-width:0}
-    .head{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:20px}
-    .head hares-gh-tabs{flex:1 1 100%;min-width:0}
-    @media (min-width:1024px){.head{gap:12px}.head hares-gh-tabs{flex:0 1 auto}.head .gh-tabs.bleed{margin:0;padding:0}}
-    .list{border-top:1px solid transparent;margin-top:12px}
-    .row{display:flex;flex-direction:column;gap:8px;padding:20px 0;border-bottom:1px solid var(--line)}
-    .info{display:flex;flex-direction:column;gap:8px;min-width:0}
-    .meta{display:flex;align-items:center;gap:6px;order:1}
-    .stat{margin-left:6px}
-    .title{order:2;margin:0;font-size:17px;line-height:1.3;font-weight:600;letter-spacing:-.01em}
-    .title a{color:var(--text);text-decoration:none}
-    .title a:hover{text-decoration:underline}
-    .state{display:flex;align-items:center;gap:10px;font-size:14px;color:var(--muted)}
-    .state .stat{margin-left:0}
-    .acts{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
-    .bot{display:inline-flex}
-    @media (min-width:1024px){
-      .list{border-top-color:var(--line);margin-top:24px}
-      .row{display:grid;grid-template-columns:minmax(0,1fr) 200px 156px;gap:24px;align-items:center;padding:16px 0}
-      .info{gap:4px}
-      .title{order:1;font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-      .meta{order:2;font-size:13.5px}
-      .acts{margin-top:0}
-    }
   `,
 })
 export class PrsPage {

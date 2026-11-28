@@ -20,7 +20,8 @@
             "browser": "src/main.ts",
             "tsConfig": "tsconfig.app.json",
             "styles": [
-              "src/styles.css"
+              "src/styles.css",
+              "src/app/pages/github/github.css"
             ],
             "assets": [
               {

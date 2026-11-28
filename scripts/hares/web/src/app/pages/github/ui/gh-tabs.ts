@@ -14,7 +14,7 @@ export interface TabItem {
   selector: 'hares-gh-tabs',
   changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
-    <div class="gh-tabs" [class.seg]="segmented()" [class.bleed]="!segmented()" [style.--cols]="items().length"
+    <div class="gh-tabs" [class.seg]="segmented()" [class.bleed]="!segmented()"
       [attr.role]="mode() === 'tab' ? 'tablist' : 'radiogroup'" [attr.aria-label]="label()" (keydown)="onKey($event)">
       @for (item of items(); track item.key) {
         <button type="button" class="gh-chip" [attr.role]="mode()" [tabindex]="item.key === selected() ? 0 : -1"

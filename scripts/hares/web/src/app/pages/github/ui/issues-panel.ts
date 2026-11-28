@@ -74,28 +74,6 @@ let panels = 0;
       </div>
     </ng-template>
   `,
-  styles: `
-    .top{display:flex;justify-content:space-between;align-items:center;min-height:48px}
-    .search{margin-top:20px;display:flex;align-items:center;gap:10px;min-height:52px;padding:0 16px;border-radius:16px;background:var(--surface);color:var(--faint)}
-    .search:focus-within{outline:2px solid var(--amber);outline-offset:3px}
-    .search input{flex:1;min-width:0;border:0;background:transparent;color:var(--text);font-size:16px;outline:none;min-height:44px}
-    .search input::placeholder{color:var(--faint);opacity:1}
-    .chips{display:block;margin-top:12px}
-    .list{margin-top:16px;border-top:1px solid var(--line)}
-    .list.page{margin-top:28px;border-top:0;display:flex;flex-direction:column;gap:32px}
-    .group{display:flex;flex-direction:column}
-    .item{display:flex;align-items:center;gap:16px;padding:14px 0;border-bottom:1px solid var(--line)}
-    .text{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
-    .name{font-size:16px;line-height:1.3;font-weight:500;color:var(--text);text-decoration:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .name:hover{text-decoration:underline}
-    .line{display:flex;align-items:center;gap:6px;font-size:13.5px;color:var(--faint)}
-    .line.blocker{color:var(--red)}
-    .line.live{color:var(--teal)}
-    .dot{width:6px;height:6px;border-radius:3px;background:var(--teal);flex:none}
-    .watch{color:var(--teal);flex:none}
-    .item .gh-btn{flex:none}
-    @media (min-width:1024px){.search{min-height:48px;border-radius:14px}.list.page{margin-top:32px}}
-  `,
 })
 export class IssuesPanel {
   private readonly api = inject(GithubApi);

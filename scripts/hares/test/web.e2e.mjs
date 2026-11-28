@@ -83,7 +83,15 @@ const SCREENS = [
   ["waiting", "/settings", "Settings"],
   ["waiting", "/settings/notifications", "Notifications"],
   ["waiting", "/activity", "Activity"],
+  // The GitHub screens must be styled under the real CSP (style-src 'self'): component styles injected as <style>
+  // elements are refused, and the page then renders as bare HTML.
+  ["waiting", "/prs", "Pull requests"],
+  ["waiting", "/prs/eduline-ai-shop/231", "Pull request"],
+  ["waiting", "/prs/eduline-ai-shop/231?view=review", "Pull request, review"],
+  ["waiting", "/issues", "Issues"],
+  ["waiting", "/ci", "CI"],
 ];
+const GITHUB_ROUTE = /^\/(?:prs|issues|ci)/;
 /** Taps are ignored for half a second after the cards move, so a test waits as a person must. */
 const settle = (page) => page.waitForTimeout(650);
 const slug = (text) => text.toLowerCase().replace(/[^a-z0-9]+/g, "-");
@@ -95,6 +103,27 @@ for (const [name, route, title] of SCREENS) {
         await scenario(name);
         const { page, close } = await open(route, { width, height: width > 800 ? 900 : 844, colorScheme });
         await page.waitForLoadState("networkidle");
+        const styled = GITHUB_ROUTE.test(route) ? await page.evaluate(() => {
+          const page_ = document.querySelector(".gh-page");
+          const chip = [...document.querySelectorAll(".gh-chip, .gh-btn")].find((el) => el.getBoundingClientRect().height > 0);
+          const row = document.querySelector("hares-prs-page .row");
+          return {
+            hasPage: !!page_,
+            maxWidth: page_ && getComputedStyle(page_).maxWidth,
+            chipHeight: chip && chip.getBoundingClientRect().height,
+            rowBorder: row && getComputedStyle(row).borderBottomWidth,
+            styleElements: document.querySelectorAll("style").length,
+            styleAttributes: document.querySelectorAll("[style]").length,
+          };
+        }) : null;
+        if (styled) {
+          assert.equal(styled.hasPage, true, "the GitHub page rendered");
+          assert.equal(styled.maxWidth, "1280px", "the page's own stylesheet applied");
+          assert.ok(styled.chipHeight >= (width < 800 ? 43.5 : 36), `a chip or button is ${styled.chipHeight}px tall`);
+          if (route === "/prs") assert.equal(styled.rowBorder, "1px", "the pull request list has its row dividers");
+          assert.equal(styled.styleElements, 0, "no <style> element is injected, the CSP refuses them");
+          assert.equal(styled.styleAttributes, 0, "no inline style attribute is set, the CSP refuses it");
+        }
         const found = await page.evaluate(() => {
           const visible = (el) => { const box = el.getBoundingClientRect(); const style = getComputedStyle(el); return box.width > 0 && box.height > 0 && style.visibility !== "hidden" && !el.closest("[hidden], dialog:not([open])"); };
           const all = [...document.querySelectorAll("body *")].filter(visible);
@@ -125,6 +154,19 @@ for (const [name, route, title] of SCREENS) {
     }
   }
 }
+
+e2e("the desktop header's links are each 44 pixels wide and tall, including CI with the red-main dot, and each has an accessible name", async () => {
+  await scenario("waiting"); // main is red here, so the CI link carries its dot
+  const { page, close } = await open("/", { width: 1440, height: 900 });
+  await page.getByRole("link", { name: /^CI/ }).waitFor();
+  const links = await page.evaluate(() => [...document.querySelectorAll("header a")].map((el) => {
+    const box = el.getBoundingClientRect();
+    return { name: (el.getAttribute("aria-label") || el.textContent || "").trim(), width: Math.round(box.width), height: Math.round(box.height) };
+  }));
+  assert.ok(links.some((link) => /^CI/.test(link.name) && /main is red/.test(link.name)), "the CI link shows it is red");
+  assert.deepEqual(links.filter((link) => !link.name || link.width < 44 || link.height < 44), []);
+  await close();
+});
 
 e2e("an answer is sent with the status and sequence the person saw, for the question they picked, and the card goes away", async () => {
   await scenario("waiting");
